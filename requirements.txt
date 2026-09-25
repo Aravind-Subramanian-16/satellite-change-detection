@@ -1,0 +1,13 @@
+torch
+torchvision
+fastapi
+uvicorn
+python-multipart
+gdown
+Pillow
+numpy<2
+tqdm
+onnx==1.15.0
+onnxruntime
+requests
+python-dotenv

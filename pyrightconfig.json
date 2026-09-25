@@ -1,0 +1,8 @@
+{
+    "venvPath": ".",
+    "venv": "venv",
+    "pythonPlatform": "Darwin",
+    "extraPaths": [
+        "venv/lib/python3.10/site-packages"
+    ]
+}

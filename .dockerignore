@@ -1,0 +1,24 @@
+# ── Exclude everything by default, then whitelist what we need ────────────────
+# This prevents the 2.3 GB dataset.zip, venv, __pycache__, etc.
+# from being sent to the Docker daemon as build context.
+
+# Whitelist the four paths that matter
+!app.py
+!model.onnx
+!change_reasoner.py
+!static/
+
+# Explicitly block large/irrelevant paths even inside the whitelisted set
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+venv/
+dataset/
+dataset.zip
+training_results/
+training_results.zip
+*.pt
+best_model_OLD_dummy.pt
+*.log
+.vscode/

@@ -1,0 +1,44 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# ── Virtual Environment ──────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Credentials ──────────────────────────────────────────
+.env
+
+# ── Large Model Files (GitHub 100MB limit) ───────────────
+*.pt
+*.onnx
+*.pth
+
+# ── Dataset (too large for GitHub) ───────────────────────
+dataset/
+dataset.zip
+training_results.zip
+
+# ── macOS ────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDE / Editor ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs & temp files ────────────────────────────────────
+server_log.txt
+*.log
+
+# ── Test outputs & scratch ───────────────────────────────
+response.json
+test_result.json

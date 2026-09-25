@@ -1,0 +1,60 @@
+Epoch 1: Train Loss: 0.7687, Train IoU: 0.4354 | Val Loss: 0.5147, Val IoU: 0.5467 | LR: 0.000500
+Saved new best model.
+Epoch 2: Train Loss: 0.4189, Train IoU: 0.5691 | Val Loss: 0.3612, Val IoU: 0.6613 | LR: 0.000500
+Saved new best model.
+Epoch 3: Train Loss: 0.3736, Train IoU: 0.6023 | Val Loss: 0.3610, Val IoU: 0.6470 | LR: 0.000499
+Validation IoU did not improve. Patience: 1/10
+Epoch 4: Train Loss: 0.3473, Train IoU: 0.6328 | Val Loss: 0.3751, Val IoU: 0.6618 | LR: 0.000498
+Saved new best model.
+Epoch 5: Train Loss: 0.3244, Train IoU: 0.6598 | Val Loss: 0.3404, Val IoU: 0.6720 | LR: 0.000497
+Saved new best model.
+Epoch 6: Train Loss: 0.3338, Train IoU: 0.6613 | Val Loss: 0.3794, Val IoU: 0.6050 | LR: 0.000496
+Validation IoU did not improve. Patience: 1/10
+Epoch 7: Train Loss: 0.3280, Train IoU: 0.6596 | Val Loss: 0.3521, Val IoU: 0.6695 | LR: 0.000494
+Validation IoU did not improve. Patience: 2/10
+Epoch 8: Train Loss: 0.2944, Train IoU: 0.6795 | Val Loss: 0.3275, Val IoU: 0.6741 | LR: 0.000492
+Saved new best model.
+Epoch 9: Train Loss: 0.2986, Train IoU: 0.6846 | Val Loss: 0.3445, Val IoU: 0.6579 | LR: 0.000490
+Validation IoU did not improve. Patience: 1/10
+Epoch 10: Train Loss: 0.2872, Train IoU: 0.6872 | Val Loss: 0.3947, Val IoU: 0.6421 | LR: 0.000488
+Validation IoU did not improve. Patience: 2/10
+Epoch 11: Train Loss: 0.2774, Train IoU: 0.6933 | Val Loss: 0.3394, Val IoU: 0.6681 | LR: 0.000485
+Validation IoU did not improve. Patience: 3/10
+Epoch 12: Train Loss: 0.3016, Train IoU: 0.6822 | Val Loss: 0.3259, Val IoU: 0.6782 | LR: 0.000482
+Saved new best model.
+Epoch 13: Train Loss: 0.2845, Train IoU: 0.6899 | Val Loss: 0.3224, Val IoU: 0.7085 | LR: 0.000479
+Saved new best model.
+Epoch 14: Train Loss: 0.2552, Train IoU: 0.7121 | Val Loss: 0.3238, Val IoU: 0.6898 | LR: 0.000476
+Validation IoU did not improve. Patience: 1/10
+Epoch 15: Train Loss: 0.2923, Train IoU: 0.6911 | Val Loss: 0.3060, Val IoU: 0.7115 | LR: 0.000473
+Saved new best model.
+Epoch 16: Train Loss: 0.2828, Train IoU: 0.6979 | Val Loss: 0.3282, Val IoU: 0.6966 | LR: 0.000469
+Validation IoU did not improve. Patience: 1/10
+Epoch 17: Train Loss: 0.2445, Train IoU: 0.7242 | Val Loss: 0.3058, Val IoU: 0.7205 | LR: 0.000465
+Saved new best model.
+Epoch 18: Train Loss: 0.2640, Train IoU: 0.7070 | Val Loss: 0.3346, Val IoU: 0.6866 | LR: 0.000461
+Validation IoU did not improve. Patience: 1/10
+Epoch 19: Train Loss: 0.2686, Train IoU: 0.7046 | Val Loss: 0.3181, Val IoU: 0.6744 | LR: 0.000457
+Validation IoU did not improve. Patience: 2/10
+Epoch 20: Train Loss: 0.2544, Train IoU: 0.7154 | Val Loss: 0.3226, Val IoU: 0.7102 | LR: 0.000452
+Validation IoU did not improve. Patience: 3/10
+Epoch 21: Train Loss: 0.2690, Train IoU: 0.7102 | Val Loss: 0.3430, Val IoU: 0.6737 | LR: 0.000448
+Validation IoU did not improve. Patience: 4/10
+Epoch 22: Train Loss: 0.2847, Train IoU: 0.6985 | Val Loss: 0.3394, Val IoU: 0.6552 | LR: 0.000443
+Validation IoU did not improve. Patience: 5/10
+Epoch 23: Train Loss: 0.2566, Train IoU: 0.7179 | Val Loss: 0.3313, Val IoU: 0.6682 | LR: 0.000438
+Validation IoU did not improve. Patience: 6/10
+Epoch 24: Train Loss: 0.2526, Train IoU: 0.7219 | Val Loss: 0.3445, Val IoU: 0.6623 | LR: 0.000432
+Validation IoU did not improve. Patience: 7/10
+Epoch 25: Train Loss: 0.2554, Train IoU: 0.7141 | Val Loss: 0.3720, Val IoU: 0.6696 | LR: 0.000427
+Validation IoU did not improve. Patience: 8/10
+Epoch 26: Train Loss: 0.2531, Train IoU: 0.7235 | Val Loss: 0.3885, Val IoU: 0.6555 | LR: 0.000421
+Validation IoU did not improve. Patience: 9/10
+Epoch 27: Train Loss: 0.2462, Train IoU: 0.7209 | Val Loss: 0.3160, Val IoU: 0.7071 | LR: 0.000415
+Validation IoU did not improve. Patience: 10/10
+Early stopping triggered after 27 epochs.
+Training completed in 6277.79 seconds (1.74 hours).
+Best Validation IoU: 0.7205
+
+--- Evaluating on Test Set ---
+Test Loss: 0.3144, Test IoU: 0.7142

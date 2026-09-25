@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Change Detection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            padding: 2rem 0;
+            text-align: center;
+        }
+
+        h1 {
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin: 0;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 900px;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin-bottom: 2rem;
+        }
+
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .file-upload {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(15, 23, 42, 0.4);
+            overflow: hidden;
+        }
+
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .file-upload input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload span {
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-top: 10px;
+            z-index: 1;
+        }
+
+        .file-upload img.preview {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 0;
+            opacity: 0.8;
+        }
+
+        .submit-btn {
+            margin-top: 2rem;
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary);
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .submit-btn:hover {
+            background: var(--primary-hover);
+        }
+        
+        .submit-btn:active {
+            transform: scale(0.98);
+        }
+
+        .submit-btn:disabled {
+            background: #475569;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #result-section {
+            display: none;
+            text-align: center;
+        }
+
+        .stats-card {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: inline-block;
+            border: 1px solid var(--border);
+        }
+
+        .stats-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #ef4444; /* Red for changes */
+            margin: 0;
+        }
+
+        .stats-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #result-image {
+            max-width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+        }
+
+        .loading {
+            display: none;
+            margin-top: 1rem;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* NEW TABS CSS */
+        .tabs {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+        }
+        .tab-btn:hover:not(.active) {
+            color: var(--text-main);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+        .input-group label {
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .input-group input {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            color: var(--text-main);
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            .upload-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Autocomplete */
+        .autocomplete-container {
+            position: relative;
+            width: 100%;
+        }
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 250px;
+            overflow-y: auto;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            z-index: 10;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+            margin-top: 0.25rem;
+        }
+        .autocomplete-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-item:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+        .autocomplete-message {
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Satellite Change Detection</h1>
+        <p class="subtitle">Upload two images (Before & After) to identify construction, destruction, or changes.</p>
+    </header>
+
+    <main>
+        <div class="glass-panel">
+            <div class="tabs">
+                <button type="button" class="tab-btn active" onclick="switchTab('upload')">Upload Images</button>
+                <button type="button" class="tab-btn" onclick="switchTab('fetch')">Fetch by Location & Date</button>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="tab-upload" class="tab-content active">
+                <form id="upload-form">
+                    <div class="upload-section">
+                        <div class="file-upload">
+                            <span>+ Image A (Before)</span>
+                            <input type="file" id="image_a" accept="image/png, image/jpeg" required>
+                            <img id="preview_a" class="preview" alt="Preview A">
+                        </div>
+                        
+                        <div class="file-upload">
+                            <span>+ Image B (After)</span>
+                            <input type="file" id="image_b" accept="image/png, image/jpeg" required>
+                            <img id="preview_b" class="preview" alt="Preview B">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-btn" id="submit-btn-upload">Detect Changes</button>
+                    <div class="loading" id="loading-upload">Analyzing images using MobileNetV2-3D ONNX...</div>
+                </form>
+            </div>
+            
+            <!-- Fetch Tab -->
+            <div id="tab-fetch" class="tab-content">
+                <form id="fetch-form">
+                    <div class="upload-section" style="grid-template-columns: 1fr;">
+                        <div class="input-group">
+                            <div class="input-group">
+                                <label>Place Name</label>
+                                <div class="autocomplete-container">
+                                    <input type="text" id="place_name" placeholder="e.g. Palm Jumeirah, Dubai" style="width: 100%; box-sizing: border-box;" autocomplete="off">
+                                    <div id="autocomplete-dropdown" class="autocomplete-dropdown"></div>
+                                </div>
+                                <small style="color:var(--text-muted);margin-top:0.2rem;">Requires Copernicus Data Space Ecosystem credentials in .env</small>
+                            </div>
+                            
+                            <div id="map" style="height: 300px; width: 100%; margin-top: 1.5rem; margin-bottom: 0.5rem; border-radius: 8px; border: 1px solid var(--border); z-index: 1;"></div>
+                            
+                            <details style="margin-bottom: 1.5rem; text-align: left; color: var(--text-muted); cursor: pointer; margin-top: 1rem;">
+                                <summary style="font-weight: 600;">Advanced: enter coordinates manually</summary>
+                                <div class="input-group" style="margin-top: 1rem;">
+                                    <label>Bounding Box (min_lon, min_lat, max_lon, max_lat)</label>
+                                    <input type="text" id="bbox" placeholder="e.g. -122.0, 37.0, -121.9, 37.1">
+                                </div>
+                            </details>
+                        <div class="upload-section">
+                            <div class="input-group">
+                                <label>Date Before</label>
+                                <input type="date" id="date_before" required>
+                            </div>
+                            <div class="input-group">
+                                <label>Date After</label>
+                                <input type="date" id="date_after" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn" id="submit-btn-fetch" disabled>Fetch & Detect Changes</button>
+                    <div class="loading" id="loading-fetch">Fetching from Copernicus & Analyzing...</div>
+                    
+                    <!-- Known Limitations -->
+                    <details style="margin-top: 1.5rem; text-align: left; color: var(--text-muted); cursor: pointer; padding: 1rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">
+                        <summary style="font-weight: 600; color: var(--text-main);">Known Limitations</summary>
+                        <ul style="margin: 0.5rem 0 0 0; padding-left: 1.2rem; font-size: 0.85rem; line-height: 1.4;">
+                            <li style="margin-bottom: 0.25rem;"><strong>Cloud Cover:</strong> Clouds and shadows can obscure the ground and may occasionally be detected as false changes.</li>
+                            <li style="margin-bottom: 0.25rem;"><strong>Resolution Limits:</strong> Satellite imagery is limited to 10m/pixel. Very small changes (like individual trees or cars) will not be visible.</li>
+                            <li><strong>Seasonal Changes:</strong> Natural seasonal variations in vegetation or agriculture may sometimes be misread as land-use change.</li>
+                        </ul>
+                    </details>
+                </form>
+            </div>
+        </div>
+
+        <div class="glass-panel" id="result-section">
+            <div id="resolved-location-card" style="background: rgba(15,23,42,0.7); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; display: none; text-align: left;">
+                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">Resolved Location</h4>
+                <p id="resolved-place" style="margin: 0 0 0.25rem 0; font-weight: 600;"></p>
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Bounding Box: <span id="resolved-bbox"></span></p>
+            </div>
+
+            <div id="story-mode-card" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; display: none; text-align: left;">
+                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">Summary</h4>
+                <p id="story-mode-text" style="margin: 0; font-size: 1.05rem; line-height: 1.5; color: var(--text-main); font-weight: 500;"></p>
+            </div>
+
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-bottom:1.5rem;">
+                <div class="stats-card" style="margin-bottom:0;">
+                    <p class="stats-value" id="percent-changed">0%</p>
+                    <p class="stats-label">Total Area Changed</p>
+                </div>
+                <div class="stats-card" id="cloud-before-card" style="display:none; margin-bottom:0;">
+                    <p class="stats-value" id="cloud-before">0%</p>
+                    <p class="stats-label">Cloud Cover (Before)</p>
+                </div>
+                <div class="stats-card" id="cloud-after-card" style="display:none; margin-bottom:0;">
+                    <p class="stats-value" id="cloud-after">0%</p>
+                    <p class="stats-label">Cloud Cover (After)</p>
+                </div>
+            </div>
+
+            <div>
+                <h3>Change Mask Overlay</h3>
+                <img id="result-image" src="" alt="Result Overlay">
+            </div>
+
+            <div id="regions-section" style="margin-top:2rem;display:none;">
+                <h3 style="margin-bottom:1rem;">Detected Change Regions</h3>
+                <div id="regions-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // confidence → accent colour
+        const CONF_COLOR = { High: '#22c55e', Medium: '#f59e0b', Low: '#94a3b8' };
+
+        // change_type → emoji badge
+        function typeEmoji(t) {
+            if (t.includes('deforestation')) return '🌲';
+            if (t.includes('construction'))  return '🏗️';
+            if (t.includes('soil'))           return '🟤';
+            return '❓';
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            // Hide result section on tab switch
+            document.getElementById('result-section').style.display = 'none';
+            
+            // Fix map sizing when tab becomes visible
+            if (tabId === 'fetch' && window.map) {
+                setTimeout(() => window.map.invalidateSize(), 100);
+            }
+        }
+
+        function renderRegions(regions) {
+            const section = document.getElementById('regions-section');
+            const list    = document.getElementById('regions-list');
+            list.innerHTML = '';
+
+            if (!regions || regions.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            regions.forEach((r, i) => {
+                const conf  = r.confidence_label;
+                const color = CONF_COLOR[conf] || '#94a3b8';
+                const [x, y, w, h] = r.bounding_box;
+                const st = r.stats;
+
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    background: rgba(15,23,42,0.7);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    border-left: 4px solid ${color};
+                    border-radius: 10px;
+                    padding: 1rem 1.25rem;
+                    margin-bottom: 1rem;
+                    text-align: left;
+                `;
+
+                card.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
+                        <span style="font-size:1.4rem;">${typeEmoji(r.change_type)}</span>
+                        <strong style="font-size:1rem;color:#f8fafc;">${r.change_type}</strong>
+                        <span style="margin-left:auto;padding:2px 10px;border-radius:99px;
+                                     background:${color}22;color:${color};
+                                     font-size:0.75rem;font-weight:600;border:1px solid ${color}88;">
+                            ${conf} confidence
+                        </span>
+                    </div>
+                    <div style="color:#94a3b8;font-size:0.82rem;display:grid;
+                                grid-template-columns:1fr 1fr;gap:0.25rem 1.5rem;">
+                        <span>Area: <b style="color:#f8fafc;">${r.pixel_area.toLocaleString()} px</b></span>
+                        <span>BBox: <b style="color:#f8fafc;">x=${x} y=${y} ${w}×${h}</b></span>
+                        <span>Veg ratio before→after: <b style="color:#f8fafc;">${st.veg_ratio_before} → ${st.veg_ratio_after}</b></span>
+                        <span>Veg drop: <b style="color:#f8fafc;">${st.veg_ratio_drop}</b></span>
+                        <span>Brightness before→after: <b style="color:#f8fafc;">${st.brightness_before} → ${st.brightness_after}</b></span>
+                        <span>Colour shift: <b style="color:#f8fafc;">${st.color_shift_mag}</b></span>
+                        <span>Uniformity std (after): <b style="color:#f8fafc;">${st.uniformity_std_b}</b></span>
+                        <span>Achromatic score: <b style="color:#f8fafc;">${st.achromatic_score_b}</b></span>
+                        <span>Red excess (after): <b style="color:#f8fafc;">${st.red_excess_after}</b></span>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+            section.style.display = 'block';
+        }
+
+        function setupPreview(inputId, previewId) {
+            const input = document.getElementById(inputId);
+            const preview = document.getElementById(previewId);
+            input.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+        setupPreview('image_a', 'preview_a');
+        setupPreview('image_b', 'preview_b');
+
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const imageA = document.getElementById('image_a').files[0];
+            const imageB = document.getElementById('image_b').files[0];
+            if (!imageA || !imageB) return;
+
+            const btn           = document.getElementById('submit-btn-upload');
+            const loading       = document.getElementById('loading-upload');
+            const resultSection = document.getElementById('result-section');
+
+            btn.disabled = true;
+            loading.style.display = 'block';
+            resultSection.style.display = 'none';
+            document.getElementById('cloud-before-card').style.display = 'none';
+            document.getElementById('cloud-after-card').style.display = 'none';
+            document.getElementById('resolved-location-card').style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('image_a', imageA);
+            formData.append('image_b', imageB);
+
+            try {
+                const response = await fetch('/predict', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.error || 'Server error');
+
+                document.getElementById('percent-changed').textContent =
+                    data.percent_changed.toFixed(2) + '%';
+                document.getElementById('result-image').src =
+                    'data:image/png;base64,' + data.overlay_base64;
+
+                renderRegions(data.change_regions || []);
+                resultSection.style.display = 'block';
+
+            } catch (err) {
+                alert('Error detecting changes: ' + err.message);
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        let selectedBbox = null;
+        let geocodeTimeout = null;
+        const placeInput = document.getElementById('place_name');
+        const dropdown = document.getElementById('autocomplete-dropdown');
+        const manualBboxInput = document.getElementById('bbox');
+        const fetchBtn = document.getElementById('submit-btn-fetch');
+
+        function setFetchButtonState() {
+            const hasManualBbox = manualBboxInput.value.trim().length > 0;
+            fetchBtn.disabled = !(selectedBbox || hasManualBbox);
+        }
+
+        // ── MAP INITIALIZATION ──────────────────────────────────────────────
+        window.map = L.map('map').setView([20.5937, 78.9629], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(window.map);
+
+        const drawnItems = new L.FeatureGroup();
+        window.map.addLayer(drawnItems);
+        const drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: {
+                polygon: false,
+                polyline: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                rectangle: true
+            }
+        });
+        window.map.addControl(drawControl);
+
+        window.map.on(L.Draw.Event.CREATED, function (event) {
+            drawnItems.clearLayers();
+            const layer = event.layer;
+            drawnItems.addLayer(layer);
+            
+            const bounds = layer.getBounds();
+            const min_lon = bounds.getWest().toFixed(4);
+            const min_lat = bounds.getSouth().toFixed(4);
+            const max_lon = bounds.getEast().toFixed(4);
+            const max_lat = bounds.getNorth().toFixed(4);
+            
+            manualBboxInput.value = `${min_lon}, ${min_lat}, ${max_lon}, ${max_lat}`;
+            placeInput.value = '';
+            selectedBbox = null;
+            setFetchButtonState();
+        });
+        
+        window.map.on(L.Draw.Event.EDITED, function (event) {
+            event.layers.eachLayer(function (layer) {
+                const bounds = layer.getBounds();
+                const min_lon = bounds.getWest().toFixed(4);
+                const min_lat = bounds.getSouth().toFixed(4);
+                const max_lon = bounds.getEast().toFixed(4);
+                const max_lat = bounds.getNorth().toFixed(4);
+                manualBboxInput.value = `${min_lon}, ${min_lat}, ${max_lon}, ${max_lat}`;
+            });
+        });
+        window.map.on(L.Draw.Event.DELETED, function (event) {
+            manualBboxInput.value = '';
+            setFetchButtonState();
+        });
+        // ────────────────────────────────────────────────────────────────────
+
+        manualBboxInput.addEventListener('input', () => {
+            if (manualBboxInput.value.trim()) {
+                selectedBbox = null; // Typing manually invalidates autocomplete
+            }
+            setFetchButtonState();
+        });
+
+        placeInput.addEventListener('input', (e) => {
+            selectedBbox = null;
+            setFetchButtonState();
+            
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            clearTimeout(geocodeTimeout);
+            geocodeTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/geocode-suggest?q=${encodeURIComponent(query)}`);
+                    const data = await res.json();
+                    
+                    dropdown.innerHTML = '';
+                    if (!res.ok) throw new Error(data.error || 'API error');
+                    
+                    if (data.length === 0) {
+                        dropdown.innerHTML = '<div class="autocomplete-message">No matches found</div>';
+                    } else {
+                        data.forEach(item => {
+                            const div = document.createElement('div');
+                            div.className = 'autocomplete-item';
+                            div.textContent = item.display_name;
+                            div.addEventListener('click', () => {
+                                placeInput.value = item.display_name;
+                                selectedBbox = item.boundingbox;
+                                dropdown.style.display = 'none';
+                                manualBboxInput.value = ''; 
+                                setFetchButtonState();
+                                
+                                // Pan map and draw box
+                                const min_lon = item.boundingbox[0];
+                                const min_lat = item.boundingbox[1];
+                                const max_lon = item.boundingbox[2];
+                                const max_lat = item.boundingbox[3];
+                                const bounds = [[min_lat, min_lon], [max_lat, max_lon]];
+                                window.map.fitBounds(bounds);
+                                drawnItems.clearLayers();
+                                L.rectangle(bounds).addTo(drawnItems);
+                            });
+                            dropdown.appendChild(div);
+                        });
+                    }
+                    dropdown.style.display = 'block';
+                } catch (err) {
+                    dropdown.innerHTML = `<div class="autocomplete-message" style="color:#ef4444;">Error loading suggestions</div>`;
+                    dropdown.style.display = 'block';
+                    console.error(err);
+                }
+            }, 350);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!placeInput.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        document.getElementById('fetch-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const dateBefore = document.getElementById('date_before').value;
+            const dateAfter = document.getElementById('date_after').value;
+            
+            let bbox = selectedBbox;
+            const bboxStr = manualBboxInput.value.trim();
+            if (bboxStr) {
+                bbox = bboxStr.split(',').map(s => parseFloat(s.trim()));
+                if (bbox.length !== 4 || bbox.some(isNaN)) {
+                    alert('Invalid bounding box. Must be 4 comma-separated numbers.');
+                    return;
+                }
+            } else if (!bbox) {
+                alert('Please select a Place Name from the dropdown or provide a Bounding Box manually.');
+                return;
+            }
+
+            const btn           = document.getElementById('submit-btn-fetch');
+            const loading       = document.getElementById('loading-fetch');
+            const resultSection = document.getElementById('result-section');
+
+            btn.disabled = true;
+            loading.style.display = 'block';
+            resultSection.style.display = 'none';
+            document.getElementById('cloud-before-card').style.display = 'none';
+            document.getElementById('cloud-after-card').style.display = 'none';
+            document.getElementById('resolved-location-card').style.display = 'none';
+            document.getElementById('story-mode-card').style.display = 'none';
+
+            try {
+                const payload = {
+                    date_before: dateBefore,
+                    date_after: dateAfter,
+                    bbox: bbox
+                };
+                if (selectedBbox) {
+                    payload.place_name = placeInput.value.trim();
+                }
+
+                const response = await fetch('/fetch-and-predict', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.error || 'Server error');
+
+                document.getElementById('percent-changed').textContent =
+                    data.percent_changed.toFixed(2) + '%';
+                
+                if (data.cloud_coverage_before !== undefined) {
+                    document.getElementById('cloud-before').textContent = data.cloud_coverage_before.toFixed(1) + '%';
+                    document.getElementById('cloud-before-card').style.display = 'block';
+                }
+                if (data.cloud_coverage_after !== undefined) {
+                    document.getElementById('cloud-after').textContent = data.cloud_coverage_after.toFixed(1) + '%';
+                    document.getElementById('cloud-after-card').style.display = 'block';
+                }
+                
+                if (data.resolved_bbox) {
+                    const rbbox = data.resolved_bbox.map(n => n.toFixed(4)).join(', ');
+                    document.getElementById('resolved-bbox').textContent = `[${rbbox}]`;
+                    if (data.resolved_place_name) {
+                        document.getElementById('resolved-place').textContent = data.resolved_place_name;
+                    } else {
+                        document.getElementById('resolved-place').textContent = 'Coordinates used directly';
+                    }
+                    document.getElementById('resolved-location-card').style.display = 'block';
+                }
+                
+                if (data.summary_sentence) {
+                    document.getElementById('story-mode-text').textContent = data.summary_sentence;
+                    document.getElementById('story-mode-card').style.display = 'block';
+                }
+
+                document.getElementById('result-image').src =
+                    'data:image/png;base64,' + data.overlay_base64;
+
+                renderRegions(data.change_regions || []);
+                resultSection.style.display = 'block';
+
+            } catch (err) {
+                alert('Error fetching imagery: ' + err.message);
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
