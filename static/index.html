@@ -896,6 +896,7 @@
     <!-- Actions -->
     <div class="actions-bar">
         <button class="btn-outline" onclick="window.print()">🖨️ Print / Save PDF</button>
+        <button class="btn-outline" onclick="downloadReport()">📄 Download Report</button>
         <button class="btn-outline" onclick="downloadImages()">📥 Download Images</button>
     </div>
 </section>
@@ -918,6 +919,7 @@
 <script>
 // ── Confidence colors & emojis ──────────────────────────────
 const CONF = { High: '#22c55e', Medium: '#f59e0b', Low: '#94a3b8' };
+let latestResult = null;
 function typeEmoji(t) {
     t = t.toLowerCase();
     if (t.includes('deforest') || t.includes('vegetation')) return '🌲';
@@ -992,6 +994,7 @@ function animateValue(el, end, suffix = '%', duration = 1200) {
 
 // ── Display results ─────────────────────────────────────────
 function displayResults(data) {
+    latestResult = data;
     const sec = document.getElementById('results-section');
 
     // Stats
@@ -1250,6 +1253,17 @@ function downloadImages() {
         a.href = src; a.download = name;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
     });
+}
+
+async function downloadReport() {
+    if (!latestResult) return;
+    try {
+        const response = await fetch('/report', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({result: latestResult})});
+        if (!response.ok) throw new Error('Report generation failed');
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a'); link.href = url; link.download = 'change-report.pdf'; link.click();
+        URL.revokeObjectURL(url);
+    } catch (error) { alert(error.message); }
 }
 </script>
 </body>
