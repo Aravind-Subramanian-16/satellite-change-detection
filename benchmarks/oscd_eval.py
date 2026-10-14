@@ -61,17 +61,37 @@ def render(city: str, data, pred, out: Path):
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--prepared-root", type=Path, required=True, help="Directory of verified per-city .npz adapters; no data is downloaded implicitly."); p.add_argument("--output", type=Path, default=ROOT/"benchmarks/results"); p.add_argument("--split", default="test"); args=p.parse_args()
     random.seed(0); np.random.seed(0); rows=[]
+    checkpoint=args.output/"oscd_results.json"
+    if checkpoint.exists():
+        rows=json.loads(checkpoint.read_text())
+    finished={r["city"] for r in rows if r.get("configuration") == "fixed_levir_weights"}
     configs=[SpectralConfig(mode="hardcoded"), SpectralConfig(mode="otsu"), SpectralConfig(mode="percentile")]
     for city, data in prepared_cities(args.prepared_root):
+        if city in finished:
+            print(f"Skipping completed city: {city}")
+            continue
         for cfg in configs:
             pred, _, info = detect_from_indices(data["ndvi_a"],data["ndbi_a"],data["ndvi_b"],data["ndbi_b"],config=cfg)
             row={"city":city,"pipeline":"spectral","configuration":cfg.mode,"scl_cloud_mask":"not_available_in_oscd","metrics":metrics(pred,data["mask"]),"thresholds":info}; rows.append(row)
             if cfg.mode == "hardcoded": render(city,data,pred,args.output/"qualitative")
+        # Pipeline A is intentionally applied unchanged to 10m OSCD RGB.
+        # A model/runtime failure is explicit and never replaced by a number.
+        try:
+            from app import run_inference_arrays
+            cnn = run_inference_arrays(data["rgb_a"].astype(np.uint8), data["rgb_b"].astype(np.uint8))
+            import base64, io
+            cnn_mask = np.asarray(Image.open(io.BytesIO(base64.b64decode(cnn["mask_base64"]))), dtype=np.uint8) > 0
+            rows.append({"city":city,"pipeline":"cnn","configuration":"fixed_levir_weights","scl_cloud_mask":"not_applicable","metrics":metrics(cnn_mask,data["mask"]),"thresholds":{}})
+        except Exception as exc:
+            rows.append({"city":city,"pipeline":"cnn","configuration":"fixed_levir_weights","status":"unavailable","reason":str(exc)})
+        # Checkpoint after every city: Colab disconnects preserve completed work.
+        args.output.mkdir(parents=True,exist_ok=True); (args.output/"oscd_results.json").write_text(json.dumps(rows,indent=2))
     if not rows: raise SystemExit("No .npz city files found; no metrics were fabricated.")
     args.output.mkdir(parents=True,exist_ok=True); (args.output/"oscd_results.json").write_text(json.dumps(rows,indent=2))
     headers="| City | Pipeline | Config | Precision | Recall | F1 | IoU | Overall accuracy |\n|---|---|---|---:|---:|---:|---:|---:|\n"
-    body="\n".join(f"| {r['city']} | {r['pipeline']} | {r['configuration']} | {r['metrics']['precision']:.4f} | {r['metrics']['recall']:.4f} | {r['metrics']['f1']:.4f} | {r['metrics']['iou']:.4f} | {r['metrics']['overall_accuracy']:.4f} |" for r in rows)
+    metric_rows=[r for r in rows if "metrics" in r]
+    body="\n".join(f"| {r['city']} | {r['pipeline']} | {r['configuration']} | {r['metrics']['precision']:.4f} | {r['metrics']['recall']:.4f} | {r['metrics']['f1']:.4f} | {r['metrics']['iou']:.4f} | {r['metrics']['overall_accuracy']:.4f} |" for r in metric_rows)
     (args.output/"oscd_results.md").write_text(headers+body+"\n")
-    (args.output/"oscd_results.tex").write_text("\\begin{tabular}{lllrrrrr}\nCity & Pipeline & Config & Precision & Recall & F1 & IoU & OA\\\\\n\\hline\n"+"\n".join(f"{r['city']} & {r['pipeline']} & {r['configuration']} & {r['metrics']['precision']:.4f} & {r['metrics']['recall']:.4f} & {r['metrics']['f1']:.4f} & {r['metrics']['iou']:.4f} & {r['metrics']['overall_accuracy']:.4f}\\\\" for r in rows)+"\n\\end{tabular}\n")
+    (args.output/"oscd_results.tex").write_text("\\begin{tabular}{lllrrrrr}\nCity & Pipeline & Config & Precision & Recall & F1 & IoU & OA\\\\\n\\hline\n"+"\n".join(f"{r['city']} & {r['pipeline']} & {r['configuration']} & {r['metrics']['precision']:.4f} & {r['metrics']['recall']:.4f} & {r['metrics']['f1']:.4f} & {r['metrics']['iou']:.4f} & {r['metrics']['overall_accuracy']:.4f}\\\\" for r in metric_rows)+"\n\\end{tabular}\n")
     print(f"OSCD {args.split}: wrote {len(rows)} reproducible rows to {args.output}")
 if __name__ == "__main__": main()
