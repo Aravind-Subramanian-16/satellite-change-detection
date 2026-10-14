@@ -2,11 +2,14 @@
 from __future__ import annotations
 import base64, io
 from pathlib import Path
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
 
 def build_report(result: dict, output: str | Path) -> Path:
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+    except ImportError as exc:
+        raise RuntimeError("reportlab is required for PDF reports; install requirements.txt") from exc
     output=Path(output); c=canvas.Canvas(str(output), pagesize=letter); _, h=letter
     c.setTitle("Satellite change analysis"); c.setFont("Helvetica-Bold", 16); c.drawString(42,h-48,"Satellite Change Analysis")
     c.setFont("Helvetica",10); y=h-72

@@ -858,6 +858,10 @@
             <p class="stat-value warning" id="stat-cloud-b-val">0%</p>
             <p class="stat-label">Cloud (After)</p>
         </div>
+        <div class="stat-card" id="stat-masked" style="display:none;">
+            <p class="stat-value warning" id="stat-masked-val">0%</p>
+            <p class="stat-label">Cloud Masked</p>
+        </div>
         <div class="stat-card" id="stat-regions-count">
             <p class="stat-value success" id="stat-regions-val">0</p>
             <p class="stat-label">Regions Found</p>
@@ -897,6 +901,8 @@
     <div class="actions-bar">
         <button class="btn-outline" onclick="window.print()">🖨️ Print / Save PDF</button>
         <button class="btn-outline" onclick="downloadReport()">📄 Download Report</button>
+        <button class="btn-outline" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
+        <button class="btn-outline" onclick="showHistory()">🕘 History</button>
         <button class="btn-outline" onclick="downloadImages()">📥 Download Images</button>
     </div>
 </section>
@@ -1009,6 +1015,10 @@ function displayResults(data) {
         document.getElementById('stat-cloud-b').style.display = '';
         animateValue(document.getElementById('stat-cloud-b-val'), data.cloud_coverage_after);
     } else { document.getElementById('stat-cloud-b').style.display = 'none'; }
+    if (data.percent_cloud_masked !== undefined) {
+        document.getElementById('stat-masked').style.display = '';
+        animateValue(document.getElementById('stat-masked-val'), data.percent_cloud_masked);
+    } else { document.getElementById('stat-masked').style.display = 'none'; }
 
     const validRegions = (data.change_regions || []).filter(r => r.change_type !== 'Possible cloud interference');
     document.getElementById('stat-regions-val').textContent = validRegions.length;
@@ -1028,6 +1038,7 @@ function displayResults(data) {
     // Mask + overlay
     document.getElementById('res-mask').src = 'data:image/png;base64,' + data.mask_base64;
     document.getElementById('res-overlay').src = 'data:image/png;base64,' + data.overlay_base64;
+    document.getElementById('res-overlay').dataset.binarySrc = document.getElementById('res-overlay').src;
 
     // Regions
     renderRegions(data.change_regions || []);
@@ -1264,6 +1275,26 @@ async function downloadReport() {
         const link = document.createElement('a'); link.href = url; link.download = 'change-report.pdf'; link.click();
         URL.revokeObjectURL(url);
     } catch (error) { alert(error.message); }
+}
+
+function heatmapColor(v) { // blue → yellow → red, continuous confidence/evidence
+    const r = Math.round(255 * Math.min(1, v * 2)); const b = Math.round(255 * Math.max(0, 1 - v * 2));
+    return [r, Math.round(255 * (1 - Math.abs(v - .5) * 2)), b];
+}
+function toggleHeatmap() {
+    const image = document.getElementById('res-overlay');
+    if (!latestResult || !latestResult.confidence_base64) return;
+    if (image.dataset.heatmapSrc) { image.src = image.dataset.binarySrc; delete image.dataset.heatmapSrc; return; }
+    const confidence = new Image(); confidence.onload = () => {
+        const canvas = document.createElement('canvas'); canvas.width=confidence.width; canvas.height=confidence.height;
+        const ctx=canvas.getContext('2d'); ctx.drawImage(confidence,0,0); const data=ctx.getImageData(0,0,canvas.width,canvas.height);
+        for(let i=0;i<data.data.length;i+=4) { const [r,g,b]=heatmapColor(data.data[i]/255); data.data[i]=r;data.data[i+1]=g;data.data[i+2]=b; }
+        ctx.putImageData(data,0,0); image.dataset.heatmapSrc=canvas.toDataURL(); image.src=image.dataset.heatmapSrc;
+    }; confidence.src='data:image/png;base64,'+latestResult.confidence_base64;
+}
+async function showHistory() {
+    try { const rows=await (await fetch('/history')).json(); alert(rows.map(r => `${r.id}: ${r.location || 'Upload'} — ${r.percent_changed.toFixed(2)}%`).join('\n') || 'No analyses yet'); }
+    catch (_) { alert('Could not load analysis history.'); }
 }
 </script>
 </body>

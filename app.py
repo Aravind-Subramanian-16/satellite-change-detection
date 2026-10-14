@@ -129,13 +129,17 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
     
     # Encode all images to base64
     mask_img = Image.fromarray(binary_mask * 255)
+    # Continuous evidence is used by the UI heatmap, not thresholded change stats.
+    evidence = np.maximum(np.maximum(ndvi_a - ndvi_b, 0), np.maximum(ndbi_b - ndbi_a, 0))
+    scale = float(np.nanpercentile(evidence, 99)) if np.isfinite(evidence).any() else 0.0
+    confidence = np.clip(evidence / scale, 0, 1) if scale > 1e-8 else np.zeros_like(evidence)
     
     return {
         "percent_changed": float(percent_changed),
         "overlay_base64": _encode_image(blended), "image_a_base64": _encode_image(original_img_a),
         "image_b_base64": _encode_image(original_img_b), "mask_base64": _encode_image(mask_img),
         "change_regions": change_regions, "percent_cloud_masked": threshold_info["masked_percent"],
-        "thresholds": threshold_info, "pipeline": "spectral"
+        "thresholds": threshold_info, "pipeline": "spectral", "confidence_base64": _encode_image(Image.fromarray((confidence * 255).astype(np.uint8)))
     }
 
 @app.post("/predict")
