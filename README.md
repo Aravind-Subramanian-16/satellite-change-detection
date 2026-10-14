@@ -105,3 +105,25 @@ For deployment, we provide a highly optimized `Dockerfile` that packages only th
 - **FC-EF / FC-Siam:** Daudt, R. C., Le Saux, B., & Boulch, A. (2018). Fully Convolutional Siamese Networks for Change Detection. *arXiv preprint arXiv:1810.08462*.
 - **AFCF3D-Net:** (3D convolution fusion concepts) *arXiv preprint arXiv:2302.05109*.
 - **BIT:** Chen, H., Qi, Z., & Shi, Z. (2021). Remote Sensing Image Change Detection with Transformers. *IEEE Transactions on Geoscience and Remote Sensing*. [DOI:10.1109/TGRS.2021.3095166](https://doi.org/10.1109/TGRS.2021.3095166)
+
+## Product features
+
+The single-page dashboard includes upload and place search, a responsive before/after drag control, staged loading feedback, classified region cards, and downloadable result images. `GET /health` is suitable for platform health checks. `POST /report` accepts a completed result object and returns a PDF report.
+
+Uploads larger than 256×256 are processed by overlapping 256px CNN tiles (32px overlap), then averaged during reconstruction. Live spectral requests exclude Sentinel-2 SCL cloud classes 8, 9, 10 and cloud shadow 3; `percent_cloud_masked` is returned with the result.
+
+## OSCD benchmark reproduction
+
+OSCD must be obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; it is not downloaded by this repository and no scores are supplied without data. The dataset contains 24 Sentinel-2 13-band pairs, with 14 train and 10 test cities. Use train cities only to choose any adaptive-threshold policy, then lock it before test evaluation.
+
+This repository's evaluator intentionally requires a verified local, per-city `.npz` adapter containing `ndvi_a`, `ndbi_a`, `ndvi_b`, `ndbi_b`, `mask`, `rgb_a`, and `rgb_b`. This explicit boundary avoids silently resampling OSCD's mixed 10m/20m/60m bands. Run:
+
+```bash
+python benchmarks/oscd_eval.py --prepared-root /path/to/oscd-test-adapters
+```
+
+It writes JSON, Markdown, LaTex, and qualitative panels into `benchmarks/results/`. OSCD has no SCL layer, so the SCL on/off comparison is marked unavailable rather than fabricated. No real OSCD data is installed in this checkout, hence no benchmark result is claimed yet.
+
+## Deployment
+
+Build with `docker build -t satellite-change .` and run `docker run -p 8000:8000 --env-file .env satellite-change`. Supply `COPERNICUS_CLIENT_ID` and `COPERNICUS_CLIENT_SECRET` through the platform secret manager, never source control. For Render/Railway/Fly.io: select Docker deployment, expose port 8000, set the two secrets, and configure health check `/health`. Use one CPU worker because ONNX model memory and free-tier cold starts are limiting.

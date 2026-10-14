@@ -18,7 +18,10 @@ RUN pip install --no-cache-dir \
         onnxruntime==1.18.0 \
         Pillow==10.3.0 \
         "numpy<2" \
-        opencv-python-headless==4.9.0.80
+        opencv-python-headless==4.9.0.80 \
+        requests \
+        python-dotenv \
+        reportlab
 
 # ── Application ───────────────────────────────────────────────────────────────
 WORKDIR /app
@@ -27,10 +30,14 @@ WORKDIR /app
 COPY app.py            ./app.py
 COPY model.onnx        ./model.onnx
 COPY change_reasoner.py ./change_reasoner.py
+COPY spectral_pipeline.py ./spectral_pipeline.py
+COPY tiling.py ./tiling.py
+COPY reports.py ./reports.py
 COPY static/           ./static/
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
 # Single worker is enough for a demo; add --workers N for production
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

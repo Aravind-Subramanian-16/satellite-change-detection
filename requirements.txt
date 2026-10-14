@@ -11,3 +11,6 @@ onnx==1.15.0
 onnxruntime
 requests
 python-dotenv
+reportlab
+rasterio
+pytest
