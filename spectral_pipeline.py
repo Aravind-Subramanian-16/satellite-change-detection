@@ -66,7 +66,11 @@ def detect_from_indices(
 ) -> tuple[np.ndarray, np.ndarray, dict[str, float | str | bool]]:
     """Return (change mask, invalid cloud mask, reproducible threshold metadata)."""
     dvi, dbi = np.asarray(ndvi_b) - np.asarray(ndvi_a), np.asarray(ndbi_b) - np.asarray(ndbi_a)
-    invalid = cloud_mask(scl_a, scl_b, config.mask_cloud_shadow) if config.use_cloud_mask else np.zeros(dvi.shape, dtype=bool)
+    # Offline datasets such as OSCD do not expose SCL. Its absence means there
+    # is no cloud information to exclude, not an empty-shaped image.
+    invalid = (cloud_mask(scl_a, scl_b, config.mask_cloud_shadow)
+               if config.use_cloud_mask and scl_a is not None and scl_b is not None
+               else np.zeros(dvi.shape, dtype=bool))
     valid = ~invalid & np.isfinite(dvi) & np.isfinite(dbi)
     if config.mode == "hardcoded":
         vi_threshold, bi_threshold = config.ndvi_drop, config.ndbi_rise
