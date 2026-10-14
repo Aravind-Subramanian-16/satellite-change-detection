@@ -3,85 +3,316 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satellite Change Detection</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Satellite Change Detection — AI-Powered Land Analysis</title>
+    <meta name="description" content="Upload satellite images or search any location to detect construction, deforestation, and land-use changes using deep learning.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <style>
+        /* ── Design Tokens ─────────────────────────────────────── */
         :root {
-            --bg-color: #0f172a;
-            --panel-bg: rgba(30, 41, 59, 0.7);
+            --bg-deep: #050a18;
+            --bg-surface: #0c1428;
+            --bg-card: rgba(15, 25, 50, 0.65);
             --primary: #3b82f6;
-            --primary-hover: #2563eb;
-            --text-main: #f8fafc;
+            --primary-glow: rgba(59, 130, 246, 0.35);
+            --accent: #a78bfa;
+            --accent-glow: rgba(167, 139, 250, 0.25);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text: #f1f5f9;
             --text-muted: #94a3b8;
-            --border: rgba(255, 255, 255, 0.1);
+            --text-dim: #64748b;
+            --border: rgba(148, 163, 184, 0.12);
+            --border-hover: rgba(59, 130, 246, 0.4);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.6);
         }
 
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { scroll-behavior: smooth; }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ── Hero Section ──────────────────────────────────────── */
+        .hero {
+            position: relative;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
-        }
-
-        header {
-            width: 100%;
-            padding: 2rem 0;
+            justify-content: center;
             text-align: center;
+            padding: 2rem;
+            overflow: hidden;
         }
 
-        h1 {
-            font-weight: 700;
-            font-size: 2.5rem;
-            margin: 0;
-            background: linear-gradient(to right, #60a5fa, #a78bfa);
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 50% 20%, rgba(59, 130, 246, 0.12), transparent),
+                radial-gradient(ellipse 60% 50% at 80% 80%, rgba(167, 139, 250, 0.08), transparent),
+                radial-gradient(ellipse 50% 40% at 10% 70%, rgba(34, 197, 94, 0.06), transparent);
+            animation: heroPulse 8s ease-in-out infinite alternate;
+        }
+
+        @keyframes heroPulse {
+            0% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* Orbiting satellite */
+        .orbit-ring {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            border: 1px dashed rgba(59, 130, 246, 0.15);
+            border-radius: 50%;
+            animation: orbitSpin 25s linear infinite;
+        }
+
+        .orbit-dot {
+            position: absolute;
+            top: -5px;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 20px var(--primary-glow), 0 0 40px var(--primary-glow);
+            transform: translateX(-50%);
+        }
+
+        @keyframes orbitSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .hero-badge {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.2rem;
+            border-radius: 99px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: var(--primary);
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .hero-badge .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .hero h1 {
+            position: relative;
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            max-width: 800px;
+            background: linear-gradient(135deg, #fff 0%, #60a5fa 40%, #a78bfa 70%, #c084fc 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: fadeInUp 0.8s ease-out 0.1s both;
         }
 
-        p.subtitle {
+        .hero .subtitle {
+            position: relative;
+            font-size: 1.15rem;
             color: var(--text-muted);
-            margin-top: 0.5rem;
+            max-width: 600px;
+            margin: 1.5rem auto 2.5rem;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
         }
 
-        main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
+        .hero-cta {
+            position: relative;
+            display: inline-flex;
             align-items: center;
-            width: 100%;
-            max-width: 900px;
-            padding: 2rem;
-            box-sizing: border-box;
+            gap: 0.5rem;
+            padding: 1rem 2.5rem;
+            background: linear-gradient(135deg, var(--primary), #6366f1);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+            box-shadow: 0 8px 30px -8px var(--primary-glow);
+            animation: fadeInUp 0.8s ease-out 0.3s both;
         }
 
-        .glass-panel {
-            background: var(--panel-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 2rem;
-            width: 100%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            margin-bottom: 2rem;
+        .hero-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px -8px var(--primary-glow);
         }
 
-        .upload-section {
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── How It Works ──────────────────────────────────────── */
+        .how-section {
+            padding: 5rem 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .section-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .section-heading {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+        }
+
+        .steps-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
         }
 
-        .file-upload {
+        .step-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .step-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px -10px rgba(59, 130, 246, 0.15);
+        }
+
+        .step-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin: 0 auto 1.2rem;
+        }
+
+        .step-card:nth-child(1) .step-icon { background: rgba(59, 130, 246, 0.15); }
+        .step-card:nth-child(2) .step-icon { background: rgba(167, 139, 250, 0.15); }
+        .step-card:nth-child(3) .step-icon { background: rgba(34, 197, 94, 0.15); }
+
+        .step-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-card p {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+
+        .step-number {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            line-height: 26px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        /* ── App Section ───────────────────────────────────────── */
+        .app-section {
+            padding: 2rem;
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+        .tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            padding: 1rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.25s;
+        }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab-btn:hover:not(.active) { color: var(--text); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Upload boxes */
+        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .file-box {
             position: relative;
             display: flex;
             flex-direction: column;
@@ -89,720 +320,937 @@
             justify-content: center;
             height: 200px;
             border: 2px dashed var(--border);
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            transition: all 0.3s ease;
-            background: rgba(15, 23, 42, 0.4);
+            transition: all 0.3s;
+            background: rgba(5, 10, 24, 0.5);
             overflow: hidden;
         }
-
-        .file-upload:hover {
-            border-color: var(--primary);
-            background: rgba(59, 130, 246, 0.1);
+        .file-box:hover { border-color: var(--primary); background: rgba(59, 130, 246, 0.05); }
+        .file-box input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .file-box .label { color: var(--text-dim); font-weight: 600; font-size: 0.95rem; z-index: 1; }
+        .file-box .icon { font-size: 2rem; margin-bottom: 0.5rem; z-index: 1; }
+        .file-box img.preview {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; display: none; opacity: 0.75; z-index: 0;
         }
+        .file-box.has-file { border-style: solid; border-color: var(--primary); }
 
-        .file-upload input[type="file"] {
-            position: absolute;
+        /* Input fields */
+        .field { margin-bottom: 1.25rem; text-align: left; }
+        .field label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+        .field input, .field select {
             width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
+            background: rgba(5, 10, 24, 0.6);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.75rem 1rem;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
         }
+        .field input:focus { outline: none; border-color: var(--primary); }
+        .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-        .file-upload span {
-            color: var(--text-muted);
-            font-weight: 600;
-            margin-top: 10px;
-            z-index: 1;
-        }
-
-        .file-upload img.preview {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: none;
-            z-index: 0;
-            opacity: 0.8;
-        }
-
-        .submit-btn {
-            margin-top: 2rem;
+        /* Buttons */
+        .btn-primary {
             width: 100%;
             padding: 1rem;
             border: none;
-            border-radius: 8px;
-            background: var(--primary);
-            color: white;
-            font-size: 1.1rem;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, var(--primary), #6366f1);
+            color: #fff;
+            font-size: 1rem;
             font-weight: 600;
+            font-family: inherit;
             cursor: pointer;
-            transition: background 0.2s ease, transform 0.1s ease;
+            transition: all 0.25s;
+            box-shadow: 0 4px 20px -4px var(--primary-glow);
+            margin-top: 1rem;
         }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 30px -4px var(--primary-glow); }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { background: #1e293b; color: var(--text-dim); cursor: not-allowed; transform: none; box-shadow: none; }
 
-        .submit-btn:hover {
-            background: var(--primary-hover);
+        .btn-outline {
+            padding: 0.75rem 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.25s;
         }
-        
-        .submit-btn:active {
-            transform: scale(0.98);
-        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
 
-        .submit-btn:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        #result-section {
+        /* ── Loading Overlay ───────────────────────────────────── */
+        .loading-overlay {
             display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 10, 24, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+        }
+        .loading-overlay.active { display: flex; }
+
+        .loader-ring {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 3px solid rgba(59, 130, 246, 0.15);
+            border-top-color: var(--primary);
+            animation: spin 1s linear infinite;
+            position: relative;
+        }
+        .loader-ring::after {
+            content: '🛰️';
+            position: absolute;
+            top: -14px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-steps { text-align: center; }
+        .loading-steps .step-text {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+        .loading-steps .step-sub {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Results Section ────────────────────────────────────── */
+        .results-section {
+            padding: 2rem;
+            max-width: 960px;
+            margin: 0 auto;
+            display: none;
+        }
+        .results-section.visible { display: block; animation: fadeInUp 0.6s ease-out; }
+
+        /* Summary bar */
+        .summary-bar {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(167, 139, 250, 0.08));
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 2rem;
+            font-size: 1.05rem;
+            line-height: 1.6;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
             text-align: center;
         }
-
-        .stats-card {
-            background: rgba(15, 23, 42, 0.6);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            display: inline-block;
-            border: 1px solid var(--border);
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 0.4rem;
         }
-
-        .stats-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #ef4444; /* Red for changes */
-            margin: 0;
-        }
-
-        .stats-label {
-            color: var(--text-muted);
-            font-size: 0.9rem;
+        .stat-value.danger { color: var(--danger); }
+        .stat-value.warning { color: var(--warning); }
+        .stat-value.success { color: var(--success); }
+        .stat-label {
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-        }
-
-        #result-image {
-            max-width: 100%;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            border: 1px solid var(--border);
-        }
-
-        .loading {
-            display: none;
-            margin-top: 1rem;
-            color: var(--primary);
+            color: var(--text-dim);
             font-weight: 600;
         }
 
-        /* NEW TABS CSS */
-        .tabs {
-            display: flex;
-            margin-bottom: 1.5rem;
+        /* Image comparison */
+        .comparison-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .img-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .img-card .img-label {
+            padding: 0.6rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
             border-bottom: 1px solid var(--border);
         }
-        .tab-btn {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            padding: 1rem 2rem;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            border-bottom: 2px solid transparent;
-        }
-        .tab-btn.active {
-            color: var(--primary);
-            border-bottom: 2px solid var(--primary);
-        }
-        .tab-btn:hover:not(.active) {
-            color: var(--text-main);
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
+
+        .img-card img {
+            width: 100%;
             display: block;
-        }
-        
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            text-align: left;
-        }
-        .input-group label {
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-        .input-group input {
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem;
-            color: var(--text-main);
-            font-size: 1rem;
-            font-family: 'Inter', sans-serif;
-        }
-        .input-group input:focus {
-            outline: none;
-            border-color: var(--primary);
+            aspect-ratio: 1;
+            object-fit: cover;
         }
 
-        @media (max-width: 768px) {
-            .upload-section {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Autocomplete */
-        .autocomplete-container {
+        /* Before/After Slider */
+        .slider-container {
             position: relative;
-            width: 100%;
+            border-radius: var(--radius);
+            overflow: hidden;
+            cursor: ew-resize;
+            user-select: none;
+            -webkit-user-select: none;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+            aspect-ratio: 1;
+            max-width: 512px;
+            margin-left: auto;
+            margin-right: auto;
         }
-        .autocomplete-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
+
+        .slider-container img {
             width: 100%;
-            max-height: 250px;
-            overflow-y: auto;
-            background: rgba(15, 23, 42, 0.95);
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .slider-container .img-after { clip-path: inset(0 0 0 50%); }
+
+        .slider-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 3px;
+            background: #fff;
+            transform: translateX(-50%);
+            z-index: 5;
+            pointer-events: none;
+        }
+        .slider-handle::before {
+            content: '⟨ ⟩';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.95);
+            border-radius: 50%;
+            color: #111;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        }
+
+        .slider-label {
+            position: absolute;
+            bottom: 12px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            z-index: 4;
+        }
+        .slider-label.left { left: 12px; }
+        .slider-label.right { right: 12px; }
+
+        /* Change regions */
+        .regions-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            margin-top: 1rem;
+        }
+
+        .region-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.2s;
+        }
+        .region-card:hover { border-color: var(--border-hover); }
+
+        .region-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+        .region-emoji { font-size: 1.3rem; }
+        .region-type { font-weight: 700; font-size: 0.95rem; }
+        .region-badge {
+            margin-left: auto;
+            padding: 3px 10px;
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .region-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.2rem 1.5rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .region-stats b { color: var(--text); }
+
+        /* Download area */
+        .actions-bar {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+
+        /* Autocomplete */
+        .ac-wrap { position: relative; }
+        .ac-dropdown {
+            position: absolute; top: 100%; left: 0; width: 100%;
+            max-height: 220px; overflow-y: auto;
+            background: rgba(12, 20, 40, 0.97);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            z-index: 10;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            display: none;
-            margin-top: 0.25rem;
+            border-radius: var(--radius-sm);
+            z-index: 20;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+            display: none; margin-top: 4px;
         }
-        .autocomplete-item {
-            padding: 0.75rem 1rem;
-            cursor: pointer;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            color: var(--text-main);
-            font-size: 0.95rem;
+        .ac-item {
+            padding: 0.7rem 1rem; cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.92rem; transition: background 0.15s;
         }
-        .autocomplete-item:last-child {
-            border-bottom: none;
+        .ac-item:hover { background: rgba(59, 130, 246, 0.15); }
+        .ac-msg { padding: 0.7rem 1rem; color: var(--text-dim); font-style: italic; font-size: 0.9rem; }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
         }
-        .autocomplete-item:hover {
-            background: rgba(59, 130, 246, 0.2);
+        .footer-brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .autocomplete-message {
-            padding: 0.75rem 1rem;
-            color: var(--text-muted);
-            font-style: italic;
-            font-size: 0.95rem;
+        .footer-tech {
+            margin-top: 0.75rem;
+            font-size: 0.82rem;
+            color: var(--text-dim);
         }
+        .footer-tech span {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            margin: 3px 2px;
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .upload-grid, .image-grid, .date-row { grid-template-columns: 1fr; }
+            .orbit-ring { width: 250px; height: 250px; }
+            .stats-row { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* Map fix */
+        #map-container { border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; margin: 1rem 0; }
     </style>
 </head>
 <body>
 
-    <header>
-        <h1>Satellite Change Detection</h1>
-        <p class="subtitle">Upload two images (Before & After) to identify construction, destruction, or changes.</p>
-    </header>
+<!-- ════════════════════════ HERO ════════════════════════ -->
+<section class="hero" id="hero">
+    <div class="orbit-ring">
+        <div class="orbit-dot"></div>
+    </div>
+    <div class="hero-badge">
+        <span class="dot"></span>
+        AI-POWERED SATELLITE ANALYSIS
+    </div>
+    <h1>Detect Changes From Space</h1>
+    <p class="subtitle">
+        Upload satellite images or search any location on Earth to identify construction,
+        deforestation, and land-use changes using deep learning.
+    </p>
+    <a href="#app" class="hero-cta">
+        Start Analyzing
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+    </a>
+</section>
 
-    <main>
-        <div class="glass-panel">
-            <div class="tabs">
-                <button type="button" class="tab-btn active" onclick="switchTab('upload')">Upload Images</button>
-                <button type="button" class="tab-btn" onclick="switchTab('fetch')">Fetch by Location & Date</button>
-            </div>
+<!-- ════════════════════ HOW IT WORKS ════════════════════ -->
+<section class="how-section">
+    <p class="section-title">How It Works</p>
+    <h2 class="section-heading">Three Steps to Actionable Intelligence</h2>
+    <div class="steps-grid">
+        <div class="step-card">
+            <div class="step-number">1</div>
+            <div class="step-icon">🛰️</div>
+            <h3>Provide Imagery</h3>
+            <p>Upload before & after satellite images, or search a location and let us fetch live Sentinel-2 data automatically.</p>
+        </div>
+        <div class="step-card">
+            <div class="step-number">2</div>
+            <div class="step-icon">🧠</div>
+            <h3>AI Analysis</h3>
+            <p>Our MobileNetV2-3D Siamese U-Net processes the images and produces a pixel-accurate change mask in seconds.</p>
+        </div>
+        <div class="step-card">
+            <div class="step-number">3</div>
+            <div class="step-icon">📊</div>
+            <h3>Explainable Results</h3>
+            <p>Get classified change regions — deforestation, construction, land clearing — with confidence scores and visual reports.</p>
+        </div>
+    </div>
+</section>
 
-            <!-- Upload Tab -->
-            <div id="tab-upload" class="tab-content active">
-                <form id="upload-form">
-                    <div class="upload-section">
-                        <div class="file-upload">
-                            <span>+ Image A (Before)</span>
-                            <input type="file" id="image_a" accept="image/png, image/jpeg" required>
-                            <img id="preview_a" class="preview" alt="Preview A">
-                        </div>
-                        
-                        <div class="file-upload">
-                            <span>+ Image B (After)</span>
-                            <input type="file" id="image_b" accept="image/png, image/jpeg" required>
-                            <img id="preview_b" class="preview" alt="Preview B">
-                        </div>
-                    </div>
-
-                    <button type="submit" class="submit-btn" id="submit-btn-upload">Detect Changes</button>
-                    <div class="loading" id="loading-upload">Analyzing images using MobileNetV2-3D ONNX...</div>
-                </form>
-            </div>
-            
-            <!-- Fetch Tab -->
-            <div id="tab-fetch" class="tab-content">
-                <form id="fetch-form">
-                    <div class="upload-section" style="grid-template-columns: 1fr;">
-                        <div class="input-group">
-                            <div class="input-group">
-                                <label>Place Name</label>
-                                <div class="autocomplete-container">
-                                    <input type="text" id="place_name" placeholder="e.g. Palm Jumeirah, Dubai" style="width: 100%; box-sizing: border-box;" autocomplete="off">
-                                    <div id="autocomplete-dropdown" class="autocomplete-dropdown"></div>
-                                </div>
-                                <small style="color:var(--text-muted);margin-top:0.2rem;">Requires Copernicus Data Space Ecosystem credentials in .env</small>
-                            </div>
-                            
-                            <div id="map" style="height: 300px; width: 100%; margin-top: 1.5rem; margin-bottom: 0.5rem; border-radius: 8px; border: 1px solid var(--border); z-index: 1;"></div>
-                            
-                            <details style="margin-bottom: 1.5rem; text-align: left; color: var(--text-muted); cursor: pointer; margin-top: 1rem;">
-                                <summary style="font-weight: 600;">Advanced: enter coordinates manually</summary>
-                                <div class="input-group" style="margin-top: 1rem;">
-                                    <label>Bounding Box (min_lon, min_lat, max_lon, max_lat)</label>
-                                    <input type="text" id="bbox" placeholder="e.g. -122.0, 37.0, -121.9, 37.1">
-                                </div>
-                            </details>
-                        <div class="upload-section">
-                            <div class="input-group">
-                                <label>Date Before</label>
-                                <input type="date" id="date_before" required>
-                            </div>
-                            <div class="input-group">
-                                <label>Date After</label>
-                                <input type="date" id="date_after" required>
-                            </div>
-                        </div>
-                    </div>
-                    <button type="submit" class="submit-btn" id="submit-btn-fetch" disabled>Fetch & Detect Changes</button>
-                    <div class="loading" id="loading-fetch">Fetching from Copernicus & Analyzing...</div>
-                    
-                    <!-- Known Limitations -->
-                    <details style="margin-top: 1.5rem; text-align: left; color: var(--text-muted); cursor: pointer; padding: 1rem; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">
-                        <summary style="font-weight: 600; color: var(--text-main);">Known Limitations</summary>
-                        <ul style="margin: 0.5rem 0 0 0; padding-left: 1.2rem; font-size: 0.85rem; line-height: 1.4;">
-                            <li style="margin-bottom: 0.25rem;"><strong>Cloud Cover:</strong> Clouds and shadows can obscure the ground and may occasionally be detected as false changes.</li>
-                            <li style="margin-bottom: 0.25rem;"><strong>Resolution Limits:</strong> Satellite imagery is limited to 10m/pixel. Very small changes (like individual trees or cars) will not be visible.</li>
-                            <li><strong>Seasonal Changes:</strong> Natural seasonal variations in vegetation or agriculture may sometimes be misread as land-use change.</li>
-                        </ul>
-                    </details>
-                </form>
-            </div>
+<!-- ════════════════════════ APP ═════════════════════════ -->
+<section class="app-section" id="app">
+    <div class="glass-card">
+        <div class="tabs">
+            <button type="button" class="tab-btn active" onclick="switchTab('upload')">📤 Upload Images</button>
+            <button type="button" class="tab-btn" onclick="switchTab('fetch')">🌍 Fetch by Location</button>
         </div>
 
-        <div class="glass-panel" id="result-section">
-            <div id="resolved-location-card" style="background: rgba(15,23,42,0.7); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; display: none; text-align: left;">
-                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">Resolved Location</h4>
-                <p id="resolved-place" style="margin: 0 0 0.25rem 0; font-weight: 600;"></p>
-                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Bounding Box: <span id="resolved-bbox"></span></p>
-            </div>
-
-            <div id="story-mode-card" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; display: none; text-align: left;">
-                <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">Summary</h4>
-                <p id="story-mode-text" style="margin: 0; font-size: 1.05rem; line-height: 1.5; color: var(--text-main); font-weight: 500;"></p>
-            </div>
-
-            <div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-bottom:1.5rem;">
-                <div class="stats-card" style="margin-bottom:0;">
-                    <p class="stats-value" id="percent-changed">0%</p>
-                    <p class="stats-label">Total Area Changed</p>
+        <!-- Upload Tab -->
+        <div id="tab-upload" class="tab-content active">
+            <form id="upload-form">
+                <div class="upload-grid">
+                    <div class="file-box" id="box-a">
+                        <span class="icon">🖼️</span>
+                        <span class="label">Image A (Before)</span>
+                        <input type="file" id="image_a" accept="image/png, image/jpeg" required>
+                        <img id="preview_a" class="preview" alt="Preview A">
+                    </div>
+                    <div class="file-box" id="box-b">
+                        <span class="icon">🖼️</span>
+                        <span class="label">Image B (After)</span>
+                        <input type="file" id="image_b" accept="image/png, image/jpeg" required>
+                        <img id="preview_b" class="preview" alt="Preview B">
+                    </div>
                 </div>
-                <div class="stats-card" id="cloud-before-card" style="display:none; margin-bottom:0;">
-                    <p class="stats-value" id="cloud-before">0%</p>
-                    <p class="stats-label">Cloud Cover (Before)</p>
-                </div>
-                <div class="stats-card" id="cloud-after-card" style="display:none; margin-bottom:0;">
-                    <p class="stats-value" id="cloud-after">0%</p>
-                    <p class="stats-label">Cloud Cover (After)</p>
-                </div>
-            </div>
-
-            <div>
-                <h3>Change Mask Overlay</h3>
-                <img id="result-image" src="" alt="Result Overlay">
-            </div>
-
-            <div id="regions-section" style="margin-top:2rem;display:none;">
-                <h3 style="margin-bottom:1rem;">Detected Change Regions</h3>
-                <div id="regions-list"></div>
-            </div>
+                <button type="submit" class="btn-primary" id="btn-upload">Detect Changes</button>
+            </form>
         </div>
-    </main>
 
-    <script>
-        // confidence → accent colour
-        const CONF_COLOR = { High: '#22c55e', Medium: '#f59e0b', Low: '#94a3b8' };
-
-        // change_type → emoji badge
-        function typeEmoji(t) {
-            if (t.includes('deforestation')) return '🌲';
-            if (t.includes('construction'))  return '🏗️';
-            if (t.includes('soil'))           return '🟤';
-            return '❓';
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
-            document.getElementById(`tab-${tabId}`).classList.add('active');
-            
-            // Hide result section on tab switch
-            document.getElementById('result-section').style.display = 'none';
-            
-            // Fix map sizing when tab becomes visible
-            if (tabId === 'fetch' && window.map) {
-                setTimeout(() => window.map.invalidateSize(), 100);
-            }
-        }
-
-        function renderRegions(regions) {
-            const section = document.getElementById('regions-section');
-            const list    = document.getElementById('regions-list');
-            list.innerHTML = '';
-
-            if (!regions || regions.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-
-            regions.forEach((r, i) => {
-                const conf  = r.confidence_label;
-                const color = CONF_COLOR[conf] || '#94a3b8';
-                const [x, y, w, h] = r.bounding_box;
-                const st = r.stats;
-
-                const card = document.createElement('div');
-                card.style.cssText = `
-                    background: rgba(15,23,42,0.7);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    border-left: 4px solid ${color};
-                    border-radius: 10px;
-                    padding: 1rem 1.25rem;
-                    margin-bottom: 1rem;
-                    text-align: left;
-                `;
-
-                card.innerHTML = `
-                    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
-                        <span style="font-size:1.4rem;">${typeEmoji(r.change_type)}</span>
-                        <strong style="font-size:1rem;color:#f8fafc;">${r.change_type}</strong>
-                        <span style="margin-left:auto;padding:2px 10px;border-radius:99px;
-                                     background:${color}22;color:${color};
-                                     font-size:0.75rem;font-weight:600;border:1px solid ${color}88;">
-                            ${conf} confidence
-                        </span>
+        <!-- Fetch Tab -->
+        <div id="tab-fetch" class="tab-content">
+            <form id="fetch-form">
+                <div class="field">
+                    <label>Place Name</label>
+                    <div class="ac-wrap">
+                        <input type="text" id="place_name" placeholder="e.g. Palm Jumeirah, Dubai" autocomplete="off">
+                        <div id="ac-dropdown" class="ac-dropdown"></div>
                     </div>
-                    <div style="color:#94a3b8;font-size:0.82rem;display:grid;
-                                grid-template-columns:1fr 1fr;gap:0.25rem 1.5rem;">
-                        <span>Area: <b style="color:#f8fafc;">${r.pixel_area.toLocaleString()} px</b></span>
-                        <span>BBox: <b style="color:#f8fafc;">x=${x} y=${y} ${w}×${h}</b></span>
-                        <span>Veg ratio before→after: <b style="color:#f8fafc;">${st.veg_ratio_before} → ${st.veg_ratio_after}</b></span>
-                        <span>Veg drop: <b style="color:#f8fafc;">${st.veg_ratio_drop}</b></span>
-                        <span>Brightness before→after: <b style="color:#f8fafc;">${st.brightness_before} → ${st.brightness_after}</b></span>
-                        <span>Colour shift: <b style="color:#f8fafc;">${st.color_shift_mag}</b></span>
-                        <span>Uniformity std (after): <b style="color:#f8fafc;">${st.uniformity_std_b}</b></span>
-                        <span>Achromatic score: <b style="color:#f8fafc;">${st.achromatic_score_b}</b></span>
-                        <span>Red excess (after): <b style="color:#f8fafc;">${st.red_excess_after}</b></span>
+                    <small style="color:var(--text-dim);margin-top:0.3rem;display:block;">Requires Copernicus Data Space Ecosystem credentials in .env</small>
+                </div>
+
+                <div id="map-container" style="height: 280px; z-index:1;"></div>
+
+                <details style="margin-bottom: 1rem; color: var(--text-dim); cursor: pointer;">
+                    <summary style="font-weight: 600; font-size: 0.88rem;">Advanced: Enter coordinates manually</summary>
+                    <div class="field" style="margin-top: 0.75rem;">
+                        <label>Bounding Box (min_lon, min_lat, max_lon, max_lat)</label>
+                        <input type="text" id="bbox" placeholder="e.g. -122.0, 37.0, -121.9, 37.1">
                     </div>
-                `;
-                list.appendChild(card);
-            });
-            section.style.display = 'block';
+                </details>
+
+                <div class="date-row">
+                    <div class="field">
+                        <label>Date Before</label>
+                        <input type="date" id="date_before" required>
+                    </div>
+                    <div class="field">
+                        <label>Date After</label>
+                        <input type="date" id="date_after" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" id="btn-fetch" disabled>Fetch & Detect Changes</button>
+            </form>
+        </div>
+    </div>
+</section>
+
+<!-- ════════════════════ LOADING OVERLAY ════════════════════ -->
+<div class="loading-overlay" id="loading-overlay">
+    <div class="loader-ring"></div>
+    <div class="loading-steps">
+        <p class="step-text" id="loading-text">Preprocessing images...</p>
+        <p class="step-sub" id="loading-sub">This may take a few seconds</p>
+    </div>
+</div>
+
+<!-- ═══════════════════════ RESULTS ═════════════════════════ -->
+<section class="results-section" id="results-section">
+
+    <!-- Summary sentence (fetch mode) -->
+    <div class="summary-bar" id="summary-bar" style="display:none;">
+        <span id="summary-text"></span>
+    </div>
+
+    <!-- Stats row -->
+    <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+            <p class="stat-value danger" id="stat-percent">0%</p>
+            <p class="stat-label">Area Changed</p>
+        </div>
+        <div class="stat-card" id="stat-cloud-a" style="display:none;">
+            <p class="stat-value warning" id="stat-cloud-a-val">0%</p>
+            <p class="stat-label">Cloud (Before)</p>
+        </div>
+        <div class="stat-card" id="stat-cloud-b" style="display:none;">
+            <p class="stat-value warning" id="stat-cloud-b-val">0%</p>
+            <p class="stat-label">Cloud (After)</p>
+        </div>
+        <div class="stat-card" id="stat-regions-count">
+            <p class="stat-value success" id="stat-regions-val">0</p>
+            <p class="stat-label">Regions Found</p>
+        </div>
+    </div>
+
+    <!-- Before/After Slider -->
+    <p class="comparison-title">Before / After Comparison <span style="font-weight:400;color:var(--text-dim);font-size:0.85rem;">— drag to compare</span></p>
+    <div class="slider-container" id="ba-slider">
+        <img id="slider-before" src="" alt="Before">
+        <img id="slider-after" src="" alt="After" class="img-after">
+        <div class="slider-handle" id="slider-handle"></div>
+        <span class="slider-label left">Before</span>
+        <span class="slider-label right">After</span>
+    </div>
+
+    <!-- Mask + Overlay grid -->
+    <p class="comparison-title">Analysis Output</p>
+    <div class="image-grid">
+        <div class="img-card">
+            <div class="img-label">Change Mask</div>
+            <img id="res-mask" src="" alt="Change Mask">
+        </div>
+        <div class="img-card">
+            <div class="img-label">Overlay on After</div>
+            <img id="res-overlay" src="" alt="Overlay">
+        </div>
+    </div>
+
+    <!-- Regions -->
+    <div id="regions-wrap" style="display:none;">
+        <p class="regions-title">Detected Change Regions</p>
+        <div id="regions-list"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-bar">
+        <button class="btn-outline" onclick="window.print()">🖨️ Print / Save PDF</button>
+        <button class="btn-outline" onclick="downloadImages()">📥 Download Images</button>
+    </div>
+</section>
+
+<!-- ════════════════════════ FOOTER ═════════════════════════ -->
+<footer>
+    <p class="footer-brand">Satellite Change Detection</p>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-top:0.3rem;">MobileNetV2-3D Siamese U-Net &nbsp;·&nbsp; F1: 87.06% &nbsp;·&nbsp; IoU: 77.08%</p>
+    <div class="footer-tech">
+        <span>PyTorch</span>
+        <span>ONNX Runtime</span>
+        <span>FastAPI</span>
+        <span>Sentinel-2</span>
+        <span>Leaflet.js</span>
+        <span>Docker</span>
+    </div>
+</footer>
+
+<!-- ════════════════════════ JAVASCRIPT ════════════════════════ -->
+<script>
+// ── Confidence colors & emojis ──────────────────────────────
+const CONF = { High: '#22c55e', Medium: '#f59e0b', Low: '#94a3b8' };
+function typeEmoji(t) {
+    t = t.toLowerCase();
+    if (t.includes('deforest') || t.includes('vegetation')) return '🌲';
+    if (t.includes('construction') || t.includes('urban')) return '🏗️';
+    if (t.includes('soil') || t.includes('clearing')) return '🟤';
+    if (t.includes('water')) return '🌊';
+    if (t.includes('agricultural')) return '🌾';
+    if (t.includes('cloud')) return '☁️';
+    return '🔍';
+}
+
+// ── Tab switching ───────────────────────────────────────────
+function switchTab(id) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.tab-btn[onclick="switchTab('${id}')"]`).classList.add('active');
+    document.getElementById(`tab-${id}`).classList.add('active');
+    document.getElementById('results-section').classList.remove('visible');
+    if (id === 'fetch' && window.map) setTimeout(() => window.map.invalidateSize(), 150);
+}
+
+// ── File preview ────────────────────────────────────────────
+function setupPreview(inputId, previewId, boxId) {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    const box = document.getElementById(boxId);
+    input.addEventListener('change', function() {
+        if (this.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; box.classList.add('has-file'); };
+            reader.readAsDataURL(this.files[0]);
         }
+    });
+}
+setupPreview('image_a', 'preview_a', 'box-a');
+setupPreview('image_b', 'preview_b', 'box-b');
 
-        function setupPreview(inputId, previewId) {
-            const input = document.getElementById(inputId);
-            const preview = document.getElementById(previewId);
-            input.addEventListener('change', function() {
-                const file = this.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        preview.src = e.target.result;
-                        preview.style.display = 'block';
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-        }
+// ── Loading overlay ─────────────────────────────────────────
+const loadingEl = document.getElementById('loading-overlay');
+const loadText = document.getElementById('loading-text');
+const loadSub = document.getElementById('loading-sub');
 
-        setupPreview('image_a', 'preview_a');
-        setupPreview('image_b', 'preview_b');
+function showLoading(steps) {
+    loadingEl.classList.add('active');
+    let i = 0;
+    loadText.textContent = steps[0][0];
+    loadSub.textContent = steps[0][1];
+    const interval = setInterval(() => {
+        i++;
+        if (i < steps.length) {
+            loadText.textContent = steps[i][0];
+            loadSub.textContent = steps[i][1];
+        } else { clearInterval(interval); }
+    }, 1500);
+    return () => { clearInterval(interval); loadingEl.classList.remove('active'); };
+}
 
-        document.getElementById('upload-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+// ── Animated counter ────────────────────────────────────────
+function animateValue(el, end, suffix = '%', duration = 1200) {
+    const start = 0;
+    const startTime = performance.now();
+    function update(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+        const current = start + (end - start) * eased;
+        el.textContent = current.toFixed(end < 10 ? 2 : 1) + suffix;
+        if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+}
 
-            const imageA = document.getElementById('image_a').files[0];
-            const imageB = document.getElementById('image_b').files[0];
-            if (!imageA || !imageB) return;
+// ── Display results ─────────────────────────────────────────
+function displayResults(data) {
+    const sec = document.getElementById('results-section');
 
-            const btn           = document.getElementById('submit-btn-upload');
-            const loading       = document.getElementById('loading-upload');
-            const resultSection = document.getElementById('result-section');
+    // Stats
+    animateValue(document.getElementById('stat-percent'), data.percent_changed);
 
-            btn.disabled = true;
-            loading.style.display = 'block';
-            resultSection.style.display = 'none';
-            document.getElementById('cloud-before-card').style.display = 'none';
-            document.getElementById('cloud-after-card').style.display = 'none';
-            document.getElementById('resolved-location-card').style.display = 'none';
+    if (data.cloud_coverage_before !== undefined) {
+        document.getElementById('stat-cloud-a').style.display = '';
+        animateValue(document.getElementById('stat-cloud-a-val'), data.cloud_coverage_before);
+    } else { document.getElementById('stat-cloud-a').style.display = 'none'; }
 
-            const formData = new FormData();
-            formData.append('image_a', imageA);
-            formData.append('image_b', imageB);
+    if (data.cloud_coverage_after !== undefined) {
+        document.getElementById('stat-cloud-b').style.display = '';
+        animateValue(document.getElementById('stat-cloud-b-val'), data.cloud_coverage_after);
+    } else { document.getElementById('stat-cloud-b').style.display = 'none'; }
 
-            try {
-                const response = await fetch('/predict', { method: 'POST', body: formData });
-                const data = await response.json();
-                
-                if (!response.ok) throw new Error(data.error || 'Server error');
+    const validRegions = (data.change_regions || []).filter(r => r.change_type !== 'Possible cloud interference');
+    document.getElementById('stat-regions-val').textContent = validRegions.length;
 
-                document.getElementById('percent-changed').textContent =
-                    data.percent_changed.toFixed(2) + '%';
-                document.getElementById('result-image').src =
-                    'data:image/png;base64,' + data.overlay_base64;
+    // Summary
+    if (data.summary_sentence) {
+        document.getElementById('summary-text').textContent = data.summary_sentence;
+        document.getElementById('summary-bar').style.display = '';
+    } else { document.getElementById('summary-bar').style.display = 'none'; }
 
-                renderRegions(data.change_regions || []);
-                resultSection.style.display = 'block';
+    // Before/After slider
+    const b64a = 'data:image/png;base64,' + data.image_a_base64;
+    const b64b = 'data:image/png;base64,' + data.image_b_base64;
+    document.getElementById('slider-before').src = b64a;
+    document.getElementById('slider-after').src = b64b;
 
-            } catch (err) {
-                alert('Error detecting changes: ' + err.message);
-                console.error(err);
-            } finally {
-                btn.disabled = false;
-                loading.style.display = 'none';
-            }
-        });
+    // Mask + overlay
+    document.getElementById('res-mask').src = 'data:image/png;base64,' + data.mask_base64;
+    document.getElementById('res-overlay').src = 'data:image/png;base64,' + data.overlay_base64;
 
-        let selectedBbox = null;
-        let geocodeTimeout = null;
-        const placeInput = document.getElementById('place_name');
-        const dropdown = document.getElementById('autocomplete-dropdown');
-        const manualBboxInput = document.getElementById('bbox');
-        const fetchBtn = document.getElementById('submit-btn-fetch');
+    // Regions
+    renderRegions(data.change_regions || []);
 
-        function setFetchButtonState() {
-            const hasManualBbox = manualBboxInput.value.trim().length > 0;
-            fetchBtn.disabled = !(selectedBbox || hasManualBbox);
-        }
+    sec.classList.add('visible');
+    setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
 
-        // ── MAP INITIALIZATION ──────────────────────────────────────────────
-        window.map = L.map('map').setView([20.5937, 78.9629], 4);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(window.map);
+// ── Render region cards ─────────────────────────────────────
+function renderRegions(regions) {
+    const wrap = document.getElementById('regions-wrap');
+    const list = document.getElementById('regions-list');
+    list.innerHTML = '';
+    const valid = regions.filter(r => r.change_type !== 'Possible cloud interference');
+    if (!valid.length) { wrap.style.display = 'none'; return; }
 
-        const drawnItems = new L.FeatureGroup();
-        window.map.addLayer(drawnItems);
-        const drawControl = new L.Control.Draw({
-            edit: { featureGroup: drawnItems },
-            draw: {
-                polygon: false,
-                polyline: false,
-                circle: false,
-                circlemarker: false,
-                marker: false,
-                rectangle: true
-            }
-        });
-        window.map.addControl(drawControl);
+    valid.forEach(r => {
+        const c = CONF[r.confidence_label] || '#94a3b8';
+        const st = r.stats;
+        const card = document.createElement('div');
+        card.className = 'region-card';
+        card.style.borderLeftColor = c;
+        card.style.borderLeftWidth = '3px';
+        card.innerHTML = `
+            <div class="region-header">
+                <span class="region-emoji">${typeEmoji(r.change_type)}</span>
+                <span class="region-type">${r.change_type}</span>
+                <span class="region-badge" style="background:${c}18;color:${c};border:1px solid ${c}55;">${r.confidence_label}</span>
+            </div>
+            <div class="region-stats">
+                <span>Area: <b>${r.pixel_area.toLocaleString()} px</b></span>
+                <span>Colour shift: <b>${st.color_shift_mag}</b></span>
+                <span>Veg: <b>${st.veg_ratio_before} → ${st.veg_ratio_after}</b></span>
+                <span>Brightness: <b>${st.brightness_before} → ${st.brightness_after}</b></span>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+    wrap.style.display = '';
+}
 
-        window.map.on(L.Draw.Event.CREATED, function (event) {
-            drawnItems.clearLayers();
-            const layer = event.layer;
-            drawnItems.addLayer(layer);
-            
-            const bounds = layer.getBounds();
-            const min_lon = bounds.getWest().toFixed(4);
-            const min_lat = bounds.getSouth().toFixed(4);
-            const max_lon = bounds.getEast().toFixed(4);
-            const max_lat = bounds.getNorth().toFixed(4);
-            
-            manualBboxInput.value = `${min_lon}, ${min_lat}, ${max_lon}, ${max_lat}`;
-            placeInput.value = '';
-            selectedBbox = null;
-            setFetchButtonState();
-        });
-        
-        window.map.on(L.Draw.Event.EDITED, function (event) {
-            event.layers.eachLayer(function (layer) {
-                const bounds = layer.getBounds();
-                const min_lon = bounds.getWest().toFixed(4);
-                const min_lat = bounds.getSouth().toFixed(4);
-                const max_lon = bounds.getEast().toFixed(4);
-                const max_lat = bounds.getNorth().toFixed(4);
-                manualBboxInput.value = `${min_lon}, ${min_lat}, ${max_lon}, ${max_lat}`;
-            });
-        });
-        window.map.on(L.Draw.Event.DELETED, function (event) {
-            manualBboxInput.value = '';
-            setFetchButtonState();
-        });
-        // ────────────────────────────────────────────────────────────────────
+// ── Upload form submit ──────────────────────────────────────
+document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const a = document.getElementById('image_a').files[0];
+    const b = document.getElementById('image_b').files[0];
+    if (!a || !b) return;
 
-        manualBboxInput.addEventListener('input', () => {
-            if (manualBboxInput.value.trim()) {
-                selectedBbox = null; // Typing manually invalidates autocomplete
-            }
-            setFetchButtonState();
-        });
+    const hideLoading = showLoading([
+        ['Preprocessing images...', 'Resizing and normalizing'],
+        ['Running AI inference...', 'MobileNetV2-3D ONNX model'],
+        ['Analyzing change regions...', 'Classifying detected changes'],
+    ]);
 
-        placeInput.addEventListener('input', (e) => {
-            selectedBbox = null;
-            setFetchButtonState();
-            
-            const query = e.target.value.trim();
-            if (query.length < 2) {
-                dropdown.style.display = 'none';
-                return;
-            }
+    try {
+        const fd = new FormData();
+        fd.append('image_a', a);
+        fd.append('image_b', b);
+        const res = await fetch('/predict', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+        hideLoading();
+        displayResults(data);
+    } catch (err) {
+        hideLoading();
+        alert('Error: ' + err.message);
+    }
+});
 
-            clearTimeout(geocodeTimeout);
-            geocodeTimeout = setTimeout(async () => {
-                try {
-                    const res = await fetch(`/geocode-suggest?q=${encodeURIComponent(query)}`);
-                    const data = await res.json();
-                    
-                    dropdown.innerHTML = '';
-                    if (!res.ok) throw new Error(data.error || 'API error');
-                    
-                    if (data.length === 0) {
-                        dropdown.innerHTML = '<div class="autocomplete-message">No matches found</div>';
-                    } else {
-                        data.forEach(item => {
-                            const div = document.createElement('div');
-                            div.className = 'autocomplete-item';
-                            div.textContent = item.display_name;
-                            div.addEventListener('click', () => {
-                                placeInput.value = item.display_name;
-                                selectedBbox = item.boundingbox;
-                                dropdown.style.display = 'none';
-                                manualBboxInput.value = ''; 
-                                setFetchButtonState();
-                                
-                                // Pan map and draw box
-                                const min_lon = item.boundingbox[0];
-                                const min_lat = item.boundingbox[1];
-                                const max_lon = item.boundingbox[2];
-                                const max_lat = item.boundingbox[3];
-                                const bounds = [[min_lat, min_lon], [max_lat, max_lon]];
-                                window.map.fitBounds(bounds);
-                                drawnItems.clearLayers();
-                                L.rectangle(bounds).addTo(drawnItems);
-                            });
-                            dropdown.appendChild(div);
-                        });
-                    }
-                    dropdown.style.display = 'block';
-                } catch (err) {
-                    dropdown.innerHTML = `<div class="autocomplete-message" style="color:#ef4444;">Error loading suggestions</div>`;
-                    dropdown.style.display = 'block';
-                    console.error(err);
-                }
-            }, 350);
-        });
+// ── Map & geocoding ─────────────────────────────────────────
+let selectedBbox = null;
+let geocodeTimeout = null;
+const placeInput = document.getElementById('place_name');
+const acDrop = document.getElementById('ac-dropdown');
+const bboxInput = document.getElementById('bbox');
+const fetchBtn = document.getElementById('btn-fetch');
 
-        document.addEventListener('click', (e) => {
-            if (!placeInput.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = 'none';
-            }
-        });
+function updateFetchBtn() {
+    fetchBtn.disabled = !(selectedBbox || bboxInput.value.trim());
+}
 
-        document.getElementById('fetch-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+window.map = L.map('map-container').setView([20.5937, 78.9629], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+}).addTo(window.map);
 
-            const dateBefore = document.getElementById('date_before').value;
-            const dateAfter = document.getElementById('date_after').value;
-            
-            let bbox = selectedBbox;
-            const bboxStr = manualBboxInput.value.trim();
-            if (bboxStr) {
-                bbox = bboxStr.split(',').map(s => parseFloat(s.trim()));
-                if (bbox.length !== 4 || bbox.some(isNaN)) {
-                    alert('Invalid bounding box. Must be 4 comma-separated numbers.');
-                    return;
-                }
-            } else if (!bbox) {
-                alert('Please select a Place Name from the dropdown or provide a Bounding Box manually.');
-                return;
-            }
+const drawnItems = new L.FeatureGroup();
+window.map.addLayer(drawnItems);
+window.map.addControl(new L.Control.Draw({
+    edit: { featureGroup: drawnItems },
+    draw: { polygon: false, polyline: false, circle: false, circlemarker: false, marker: false, rectangle: true }
+}));
 
-            const btn           = document.getElementById('submit-btn-fetch');
-            const loading       = document.getElementById('loading-fetch');
-            const resultSection = document.getElementById('result-section');
+window.map.on(L.Draw.Event.CREATED, e => {
+    drawnItems.clearLayers();
+    drawnItems.addLayer(e.layer);
+    const b = e.layer.getBounds();
+    bboxInput.value = `${b.getWest().toFixed(4)}, ${b.getSouth().toFixed(4)}, ${b.getEast().toFixed(4)}, ${b.getNorth().toFixed(4)}`;
+    placeInput.value = '';
+    selectedBbox = null;
+    updateFetchBtn();
+});
+window.map.on(L.Draw.Event.DELETED, () => { bboxInput.value = ''; updateFetchBtn(); });
 
-            btn.disabled = true;
-            loading.style.display = 'block';
-            resultSection.style.display = 'none';
-            document.getElementById('cloud-before-card').style.display = 'none';
-            document.getElementById('cloud-after-card').style.display = 'none';
-            document.getElementById('resolved-location-card').style.display = 'none';
-            document.getElementById('story-mode-card').style.display = 'none';
+bboxInput.addEventListener('input', () => { if (bboxInput.value.trim()) selectedBbox = null; updateFetchBtn(); });
 
-            try {
-                const payload = {
-                    date_before: dateBefore,
-                    date_after: dateAfter,
-                    bbox: bbox
-                };
-                if (selectedBbox) {
-                    payload.place_name = placeInput.value.trim();
-                }
+placeInput.addEventListener('input', (e) => {
+    selectedBbox = null;
+    updateFetchBtn();
+    const q = e.target.value.trim();
+    if (q.length < 2) { acDrop.style.display = 'none'; return; }
 
-                const response = await fetch('/fetch-and-predict', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
+    clearTimeout(geocodeTimeout);
+    geocodeTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/geocode-suggest?q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            acDrop.innerHTML = '';
+            if (!res.ok) throw new Error(data.error);
+            if (!data.length) {
+                acDrop.innerHTML = '<div class="ac-msg">No matches found</div>';
+            } else {
+                data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'ac-item';
+                    div.textContent = item.display_name;
+                    div.addEventListener('click', () => {
+                        placeInput.value = item.display_name;
+                        selectedBbox = item.boundingbox;
+                        acDrop.style.display = 'none';
+                        bboxInput.value = '';
+                        updateFetchBtn();
+                        const bb = item.boundingbox;
+                        const bounds = [[bb[1], bb[0]], [bb[3], bb[2]]];
+                        window.map.fitBounds(bounds);
+                        drawnItems.clearLayers();
+                        L.rectangle(bounds).addTo(drawnItems);
+                    });
+                    acDrop.appendChild(div);
                 });
-                
-                const data = await response.json();
-                
-                if (!response.ok) throw new Error(data.error || 'Server error');
-
-                document.getElementById('percent-changed').textContent =
-                    data.percent_changed.toFixed(2) + '%';
-                
-                if (data.cloud_coverage_before !== undefined) {
-                    document.getElementById('cloud-before').textContent = data.cloud_coverage_before.toFixed(1) + '%';
-                    document.getElementById('cloud-before-card').style.display = 'block';
-                }
-                if (data.cloud_coverage_after !== undefined) {
-                    document.getElementById('cloud-after').textContent = data.cloud_coverage_after.toFixed(1) + '%';
-                    document.getElementById('cloud-after-card').style.display = 'block';
-                }
-                
-                if (data.resolved_bbox) {
-                    const rbbox = data.resolved_bbox.map(n => n.toFixed(4)).join(', ');
-                    document.getElementById('resolved-bbox').textContent = `[${rbbox}]`;
-                    if (data.resolved_place_name) {
-                        document.getElementById('resolved-place').textContent = data.resolved_place_name;
-                    } else {
-                        document.getElementById('resolved-place').textContent = 'Coordinates used directly';
-                    }
-                    document.getElementById('resolved-location-card').style.display = 'block';
-                }
-                
-                if (data.summary_sentence) {
-                    document.getElementById('story-mode-text').textContent = data.summary_sentence;
-                    document.getElementById('story-mode-card').style.display = 'block';
-                }
-
-                document.getElementById('result-image').src =
-                    'data:image/png;base64,' + data.overlay_base64;
-
-                renderRegions(data.change_regions || []);
-                resultSection.style.display = 'block';
-
-            } catch (err) {
-                alert('Error fetching imagery: ' + err.message);
-                console.error(err);
-            } finally {
-                btn.disabled = false;
-                loading.style.display = 'none';
             }
+            acDrop.style.display = 'block';
+        } catch (err) {
+            acDrop.innerHTML = `<div class="ac-msg" style="color:var(--danger);">Error loading suggestions</div>`;
+            acDrop.style.display = 'block';
+        }
+    }, 350);
+});
+
+document.addEventListener('click', e => {
+    if (!placeInput.contains(e.target) && !acDrop.contains(e.target)) acDrop.style.display = 'none';
+});
+
+// ── Fetch form submit ───────────────────────────────────────
+document.getElementById('fetch-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const dateBefore = document.getElementById('date_before').value;
+    const dateAfter = document.getElementById('date_after').value;
+
+    let bbox = selectedBbox;
+    const bboxStr = bboxInput.value.trim();
+    if (bboxStr) {
+        bbox = bboxStr.split(',').map(s => parseFloat(s.trim()));
+        if (bbox.length !== 4 || bbox.some(isNaN)) { alert('Invalid bounding box.'); return; }
+    } else if (!bbox) { alert('Select a place or draw a rectangle.'); return; }
+
+    const hideLoading = showLoading([
+        ['Geocoding location...', 'Resolving coordinates'],
+        ['Fetching satellite imagery...', 'Querying Copernicus Sentinel-2'],
+        ['Computing spectral indices...', 'NDVI & NDBI differencing'],
+        ['Classifying change regions...', 'Analyzing results'],
+    ]);
+
+    try {
+        const payload = { date_before: dateBefore, date_after: dateAfter, bbox };
+        if (selectedBbox) payload.place_name = placeInput.value.trim();
+
+        const res = await fetch('/fetch-and-predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
-    </script>
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+        hideLoading();
+        displayResults(data);
+    } catch (err) {
+        hideLoading();
+        alert('Error: ' + err.message);
+    }
+});
+
+// ── Before/After Slider ─────────────────────────────────────
+(function() {
+    const slider = document.getElementById('ba-slider');
+    const handle = document.getElementById('slider-handle');
+    const afterImg = document.getElementById('slider-after');
+    let dragging = false;
+
+    function update(x) {
+        const rect = slider.getBoundingClientRect();
+        let pct = ((x - rect.left) / rect.width) * 100;
+        pct = Math.max(2, Math.min(98, pct));
+        afterImg.style.clipPath = `inset(0 0 0 ${pct}%)`;
+        handle.style.left = pct + '%';
+    }
+
+    slider.addEventListener('mousedown', e => { dragging = true; update(e.clientX); });
+    slider.addEventListener('touchstart', e => { dragging = true; update(e.touches[0].clientX); }, { passive: true });
+    window.addEventListener('mousemove', e => { if (dragging) update(e.clientX); });
+    window.addEventListener('touchmove', e => { if (dragging) update(e.touches[0].clientX); }, { passive: true });
+    window.addEventListener('mouseup', () => dragging = false);
+    window.addEventListener('touchend', () => dragging = false);
+})();
+
+// ── Download images ─────────────────────────────────────────
+function downloadImages() {
+    const overlay = document.getElementById('res-overlay').src;
+    const mask = document.getElementById('res-mask').src;
+    if (!overlay) return;
+    [['overlay.png', overlay], ['mask.png', mask]].forEach(([name, src]) => {
+        const a = document.createElement('a');
+        a.href = src; a.download = name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+}
+</script>
 </body>
 </html>

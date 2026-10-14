@@ -68,8 +68,10 @@ COLOR_SHIFT_MIN = 12.0   # Euclidean distance in RGB space; below → "unclear"
 CLOUD_BRIGHT_THRESH = 190
 CLOUD_UNIFORMITY_MAX = 20.0
 
-# Water thresholds
-WATER_BRIGHT_MAX = 55
+# Water thresholds — require BOTH dark pixels AND no vegetation (NDVI < -0.05)
+# Raised from 55 to 40 to avoid misclassifying dark urban pixels at 10m resolution
+WATER_BRIGHT_MAX = 40
+WATER_NDVI_MAX   = -0.05   # actual water has negative NDVI
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -201,9 +203,15 @@ def _classify(stats: dict) -> tuple[str, str]:
         return "Change detected (type unclear)", "Low"
 
     # ── Rule 1: Water body change ─────────────────────────────────────────
-    # If it was very dark before or is very dark after
+    # Require: very dark pixel (brightness < 40) AND negative NDVI stored in stats
+    # (avoids triggering on dark urban shadows at 10m resolution)
+    ndvi_after = stats.get("ndvi_after", None)
     if bright_a < WATER_BRIGHT_MAX or bright_b < WATER_BRIGHT_MAX:
-        return "Water body change", "Medium"
+        # If we have NDVI data, require negative NDVI to confirm water
+        if ndvi_after is None or ndvi_after < WATER_NDVI_MAX:
+            return "Water body change", "Medium"
+        # Otherwise downgrade to unclear (dark but not water-like spectrally)
+        return "Change detected (type unclear)", "Low"
 
     # ── Rule 2: Deforestation / vegetation loss ───────────────────────────
     # Before was significantly green AND green ratio dropped substantially
@@ -323,7 +331,65 @@ def reason_regions(
         crop_b_px = crop_b_px[:, np.newaxis, :]
 
         stats = _compute_stats(crop_a_px, crop_b_px)
-        change_type, confidence = _classify(stats)
+
+        # ── Spectral-index-aware classification (Sentinel-2 live mode) ─────
+        # When NDVI/NDBI arrays are provided, use them for primary classification.
+        # This bypasses the fragile RGB heuristics that fail at 10m resolution.
+        if idx_a is not None and idx_b is not None:
+            # Crop spectral index arrays to bounding box, same as comp_bbox
+            idx_a_crop = idx_a[row_min:row_max, col_min:col_max, :]
+            idx_b_crop = idx_b[row_min:row_max, col_min:col_max, :]
+            # Only pixels inside this exact component
+            mask_flat = comp_bbox.flatten().astype(bool)
+            ndvi_a_px = ((idx_a_crop[:, :, 0].flatten() / 255.0 - 0.5) * 2.0)[mask_flat]
+            ndvi_b_px = ((idx_b_crop[:, :, 0].flatten() / 255.0 - 0.5) * 2.0)[mask_flat]
+            ndbi_a_px = ((idx_a_crop[:, :, 1].flatten() / 255.0 - 0.5) * 2.0)[mask_flat]
+            ndbi_b_px = ((idx_b_crop[:, :, 1].flatten() / 255.0 - 0.5) * 2.0)[mask_flat]
+            ndvi_a_region = float(np.mean(ndvi_a_px)) if len(ndvi_a_px) else 0.0
+            ndvi_b_region = float(np.mean(ndvi_b_px)) if len(ndvi_b_px) else 0.0
+            ndbi_a_region = float(np.mean(ndbi_a_px)) if len(ndbi_a_px) else 0.0
+            ndbi_b_region = float(np.mean(ndbi_b_px)) if len(ndbi_b_px) else 0.0
+
+            d_ndvi = ndvi_b_region - ndvi_a_region
+            d_ndbi = ndbi_b_region - ndbi_a_region
+            # Attach to stats so _classify water rule can use NDVI
+            stats["ndvi_after"] = ndvi_b_region
+            stats["ndvi_before"] = ndvi_a_region
+            stats["ndbi_after"] = ndbi_b_region
+
+            # Priority spectral classification:
+            spectral_type = None
+            spectral_conf = "Medium"
+            # Water: NDVI < -0.1 in after image (strong water signal)
+            if ndvi_b_region < -0.1:
+                spectral_type = "Water body change"
+                spectral_conf = "High" if ndvi_b_region < -0.2 else "Medium"
+            # Vegetation loss: NDVI dropped significantly
+            elif d_ndvi < -0.12:
+                if d_ndbi > 0.05:  # Built-up also increased → construction replaced green
+                    spectral_type = "Urban expansion / new construction"
+                    spectral_conf = "High" if (d_ndbi > 0.12 and d_ndvi < -0.18) else "Medium"
+                elif ndvi_b_region > 0.15:
+                    spectral_type = "Agricultural land conversion"
+                    spectral_conf = "Medium"
+                else:
+                    spectral_type = "Deforestation / vegetation loss"
+                    spectral_conf = "High" if d_ndvi < -0.2 else "Medium"
+            # Urban growth: NDBI increased without strong NDVI change
+            elif d_ndbi > 0.12:
+                spectral_type = "Urban expansion / new construction"
+                spectral_conf = "High" if d_ndbi > 0.2 else "Medium"
+            # Vegetation gain (reforestation / greening)
+            elif d_ndvi > 0.12:
+                spectral_type = "Vegetation gain / reforestation"
+                spectral_conf = "Medium"
+
+            if spectral_type:
+                change_type, confidence = spectral_type, spectral_conf
+            else:
+                change_type, confidence = _classify(stats)
+        else:
+            change_type, confidence = _classify(stats)
 
         results.append({
             "bounding_box":     [col_min, row_min, col_max - col_min, row_max - row_min],

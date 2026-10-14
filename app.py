@@ -89,6 +89,7 @@ def run_inference_pipeline(img_a_bytes, img_b_bytes):
     percent_changed = (adjusted_changed / (256 * 256)) * 100
 
     # Create an overlay (red for changes)
+    original_img_a = Image.open(io.BytesIO(img_a_bytes)).convert('RGB').resize((256, 256))
     original_img_b = Image.open(io.BytesIO(img_b_bytes)).convert('RGB').resize((256, 256))
     overlay = np.array(original_img_b)
     overlay[binary_mask == 1] = [255, 0, 0] # Red
@@ -96,14 +97,21 @@ def run_inference_pipeline(img_a_bytes, img_b_bytes):
     # Blend overlay with original using PIL
     blended = Image.blend(original_img_b, Image.fromarray(overlay), alpha=0.5)
     
-    # Encode to base64
-    buffer = io.BytesIO()
-    blended.save(buffer, format="PNG")
-    base64_overlay = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    # Encode all images to base64
+    def _to_b64(img):
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    # Pure mask image (white on black)
+    mask_img = Image.fromarray(binary_mask * 255)
     
     return {
         "percent_changed": float(percent_changed),
-        "overlay_base64":  base64_overlay,
+        "overlay_base64":  _to_b64(blended),
+        "image_a_base64":  _to_b64(original_img_a),
+        "image_b_base64":  _to_b64(original_img_b),
+        "mask_base64":     _to_b64(mask_img),
         "change_regions":  change_regions,
     }
 
@@ -121,16 +129,23 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
     ndbi_a = (idx_a[:, :, 1] / 255.0 - 0.5) * 2.0
     ndbi_b = (idx_b[:, :, 1] / 255.0 - 0.5) * 2.0
     
-    # SCL is mostly 0 to 11.
-    scl_a = idx_a[:, :, 2]
-    scl_b = idx_b[:, :, 2]
+    # SCL is mostly 0 to 11 (scaled to 0-255 in the PNG).
+    # SCL values 8=cloud_medium, 9=cloud_high, 10=thin_cirrus, 3=cloud_shadow
+    scl_a_raw = (idx_a[:, :, 2] / 255.0 * 11.0).astype(np.uint8)
+    scl_b_raw = (idx_b[:, :, 2] / 255.0 * 11.0).astype(np.uint8)
+    cloud_vals = {3, 8, 9, 10}
+    cloud_mask_a = np.isin(scl_a_raw, list(cloud_vals))
+    cloud_mask_b = np.isin(scl_b_raw, list(cloud_vals))
+    cloud_mask = cloud_mask_a | cloud_mask_b
     
     diff_ndvi = ndvi_b - ndvi_a
     diff_ndbi = ndbi_b - ndbi_a
     
-    # 3. Simple thresholding
+    # 3. Thresholding with cloud masking
     # NDBI increase > 0.1 (New buildings) OR NDVI decrease < -0.15 (Vegetation lost)
-    binary_mask = ((diff_ndbi > 0.1) | (diff_ndvi < -0.15)).astype(np.uint8)
+    raw_mask = ((diff_ndbi > 0.1) | (diff_ndvi < -0.15)).astype(np.uint8)
+    # Zero out pixels where SCL indicates cloud/shadow
+    binary_mask = (raw_mask & (~cloud_mask).astype(np.uint8))
     
     # 4. Generate Visualization
     change_regions = reason_regions(img_a_rgb, img_b_rgb, binary_mask, idx_a=idx_a, idx_b=idx_b)
@@ -141,6 +156,7 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
     percent_changed = (adjusted_changed / (256 * 256)) * 100
     
     # Create an overlay (red for changes)
+    original_img_a = Image.open(io.BytesIO(rgb_a_bytes)).convert('RGB').resize((256, 256))
     original_img_b = Image.open(io.BytesIO(rgb_b_bytes)).convert('RGB').resize((256, 256))
     overlay = np.array(original_img_b)
     overlay[binary_mask == 1] = [255, 0, 0] # Red
@@ -148,14 +164,20 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
     # Blend overlay with original using PIL
     blended = Image.blend(original_img_b, Image.fromarray(overlay), alpha=0.5)
     
-    # Encode to base64
-    buffer = io.BytesIO()
-    blended.save(buffer, format="PNG")
-    base64_overlay = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    # Encode all images to base64
+    def _to_b64(img):
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    mask_img = Image.fromarray(binary_mask * 255)
     
     return {
         "percent_changed": float(percent_changed),
-        "overlay_base64": base64_overlay,
+        "overlay_base64": _to_b64(blended),
+        "image_a_base64": _to_b64(original_img_a),
+        "image_b_base64": _to_b64(original_img_b),
+        "mask_base64":    _to_b64(mask_img),
         "change_regions": change_regions
     }
 

@@ -118,8 +118,12 @@ class CopernicusClient:
         cloud_cover = best_feature["properties"].get("eo:cloud_cover", 0.0)
         
         # Parse exact time to create a tiny 1-minute window for the Process API
-        # Handle formats with or without fractional seconds by replacing Z with +00:00
-        best_time = datetime.fromisoformat(best_time_str.replace("Z", "+00:00"))
+        # Robust parser: strip fractional seconds and timezone, then parse as naive UTC
+        # Handles: "2023-01-05T10:15:30Z", "2023-01-05T10:15:30.66Z", "2023-01-05T10:15:30.66+00:00"
+        import re as _re
+        clean_dt = _re.sub(r'\.\d+', '', best_time_str)   # strip fractional seconds
+        clean_dt = _re.sub(r'([+-]\d{2}:\d{2}|Z)$', '', clean_dt)  # strip tz
+        best_time = datetime.strptime(clean_dt, "%Y-%m-%dT%H:%M:%S")
         p_from = (best_time - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         p_to = (best_time + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         
