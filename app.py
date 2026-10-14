@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
@@ -17,6 +17,10 @@ import base64
 from change_reasoner import reason_regions
 from copernicus_client import fetch_satellite_image
 from geocoding import geocode_place, suggest_places
+from spectral_pipeline import SpectralConfig, decode_indices, detect_from_indices
+from tiling import tiled_predict
+from reports import build_report
+import tempfile
 
 class FetchRequest(BaseModel):
     bbox: Optional[List[float]] = None
@@ -24,10 +28,18 @@ class FetchRequest(BaseModel):
     date_before: str
     date_after: str
 
+class ReportRequest(BaseModel):
+    result: dict
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 session = onnxruntime.InferenceSession("model.onnx")
+
+@app.get("/health")
+async def health():
+    """Container-friendly liveness check that never exposes secrets."""
+    return {"status": "ok", "model_loaded": session is not None}
 
 def preprocess_image(image_bytes):
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
@@ -49,111 +61,61 @@ async def read_index():
     with open("static/index.html", "r") as f:
         return f.read()
 
+def _encode_image(img):
+    buf = io.BytesIO(); img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+def _cnn_tile(a_rgb, b_rgb):
+    def normalized(rgb):
+        array = np.transpose(rgb.astype(np.float32) / 255.0, (2, 0, 1))
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
+        return ((array - mean) / std)[None].astype(np.float32)
+    logits = session.run(None, {"input_a": normalized(a_rgb), "input_b": normalized(b_rgb)})[0]
+    return (1 / (1 + np.exp(np.clip(-logits[0, 0], -88.7, 88.7)))).astype(np.float32)
+
+def run_inference_arrays(img_a_rgb, img_b_rgb):
+    """Pipeline A shared entry point; tiles images above the ONNX native size."""
+    probs = tiled_predict(img_a_rgb, img_b_rgb, _cnn_tile)
+    binary_mask = (probs > 0.5).astype(np.uint8)
+    regions = reason_regions(img_a_rgb, img_b_rgb, binary_mask)
+    overlay = img_b_rgb.copy(); overlay[binary_mask == 1] = [255, 0, 0]
+    return {"percent_changed": float(binary_mask.mean() * 100), "overlay_base64": _encode_image(Image.blend(Image.fromarray(img_b_rgb), Image.fromarray(overlay), .5)), "image_a_base64": _encode_image(Image.fromarray(img_a_rgb)), "image_b_base64": _encode_image(Image.fromarray(img_b_rgb)), "mask_base64": _encode_image(Image.fromarray(binary_mask * 255)), "change_regions": regions, "confidence_base64": _encode_image(Image.fromarray((probs * 255).astype(np.uint8))), "pipeline": "cnn"}
+
 def run_inference_pipeline(img_a_bytes, img_b_bytes):
     try:
-        input_a = preprocess_image(img_a_bytes)
-        input_b = preprocess_image(img_b_bytes)
+        # Decode without resizing: tiled_predict preserves full-size uploads.
+        Image.open(io.BytesIO(img_a_bytes)).verify()
+        Image.open(io.BytesIO(img_b_bytes)).verify()
     except Exception as e:
         return {"error": f"Invalid image file(s) provided. {str(e)}"}
     
-    ort_inputs = {
-        'input_a': input_a,
-        'input_b': input_b
-    }
-    
-    # Run inference
-    ort_outs = session.run(None, ort_inputs)
-    mask = ort_outs[0] # Shape: [1, 1, 256, 256]
-    
-    # Sigmoid and threshold
-    mask = 1 / (1 + np.exp(np.clip(-mask, -88.7, 88.7))) # Sigmoid
-    binary_mask = (mask > 0.5).astype(np.uint8)[0, 0] # Shape: [256, 256]
-    
-    # ── Change Reasoning ───────────────────────────────────────────────────
-    # Load both images as uint8 RGB at 256×256 to match the mask
+    # 256px files take one native ONNX tile; larger files retain their dimensions.
     img_a_rgb = np.array(
-        Image.open(io.BytesIO(img_a_bytes)).convert('RGB').resize((256, 256)),
+        Image.open(io.BytesIO(img_a_bytes)).convert('RGB'),
         dtype=np.uint8
     )
     img_b_rgb = np.array(
-        Image.open(io.BytesIO(img_b_bytes)).convert('RGB').resize((256, 256)),
+        Image.open(io.BytesIO(img_b_bytes)).convert('RGB'),
         dtype=np.uint8
     )
-    change_regions = reason_regions(img_a_rgb, img_b_rgb, binary_mask)
-    # ───────────────────────────────────────────────────────────────────────
-    
-    # Calculate % changed, excluding cloud interference
-    cloud_area = sum(r["pixel_area"] for r in change_regions if r["change_type"] == "Possible cloud interference")
-    total_changed = int(np.sum(binary_mask))
-    adjusted_changed = max(0, total_changed - cloud_area)
-    percent_changed = (adjusted_changed / (256 * 256)) * 100
+    return run_inference_arrays(img_a_rgb, img_b_rgb)
 
-    # Create an overlay (red for changes)
-    original_img_a = Image.open(io.BytesIO(img_a_bytes)).convert('RGB').resize((256, 256))
-    original_img_b = Image.open(io.BytesIO(img_b_bytes)).convert('RGB').resize((256, 256))
-    overlay = np.array(original_img_b)
-    overlay[binary_mask == 1] = [255, 0, 0] # Red
-    
-    # Blend overlay with original using PIL
-    blended = Image.blend(original_img_b, Image.fromarray(overlay), alpha=0.5)
-    
-    # Encode all images to base64
-    def _to_b64(img):
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
-    
-    # Pure mask image (white on black)
-    mask_img = Image.fromarray(binary_mask * 255)
-    
-    return {
-        "percent_changed": float(percent_changed),
-        "overlay_base64":  _to_b64(blended),
-        "image_a_base64":  _to_b64(original_img_a),
-        "image_b_base64":  _to_b64(original_img_b),
-        "mask_base64":     _to_b64(mask_img),
-        "change_regions":  change_regions,
-    }
-
-def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes):
+def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes, config=SpectralConfig()):
     # 1. Decode images
     img_a_rgb = np.array(Image.open(io.BytesIO(rgb_a_bytes)).convert('RGB').resize((256, 256)), dtype=np.uint8)
     img_b_rgb = np.array(Image.open(io.BytesIO(rgb_b_bytes)).convert('RGB').resize((256, 256)), dtype=np.uint8)
     idx_a = np.array(Image.open(io.BytesIO(idx_a_bytes)).convert('RGB').resize((256, 256)), dtype=np.float32)
     idx_b = np.array(Image.open(io.BytesIO(idx_b_bytes)).convert('RGB').resize((256, 256)), dtype=np.float32)
     
-    # 2. Extract Spectral Indices (from 0-255 back to -1 to 1)
-    # Channel 0: NDVI, Channel 1: NDBI, Channel 2: SCL (0-11 scaled to 0-255)
-    ndvi_a = (idx_a[:, :, 0] / 255.0 - 0.5) * 2.0
-    ndvi_b = (idx_b[:, :, 0] / 255.0 - 0.5) * 2.0
-    ndbi_a = (idx_a[:, :, 1] / 255.0 - 0.5) * 2.0
-    ndbi_b = (idx_b[:, :, 1] / 255.0 - 0.5) * 2.0
-    
-    # SCL is mostly 0 to 11 (scaled to 0-255 in the PNG).
-    # SCL values 8=cloud_medium, 9=cloud_high, 10=thin_cirrus, 3=cloud_shadow
-    scl_a_raw = (idx_a[:, :, 2] / 255.0 * 11.0).astype(np.uint8)
-    scl_b_raw = (idx_b[:, :, 2] / 255.0 * 11.0).astype(np.uint8)
-    cloud_vals = {3, 8, 9, 10}
-    cloud_mask_a = np.isin(scl_a_raw, list(cloud_vals))
-    cloud_mask_b = np.isin(scl_b_raw, list(cloud_vals))
-    cloud_mask = cloud_mask_a | cloud_mask_b
-    
-    diff_ndvi = ndvi_b - ndvi_a
-    diff_ndbi = ndbi_b - ndbi_a
-    
-    # 3. Thresholding with cloud masking
-    # NDBI increase > 0.1 (New buildings) OR NDVI decrease < -0.15 (Vegetation lost)
-    raw_mask = ((diff_ndbi > 0.1) | (diff_ndvi < -0.15)).astype(np.uint8)
-    # Zero out pixels where SCL indicates cloud/shadow
-    binary_mask = (raw_mask & (~cloud_mask).astype(np.uint8))
+    ndvi_a, ndbi_a, scl_a = decode_indices(idx_a)
+    ndvi_b, ndbi_b, scl_b = decode_indices(idx_b)
+    binary_mask, cloud_mask, threshold_info = detect_from_indices(ndvi_a, ndbi_a, ndvi_b, ndbi_b, scl_a, scl_b, config)
     
     # 4. Generate Visualization
     change_regions = reason_regions(img_a_rgb, img_b_rgb, binary_mask, idx_a=idx_a, idx_b=idx_b)
     
-    cloud_area = sum(r["pixel_area"] for r in change_regions if r["change_type"] == "Possible cloud interference")
-    total_changed = int(np.sum(binary_mask))
-    adjusted_changed = max(0, total_changed - cloud_area)
-    percent_changed = (adjusted_changed / (256 * 256)) * 100
+    percent_changed = float(binary_mask.mean() * 100)
     
     # Create an overlay (red for changes)
     original_img_a = Image.open(io.BytesIO(rgb_a_bytes)).convert('RGB').resize((256, 256))
@@ -165,20 +127,14 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
     blended = Image.blend(original_img_b, Image.fromarray(overlay), alpha=0.5)
     
     # Encode all images to base64
-    def _to_b64(img):
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
-    
     mask_img = Image.fromarray(binary_mask * 255)
     
     return {
         "percent_changed": float(percent_changed),
-        "overlay_base64": _to_b64(blended),
-        "image_a_base64": _to_b64(original_img_a),
-        "image_b_base64": _to_b64(original_img_b),
-        "mask_base64":    _to_b64(mask_img),
-        "change_regions": change_regions
+        "overlay_base64": _encode_image(blended), "image_a_base64": _encode_image(original_img_a),
+        "image_b_base64": _encode_image(original_img_b), "mask_base64": _encode_image(mask_img),
+        "change_regions": change_regions, "percent_cloud_masked": threshold_info["masked_percent"],
+        "thresholds": threshold_info, "pipeline": "spectral"
     }
 
 @app.post("/predict")
@@ -191,6 +147,16 @@ async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(..
         return JSONResponse(status_code=400, content={"error": result["error"]})
         
     return JSONResponse(content=result)
+
+@app.post("/report")
+async def download_report(req: ReportRequest):
+    """Render a self-contained PDF from a completed API response."""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+            build_report(req.result, tmp.name)
+            return Response(content=open(tmp.name, "rb").read(), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=change-report.pdf"})
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not generate report: {exc}")
 
 @app.post("/fetch-and-predict")
 async def fetch_and_predict(req: FetchRequest):
