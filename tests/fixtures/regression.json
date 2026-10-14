@@ -1,0 +1,4 @@
+{
+  "cnn_same_image": {"percent_changed": 0.0, "regions": 0},
+  "spectral_synthetic": {"percent_changed": 25.0, "masked_percent": 25.0}
+}

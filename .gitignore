@@ -13,6 +13,7 @@ env/
 
 # ── Credentials ──────────────────────────────────────────
 .env
+analysis_history.sqlite3
 
 # ── Large Model Files (GitHub 100MB limit) ───────────────
 *.pt

@@ -20,6 +20,7 @@ from geocoding import geocode_place, suggest_places
 from spectral_pipeline import SpectralConfig, decode_indices, detect_from_indices
 from tiling import tiled_predict
 from reports import build_report
+from history_store import save_analysis, list_analyses, get_analysis
 import tempfile
 
 class FetchRequest(BaseModel):
@@ -146,6 +147,7 @@ async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(..
     if "error" in result:
         return JSONResponse(status_code=400, content={"error": result["error"]})
         
+    result["history_id"] = save_analysis(result, {"route": "/predict", "image_a": image_a.filename, "image_b": image_b.filename})
     return JSONResponse(content=result)
 
 @app.post("/report")
@@ -157,6 +159,17 @@ async def download_report(req: ReportRequest):
             return Response(content=open(tmp.name, "rb").read(), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=change-report.pdf"})
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not generate report: {exc}")
+
+@app.get("/history")
+async def history(limit: int = 50):
+    return list_analyses(limit)
+
+@app.get("/history/{analysis_id}")
+async def history_detail(analysis_id: int):
+    item = get_analysis(analysis_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return item
 
 @app.post("/fetch-and-predict")
 async def fetch_and_predict(req: FetchRequest):
@@ -211,6 +224,9 @@ async def fetch_and_predict(req: FetchRequest):
     place_str = resolved_place or "the selected location"
     summary_sentence = f"Satellite analysis of {place_str} between {req.date_before} and {req.date_after} shows {severity} change, with approximately {pct:.2f}% of the observed area affected — primarily {dominant_category}."
     result["summary_sentence"] = summary_sentence
+    result["date_before"] = req.date_before
+    result["date_after"] = req.date_after
+    result["history_id"] = save_analysis(result, {"route": "/fetch-and-predict", "bbox": bbox, "date_before": req.date_before, "date_after": req.date_after}, resolved_place)
     
     return JSONResponse(content=result)
 
