@@ -25,11 +25,23 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 `Dockerfile` is the production entry point and starts the same ASGI app. The
-ONNX model is `model.onnx`; PyTorch training architecture and weights are in
-`model.py` and `best_model.pt`.
+ONNX model is `model.onnx` (override with `MODEL_ONNX_PATH`); PyTorch training
+architecture and weights are in `model.py` and `best_model.pt` (override with
+`MODEL_PT_PATH`). Both files are optional until their respective pipeline runs.
 
-## Baseline observed 2026-10-14
+## Tests and OSCD
 
-The host Python lacks both `pytest` and `python-dotenv`, so the baseline test
-suite and app import could not run in this environment. `model.onnx` is present
-(33,268,410 bytes). OSCD is not in the repository.
+`python3 -m pytest -q` collects only `tests/`; manual diagnostics live in
+`scripts/` and never run during test collection. Tests requiring `model.onnx`
+skip when it is absent. `requirements.txt` supports NumPy 2.x runtime use;
+`requirements-dev.txt` additionally installs unpinned `onnx` for export.
+
+`benchmarks/oscd_eval.py --root /content/oscd --output /path/to/results` reads
+the official OSCD archive layout directly, validates every selected band against
+the corresponding `cm.png`, selects thresholds on training cities only, then
+scores the official test split. It checkpoints results after every city.
+
+## Baseline observed 2026-10-16
+
+The host Python lacks `pytest`, so local test execution cannot yet be verified.
+OSCD is not in the repository.

@@ -116,13 +116,25 @@ Uploads larger than 256×256 are processed by overlapping 256px CNN tiles (32px 
 
 OSCD must be obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; it is not downloaded by this repository and no scores are supplied without data. The dataset contains 24 Sentinel-2 13-band pairs, with 14 train and 10 test cities. Use train cities only to choose any adaptive-threshold policy, then lock it before test evaluation.
 
-This repository's evaluator intentionally requires a verified local, per-city `.npz` adapter containing `ndvi_a`, `ndbi_a`, `ndvi_b`, `ndbi_b`, `mask`, `rgb_a`, and `rgb_b`. This explicit boundary avoids silently resampling OSCD's mixed 10m/20m/60m bands. Run:
+The evaluator reads the verified OSCD release layout directly. It uses `B02`,
+`B03`, `B04`, `B08`, and `B11` from each `imgs_1_rect`/`imgs_2_rect` directory,
+and refuses to resize a raster whose dimensions differ from `cm.png` (including
+Dubai). `cm.png` must contain only `0` and `255`, where `255` means change.
+Tune hardcoded and percentile settings on the 14 train cities only; the ten
+official test cities are scored once afterward. Run:
 
 ```bash
-python benchmarks/oscd_eval.py --prepared-root /path/to/oscd-test-adapters
+MODEL_ONNX_PATH=/path/to/model.onnx \
+python benchmarks/oscd_eval.py --root /path/to/oscd --output /path/to/results
 ```
 
-It writes JSON, Markdown, LaTex, and qualitative panels into `benchmarks/results/`. OSCD has no SCL layer, so the SCL on/off comparison is marked unavailable rather than fabricated. No real OSCD data is installed in this checkout, hence no benchmark result is claimed yet.
+It checkpoints `oscd_results.json` after every city and emits a per-city plus
+aggregate Markdown table for hardcoded, Otsu, percentile, and Pipeline A CNN.
+The CNN needs `model.onnx` (`MODEL_ONNX_PATH`, default `model.onnx`); PyTorch
+utilities need `best_model.pt` (`MODEL_PT_PATH`, default `best_model.pt`). No
+weights or OSCD data are committed. See `notebooks/oscd_benchmark.ipynb` for a
+fresh Google Colab run. OSCD has no SCL layer, so cloud-mask comparisons are not
+reported as measurements.
 
 ## Deployment
 

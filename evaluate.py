@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from dataset import ChangeDetectionDataset
@@ -23,11 +25,12 @@ def evaluate():
     
     model = MobileNetV2_3D_CDNet(n_classes=1).to(device)
     
+    checkpoint_path = Path(os.environ.get("MODEL_PT_PATH", "best_model.pt"))
     try:
-        model.load_state_dict(torch.load('best_model.pt', map_location=device))
-        print("Loaded best_model.pt")
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        print(f"Loaded {checkpoint_path}")
     except FileNotFoundError:
-        print("No best_model.pt found. Have you trained the model?")
+        print(f"No checkpoint at {checkpoint_path}. Set MODEL_PT_PATH or train the model.")
         return
 
     model.eval()
