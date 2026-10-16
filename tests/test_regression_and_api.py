@@ -19,7 +19,7 @@ def test_pipeline_a_fixed_sample_is_within_tolerance():
     assert len(result['change_regions']) == expected['regions']
 
 def test_pipeline_b_fixed_spectral_fixture_is_within_tolerance():
-    before=np.zeros((2,2),np.float32); after=before.copy(); after[0,0]=-.5; after[1,0]=-.5
+    before=np.zeros((2,2),np.float32); after=before.copy(); after[0,1]=-.5; after[1,0]=-.5
     scl=np.array([[0,8],[0,0]],np.uint8)
     mask, _, info=detect_from_indices(before,before,after,before,scl,scl,SpectralConfig())
     assert abs(mask.mean()*100-FIXTURE['spectral_synthetic']['percent_changed']) <= .01
