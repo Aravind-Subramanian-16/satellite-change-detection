@@ -1,5 +1,7 @@
 # Satellite Image Change Detection
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Aravind-Subramanian-16/satellite-change-detection/blob/main/notebooks/oscd_benchmark.ipynb)
+
 An end-to-end local demo web application that takes "before" and "after" satellite images, detects changes using a Siamese U-Net model trained on the LEVIR-CD dataset, and returns a highlighted mask along with a percentage of change. It includes a deterministic change-reasoning module to classify the type of change.
 
 ## 1. Project Overview & Architecture Summary
@@ -111,6 +113,23 @@ For deployment, we provide a highly optimized `Dockerfile` that packages only th
 The single-page dashboard includes upload and place search, a responsive before/after drag control, staged loading feedback, classified region cards, and downloadable result images. `GET /health` is suitable for platform health checks. `POST /report` accepts a completed result object and returns a PDF report.
 
 Uploads larger than 256×256 are processed by overlapping 256px CNN tiles (32px overlap), then averaged during reconstruction. Live spectral requests exclude Sentinel-2 SCL cloud classes 8, 9, 10 and cloud shadow 3; `percent_cloud_masked` is returned with the result.
+
+## Run the OSCD benchmark
+
+The fastest way to reproduce the OSCD results is via the Colab notebook
+[`notebooks/oscd_benchmark.ipynb`](notebooks/oscd_benchmark.ipynb). Before
+running, place the following files in your Google Drive under
+`My Drive/oscd/`:
+
+| File | Description |
+|---|---|
+| `archive (1).zip` | OSCD images (from IEEE DataPort) |
+| `test_labels.zip` | Official test-split ground-truth labels |
+| `weights/model.onnx` | Exported ONNX model for Pipeline A CNN |
+| `weights/best_model.pt` | PyTorch checkpoint for training utilities |
+
+The notebook will raise a clear `FileNotFoundError` if any weight file is
+missing.
 
 ## OSCD benchmark reproduction
 
