@@ -22,6 +22,8 @@ from tiling import tiled_predict
 from reports import build_report
 from history_store import save_analysis, list_analyses, get_analysis
 import tempfile
+import os
+from pathlib import Path
 
 class FetchRequest(BaseModel):
     bbox: Optional[List[float]] = None
@@ -35,7 +37,20 @@ class ReportRequest(BaseModel):
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-session = onnxruntime.InferenceSession("model.onnx")
+MODEL_ONNX_PATH = Path(os.environ.get("MODEL_ONNX_PATH", "model.onnx"))
+session = None
+
+def get_onnx_session():
+    """Load the optional CNN weights only when Pipeline A is requested."""
+    global session
+    if session is None:
+        if not MODEL_ONNX_PATH.is_file():
+            raise FileNotFoundError(
+                f"Pipeline A requires an ONNX model, but {MODEL_ONNX_PATH} is missing. "
+                "Set MODEL_ONNX_PATH or copy model.onnx into the repository."
+            )
+        session = onnxruntime.InferenceSession(str(MODEL_ONNX_PATH))
+    return session
 
 @app.get("/health")
 async def health():
@@ -72,7 +87,7 @@ def _cnn_tile(a_rgb, b_rgb):
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
         return ((array - mean) / std)[None].astype(np.float32)
-    logits = session.run(None, {"input_a": normalized(a_rgb), "input_b": normalized(b_rgb)})[0]
+    logits = get_onnx_session().run(None, {"input_a": normalized(a_rgb), "input_b": normalized(b_rgb)})[0]
     return (1 / (1 + np.exp(np.clip(-logits[0, 0], -88.7, 88.7)))).astype(np.float32)
 
 def run_inference_arrays(img_a_rgb, img_b_rgb):
