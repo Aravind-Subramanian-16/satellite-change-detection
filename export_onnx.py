@@ -1,7 +1,10 @@
+import os
 import torch
 from model import MobileNetV2_3D_CDNet
 
-def export_onnx(model_path='best_model.pt', onnx_path='model.onnx'):
+def export_onnx(model_path=None, onnx_path=None):
+    model_path = model_path or os.environ.get("MODEL_PT_PATH", "best_model.pt")
+    onnx_path = onnx_path or os.environ.get("MODEL_ONNX_PATH", "model.onnx")
     device = torch.device('cpu') # Export on CPU
     model = MobileNetV2_3D_CDNet(n_classes=1).to(device)
     

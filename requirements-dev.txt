@@ -1,0 +1,3 @@
+-r requirements.txt
+# ONNX is required only to export a PyTorch checkpoint, not to run the app.
+onnx
