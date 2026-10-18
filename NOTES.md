@@ -38,8 +38,16 @@ skip when it is absent. `requirements.txt` supports NumPy 2.x runtime use;
 
 `benchmarks/oscd_eval.py --root /content/oscd --output /path/to/results` reads
 the official OSCD archive layout directly, validates every selected band against
-the corresponding `cm.png`, selects thresholds on training cities only, then
-scores the official test split. It checkpoints results after every city.
+the city-named label GeoTIFF, selects spectral thresholds and CNN preprocessing
+on training cities only, then scores both CNN preprocessing variants on the
+official test split. It checkpoints v2 results after every city.
+
+In `spectral_pipeline.py`, `SpectralConfig(mode="percentile")` computes the
+configured percentile separately over valid positive NDVI-drop evidence
+(`-dvi`) and positive NDBI-rise evidence (`dbi`), then marks a pixel changed if
+it exceeds either resulting threshold. This is an adaptive threshold on the
+observed evidence distributions; it does not assume or enforce a fixed change
+fraction.
 
 ## Baseline observed 2026-10-16
 
