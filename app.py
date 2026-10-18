@@ -53,7 +53,15 @@ def get_onnx_session():
                 f"Pipeline A requires an ONNX model, but {MODEL_ONNX_PATH} is missing. "
                 "Set MODEL_ONNX_PATH or copy model.onnx into the repository."
             )
-        session = onnxruntime.InferenceSession(str(MODEL_ONNX_PATH))
+        try:
+            session = onnxruntime.InferenceSession(str(MODEL_ONNX_PATH))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Pipeline A could not load ONNX model {MODEL_ONNX_PATH}. The file may be "
+                "incompatible or invalid; replace it with the verified Drive model.onnx "
+                "(33,268,410 bytes). "
+                f"ONNX Runtime error: {exc}"
+            ) from exc
     return session
 
 @app.get("/health")
@@ -166,7 +174,10 @@ async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(..
     img_a_bytes = await image_a.read()
     img_b_bytes = await image_b.read()
     
-    result = run_inference_pipeline(img_a_bytes, img_b_bytes)
+    try:
+        result = run_inference_pipeline(img_a_bytes, img_b_bytes)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if "error" in result:
         return JSONResponse(status_code=400, content={"error": result["error"]})
         

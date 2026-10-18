@@ -4,22 +4,22 @@ Evidence is recorded next to each checked item. Do not check items until the sta
 
 ## Phase A — Finish setup and verify
 
-- [ ] A1. Record local `model.onnx` byte size and SHA-256; do not modify it; tell user to replace it with the Drive copy of 33,268,410 bytes.
-- [ ] A1. Ensure model-dependent features fail with a clear error instead of crashing.
-- [ ] A2. Install dependencies in the venv using `python -m pip`.
-- [ ] A2. Run `python -m pytest -q` and record exact counts.
-- [ ] A3. Start the app; verify `/health`.
-- [ ] A3. Verify image upload flow.
-- [ ] A3. Verify dashboard rendering.
-- [ ] A3. Verify before/after slider.
-- [ ] A3. Verify heatmap toggle.
-- [ ] A3. Verify report download.
-- [ ] A3. Verify History tab.
-- [ ] A3. Save screenshots under `docs/screenshots/` and record browser console errors; mark unavailable checks unverified.
-- [ ] A4. Build Docker image if Docker exists; verify `/health` and PDF generation in container, or record Docker unavailable.
-- [ ] A5. Add secret-free `.env.example`.
-- [ ] A5. Add CPU-only Render free-tier `render.yaml` with health check.
-- [ ] A5. Add `DEPLOY.md`.
+- [x] A1. Record local `model.onnx` byte size and SHA-256; do not modify it; tell user to replace it with the Drive copy of 33,268,410 bytes. Evidence: `stat -f 'size_bytes=%z' model.onnx && shasum -a 256 model.onnx` → `60534573`; SHA-256 `b3d95e3e796b3bda4b06dc37a4909a47be8b6c13460b59fed3d6f4a66e2ececd`. User must replace it with the 33,268,410-byte Drive copy.
+- [x] A1. Ensure model-dependent features fail with a clear error instead of crashing. Evidence: `tests/test_model_load_errors.py`; live curl `POST /predict` returned HTTP 503 with `Pipeline A could not load ONNX model... replace it with the verified Drive model.onnx (33,268,410 bytes)`.
+- [ ] A2. Install dependencies in the venv using `python -m pip`. Attempt: `venv/bin/python -m pip install -r requirements.txt` failed while building rasterio's build requirements: `[Errno 28] No space left on device`; rasterio also requires GDAL when built from source.
+- [x] A2. Run `python -m pytest -q` and record exact counts. Evidence: `venv/bin/python -m pytest -q` → `13 passed, 3 skipped, 2 warnings in 4.03s`; skips: invalid-model regression, rasterio, reportlab.
+- [x] A3. Start the app; verify `/health`. Evidence: live uvicorn + curl → `GET /health: {"status":"ok","model_loaded":false}`.
+- [x] A3. Verify image upload flow. Evidence: synthetic PNG multipart upload via curl reached `/predict` and returned HTTP 503 with actionable model-replacement error; successful inference awaits the verified Drive model.
+- [x] A3. Verify dashboard rendering. Evidence: `curl GET /` returned HTTP 200 and included dashboard HTML markers (`slider-container`, `heatmap`, `History`, `tab-btn`).
+- [ ] A3. Verify before/after slider. Unverified: no Playwright/browser available; only static HTML was fetched.
+- [ ] A3. Verify heatmap toggle. Unverified: no Playwright/browser available; only static HTML was fetched.
+- [ ] A3. Verify report download. Unverified: `POST /report` returned HTTP 500 because reportlab is not installed; dependency install was blocked by disk space.
+- [ ] A3. Verify History tab. Unverified: API `GET /history` returned HTTP 200 and `[]`; UI interaction was not browser-tested.
+- [ ] A3. Save screenshots under `docs/screenshots/` and record browser console errors; mark unavailable checks unverified. Unverified: Playwright unavailable; no screenshots or browser console are fabricated.
+- [x] A4. Build Docker image if Docker exists; verify `/health` and PDF generation in container, or record Docker unavailable. Evidence: `docker --version` → `sh: docker: command not found`.
+- [x] A5. Add secret-free `.env.example`. Evidence: `.env.example`; contains blank credential fields only.
+- [x] A5. Add CPU-only Render free-tier `render.yaml` with health check. Evidence: `render.yaml`; `plan: free`, Python service, `/health` check, no GPU request.
+- [x] A5. Add `DEPLOY.md`. Evidence: `DEPLOY.md`; documents local setup, model replacement, free-tier caveats, and secrets.
 
 ## Phase B — Live map picker and best-image selection
 
@@ -79,8 +79,8 @@ Evidence is recorded next to each checked item. Do not check items until the sta
 
 ## Phase commit and push log
 
-- Initial checklist commit: pending.
-- Phase A commit/push: pending.
+- Initial checklist commit: `d3ebed5` (local checkpoint; pending push with Phase A checkpoint).
+- Phase A partial checkpoint: pending. Phase A remains incomplete pending dependency space, verified model replacement, browser interactions/screenshots, and PDF dependency.
 - Phase B commit/push: pending.
 - Phase C commit/push: pending.
 - Phase D commit/push: pending; v3 is not run locally.
@@ -89,4 +89,7 @@ Evidence is recorded next to each checked item. Do not check items until the sta
 
 ## Manual actions for the owner
 
-- Pending; list exact requirements here as phases are verified.
+- Replace `model.onnx` with Drive `oscd/weights/model.onnx` without deleting the current file: from the project directory run `mv model.onnx model.onnx.local-backup 2>/dev/null`, copy the Drive file to `model.onnx`, then check `ls -l model.onnx` is 33,268,410 bytes.
+- Re-run `venv/bin/python -c "import onnxruntime as o; s=o.InferenceSession('model.onnx'); print([i.name for i in s.get_inputs()])"` and share output; expected names: `['input_a', 'input_b']`.
+- Free disk space (without deleting project/user data) and retry `venv/bin/python -m pip install -r requirements.txt` so reportlab/rasterio and remaining dependencies can install.
+- For interactive UI validation/screenshots, provide a browser/Playwright runtime; Docker is not installed in this environment.
