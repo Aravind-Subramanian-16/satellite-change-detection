@@ -131,29 +131,82 @@ running, place the following files in your Google Drive under
 The notebook will raise a clear `FileNotFoundError` if any weight file is
 missing.
 
-## OSCD benchmark reproduction
+## OSCD benchmark reproduction and v2 results
 
-OSCD must be obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; it is not downloaded by this repository and no scores are supplied without data. The dataset contains 24 Sentinel-2 13-band pairs, with 14 train and 10 test cities. Use train cities only to choose any adaptive-threshold policy, then lock it before test evaluation.
+OSCD is obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; images and weights are not committed. The dataset provides 14 train and 10 official test cities. Thresholds and the CNN preprocessing variant are selected on the 14 training cities only, before scoring the test cities.
 
-The evaluator reads the verified OSCD release layout directly. It uses `B02`,
-`B03`, `B04`, `B08`, and `B11` from each `imgs_1_rect`/`imgs_2_rect` directory,
-and refuses to resize a raster whose dimensions differ from `cm.png` (including
-Dubai). `cm.png` must contain only `0` and `255`, where `255` means change.
-Tune hardcoded and percentile settings on the 14 train cities only; the ten
-official test cities are scored once afterward. Run:
+The evaluator reads `B02`, `B03`, `B04`, `B08`, and `B11` from each acquisition, and reads labels from the city-named change-label GeoTIFF. It refuses dimension mismatches rather than resizing. Spectral configurations are selected by pooled training F1: the v2 hardcoded choice is NDVI drop `-0.30` or NDBI rise `+0.30` (both at the edge of their search grids), and percentile mode selects `99.0`. The CNN preprocessing marked chosen on train is `joint_percentile`; `reflectance` is reported as the other ablation. The saved test artifacts do not include the CNN training scores.
 
-```bash
-MODEL_ONNX_PATH=/path/to/model.onnx \
-python benchmarks/oscd_eval.py --root /path/to/oscd --output /path/to/results
-```
+The main result is v2 in [`benchmarks/results/oscd_results_v2.md`](benchmarks/results/oscd_results_v2.md) and [`benchmarks/results/oscd_results_v2.json`](benchmarks/results/oscd_results_v2.json). Fractions below are percentages of pixels. Score is F1 except Otsu, where it is overall accuracy (OA).
 
-It checkpoints `oscd_results.json` after every city and emits a per-city plus
-aggregate Markdown table for hardcoded, Otsu, percentile, and Pipeline A CNN.
-The CNN needs `model.onnx` (`MODEL_ONNX_PATH`, default `model.onnx`); PyTorch
-utilities need `best_model.pt` (`MODEL_PT_PATH`, default `best_model.pt`). No
-weights or OSCD data are committed. See `notebooks/oscd_benchmark.ipynb` for a
-fresh Google Colab run. OSCD has no SCL layer, so cloud-mask comparisons are not
-reported as measurements.
+| City | Method | True change | Predicted change | F1 (Otsu: OA) |
+|---|---|---:|---:|---:|
+| brasilia | Hardcoded | 2.58% | 0.32% | 0.0590 |
+| brasilia | Percentile | 2.58% | 1.66% | 0.1082 |
+| brasilia | Otsu | 2.58% | 69.31% | 0.3272 |
+| brasilia | CNN joint-percentile (chosen on train) | 2.58% | 0.00% | 0.0000 |
+| brasilia | CNN reflectance (other) | 2.58% | 0.00% | 0.0000 |
+| montpellier | Hardcoded | 6.79% | 1.10% | 0.0355 |
+| montpellier | Percentile | 6.79% | 1.67% | 0.0490 |
+| montpellier | Otsu | 6.79% | 57.13% | 0.4514 |
+| montpellier | CNN joint-percentile (chosen on train) | 6.79% | 0.00% | 0.0000 |
+| montpellier | CNN reflectance (other) | 6.79% | 0.00% | 0.0000 |
+| norcia | Hardcoded | 1.32% | 5.14% | 0.0350 |
+| norcia | Percentile | 1.32% | 1.37% | 0.0345 |
+| norcia | Otsu | 1.32% | 72.75% | 0.2850 |
+| norcia | CNN joint-percentile (chosen on train) | 1.32% | 0.00% | 0.0000 |
+| norcia | CNN reflectance (other) | 1.32% | 0.00% | 0.0000 |
+| rio | Hardcoded | 5.69% | 2.51% | 0.1755 |
+| rio | Percentile | 5.69% | 1.68% | 0.1482 |
+| rio | Otsu | 5.69% | 57.09% | 0.4223 |
+| rio | CNN joint-percentile (chosen on train) | 5.69% | 0.00% | 0.0000 |
+| rio | CNN reflectance (other) | 5.69% | 0.00% | 0.0000 |
+| saclay_w | Hardcoded | 1.14% | 9.88% | 0.0045 |
+| saclay_w | Percentile | 1.14% | 1.56% | 0.0005 |
+| saclay_w | Otsu | 1.14% | 48.90% | 0.5116 |
+| saclay_w | CNN joint-percentile (chosen on train) | 1.14% | 0.00% | 0.0000 |
+| saclay_w | CNN reflectance (other) | 1.14% | 0.00% | 0.0000 |
+| valencia | Hardcoded | 0.44% | 1.69% | 0.0133 |
+| valencia | Percentile | 0.44% | 1.40% | 0.0134 |
+| valencia | Otsu | 0.44% | 78.25% | 0.2205 |
+| valencia | CNN joint-percentile (chosen on train) | 0.44% | 0.02% | 0.0000 |
+| valencia | CNN reflectance (other) | 0.44% | 0.00% | 0.0000 |
+| dubai | Hardcoded | 9.92% | 0.05% | 0.0032 |
+| dubai | Percentile | 9.92% | 1.72% | 0.0500 |
+| dubai | Otsu | 9.92% | 79.13% | 0.2323 |
+| dubai | CNN joint-percentile (chosen on train) | 9.92% | 0.00% | 0.0000 |
+| dubai | CNN reflectance (other) | 9.92% | 0.00% | 0.0000 |
+| lasvegas | Hardcoded | 7.67% | 0.27% | 0.0533 |
+| lasvegas | Percentile | 7.67% | 1.74% | 0.1548 |
+| lasvegas | Otsu | 7.67% | 80.71% | 0.2334 |
+| lasvegas | CNN joint-percentile (chosen on train) | 7.67% | 0.02% | 0.0024 |
+| lasvegas | CNN reflectance (other) | 7.67% | 0.00% | 0.0000 |
+| milano | Hardcoded | 0.80% | 0.42% | 0.1133 |
+| milano | Percentile | 0.80% | 1.72% | 0.1219 |
+| milano | Otsu | 0.80% | 67.84% | 0.3252 |
+| milano | CNN joint-percentile (chosen on train) | 0.80% | 0.00% | 0.0000 |
+| milano | CNN reflectance (other) | 0.80% | 0.00% | 0.0000 |
+| chongqing | Hardcoded | 7.21% | 1.91% | 0.3102 |
+| chongqing | Percentile | 7.21% | 1.74% | 0.2481 |
+| chongqing | Otsu | 7.21% | 53.58% | 0.4831 |
+| chongqing | CNN joint-percentile (chosen on train) | 7.21% | 0.00% | 0.0000 |
+| chongqing | CNN reflectance (other) | 7.21% | 0.00% | 0.0000 |
+
+### Pooled v2 test results
+
+| Method | True change | Predicted change | Reported score |
+|---|---:|---:|---:|
+| Hardcoded | 5.17% | 2.24% | F1 0.0782 |
+| Percentile | 5.17% | 1.66% | F1 0.1176 |
+| Otsu | 5.17% | 67.35% | OA 0.3439 |
+| CNN joint-percentile (chosen on train) | 5.17% | 0.01% | F1 0.0007 |
+| CNN reflectance (other) | 5.17% | 0.00% | F1 0.0000 |
+
+An earlier preliminary run with a smaller search grid also scored the test split (pooled F1: percentile `0.167`, hardcoded `0.104`, Otsu `0.095`, CNN `0.0`). This is disclosed because the test split was used in that preliminary run; v2 is the main reported result, not an independent second test.
+
+Limitations: city-level results vary widely (for example, percentile F1 ranges from `0.0005` in saclay_w to `0.2481` in chongqing). Hardcoded and percentile thresholds under-predict pooled change (`2.24%` and `1.66%`, respectively, versus `5.17%` true). Otsu labels `67.35%` of pooled pixels as changed, so its pooled OA (`0.3439`) is reported instead of its recall. OSCD provides no SCL layer here, so SCL/cloud exclusion is not measured. A domain gap between LEVIR-CD training imagery and OSCD Sentinel-2 imagery/resolution is a hypothesis that may help explain the CNN result, not an established cause. The measured selected CNN F1 is about `0.0007`; the saved results show its near-empty predictions.
+
+**TODO:** Add published OSCD baselines with citations and comparable evaluation protocols; no baseline numbers are invented here. The v2 LaTeX versions of both tables are in [`PAPER_NOTES.md`](PAPER_NOTES.md).
 
 ## Deployment
 
