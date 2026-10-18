@@ -12,6 +12,7 @@ import io
 import itertools
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -51,10 +52,13 @@ def aggregate(rows: list[dict]) -> dict[str, float | int]:
 def raster(path: Path) -> np.ndarray:
     try:
         import rasterio
+        from rasterio.errors import NotGeoreferencedWarning
     except ImportError as exc:
         raise RuntimeError("OSCD evaluation requires rasterio; install requirements.txt") from exc
-    with rasterio.open(path) as dataset:
-        return dataset.read(1).astype(np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        with rasterio.open(path) as dataset:
+            return dataset.read(1).astype(np.float32)
 
 
 def band_path(directory: Path, band: str) -> Path:
@@ -69,30 +73,58 @@ def rgb(red: np.ndarray, green: np.ndarray, blue: np.ndarray) -> np.ndarray:
     return np.clip(np.dstack((red, green, blue)) / 10000.0 * 255.0, 0, 255).astype(np.uint8)
 
 
+def load_label(labels_root: Path, city: str) -> tuple[np.ndarray, tuple[int, int]]:
+    """Read the ground-truth change mask from the OSCD label GeoTIFF.
+
+    The label file is ``<city>/cm/<city>-cm.tif``, band 1.  Valid pixel
+    values are **1** (no change) and **2** (change).  Returns a boolean
+    mask where ``True`` means *change*.
+    """
+    label_path = labels_root / city / "cm" / f"{city}-cm.tif"
+    if not label_path.is_file():
+        raise FileNotFoundError(f"{city}: missing change label GeoTIFF {label_path}")
+    try:
+        import rasterio
+        from rasterio.errors import NotGeoreferencedWarning
+    except ImportError as exc:
+        raise RuntimeError("OSCD evaluation requires rasterio; install requirements.txt") from exc
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        with rasterio.open(label_path) as ds:
+            expected_shape = (ds.height, ds.width)
+            raw = ds.read(1)
+    values = set(np.unique(raw).tolist())
+    if not values.issubset({1, 2}):
+        raise ValueError(
+            f"{city}: label GeoTIFF must contain only values {{1, 2}}, got {sorted(values)}"
+        )
+    mask = raw == 2
+    if mask.shape != expected_shape:
+        raise ValueError(
+            f"{city}: label mask shape {mask.shape} does not match GeoTIFF band dimensions "
+            f"{expected_shape}; refusing to resize"
+        )
+    return mask, expected_shape
+
+
 def load_city(images_root: Path, labels_root: Path, city: str) -> dict:
     before_dir, after_dir = images_root / city / "imgs_1_rect", images_root / city / "imgs_2_rect"
-    label_path = labels_root / city / "cm" / "cm.png"
-    if not label_path.is_file():
-        raise FileNotFoundError(f"{city}: missing change label {label_path}")
-    label = np.asarray(Image.open(label_path).convert("L"), dtype=np.uint8)
-    values = set(np.unique(label).tolist())
-    if not values.issubset({0, 255}):
-        raise ValueError(f"{city}: cm.png must contain only 0 and 255, got {sorted(values)}")
+    mask, label_shape = load_label(labels_root, city)
     bands, mismatches = {}, []
     for time, directory in (("before", before_dir), ("after", after_dir)):
         for band in BANDS:
             path = band_path(directory, band)
             image = raster(path)
             bands[time, band] = image
-            if image.shape != label.shape:
-                mismatches.append(f"{time} {band}: band {image.shape}, label {label.shape} ({path})")
+            if image.shape != label_shape:
+                mismatches.append(f"{time} {band}: band {image.shape}, label {label_shape} ({path})")
     if mismatches:
         raise ValueError(f"{city}: raster/label dimensions differ; refusing to resize:\n" + "\n".join(mismatches))
     def indices(time: str) -> tuple[np.ndarray, np.ndarray]:
         nir, red, swir = bands[time, "B08"], bands[time, "B04"], bands[time, "B11"]
         return (nir - red) / np.maximum(nir + red, 1e-6), (swir - nir) / np.maximum(swir + nir, 1e-6)
     ndvi_a, ndbi_a = indices("before"); ndvi_b, ndbi_b = indices("after")
-    return {"city": city, "mask": label == 255, "ndvi_a": ndvi_a, "ndbi_a": ndbi_a, "ndvi_b": ndvi_b, "ndbi_b": ndbi_b, "rgb_a": rgb(bands["before", "B04"], bands["before", "B03"], bands["before", "B02"]), "rgb_b": rgb(bands["after", "B04"], bands["after", "B03"], bands["after", "B02"])}
+    return {"city": city, "mask": mask, "ndvi_a": ndvi_a, "ndbi_a": ndbi_a, "ndvi_b": ndvi_b, "ndbi_b": ndbi_b, "rgb_a": rgb(bands["before", "B04"], bands["before", "B03"], bands["before", "B02"]), "rgb_b": rgb(bands["after", "B04"], bands["after", "B03"], bands["after", "B02"])}
 
 
 def spectral_prediction(data: dict, config: SpectralConfig) -> tuple[np.ndarray, dict]:

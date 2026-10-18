@@ -7,12 +7,16 @@ from fastapi.testclient import TestClient
 from app import app, run_inference_pipeline
 from spectral_pipeline import SpectralConfig, detect_from_indices
 
-FIXTURE=json.loads((Path(__file__).parent/'fixtures/regression.json').read_text())
+_FIXTURE_PATH = Path(__file__).parent / 'fixtures/regression.json'
+_SAMPLE_IMAGE = Path('dataset/test/A/test_100_0_0.png')
 MODEL_ONNX_PATH = Path(os.environ.get("MODEL_ONNX_PATH", "model.onnx"))
+FIXTURE = json.loads(_FIXTURE_PATH.read_text()) if _FIXTURE_PATH.is_file() else {}
 
 @pytest.mark.skipif(not MODEL_ONNX_PATH.is_file(), reason="Pipeline A regression test requires model.onnx (set MODEL_ONNX_PATH)")
+@pytest.mark.skipif(not _FIXTURE_PATH.is_file(), reason="Missing regression fixture (tests/fixtures/regression.json)")
+@pytest.mark.skipif(not _SAMPLE_IMAGE.is_file(), reason="Missing dataset sample (dataset/test/A/test_100_0_0.png)")
 def test_pipeline_a_fixed_sample_is_within_tolerance():
-    image=(Path('dataset/test/A/test_100_0_0.png')).read_bytes()
+    image=_SAMPLE_IMAGE.read_bytes()
     result=run_inference_pipeline(image,image)
     expected=FIXTURE['cnn_same_image']
     assert abs(result['percent_changed']-expected['percent_changed']) <= .01
