@@ -40,12 +40,7 @@ training_results.zip
 server_log.txt
 *.log
 
-# Generated benchmark figures/results; retain documentation, never data-derived outputs
-benchmarks/results/*.json
-benchmarks/results/*.png
-benchmarks/results/*.tex
-benchmarks/results/*.md
-
+# OSCD benchmark results under benchmarks/results are intentionally trackable.
 # ── Test outputs & scratch ───────────────────────────────
 response.json
 test_result.json

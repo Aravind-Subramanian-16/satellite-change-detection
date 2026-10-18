@@ -1,4 +1,5 @@
 """Synthetic tests for OSCD benchmark preprocessing and reporting helpers."""
+import json
 import sys
 from pathlib import Path
 
@@ -9,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "benchmarks"))
 
 from oscd_eval import metrics, preprocess_rgb_pair, run_key, warn_grid_edges, write_table
+from oscd_run_summary import write_run_summary
 from spectral_pipeline import SpectralConfig
 
 
@@ -65,6 +67,41 @@ def test_markdown_table_reports_fraction_fields(tmp_path):
     table = (tmp_path / "oscd_results_v2.md").read_text()
     assert "Predicted fraction | True fraction" in table
     assert "| 0.5000 | 0.2500 |" in table
+
+
+def test_run_summary_uses_saved_fake_results_json(tmp_path):
+    results_path = tmp_path / "fake_results.json"
+    summary_path = tmp_path / "benchmarks" / "results" / "RUN_SUMMARY.md"
+    payload = [
+        {
+            "record_type": "run_metadata",
+            "metadata": {
+                "run_date": "2026-10-18",
+                "code_commit": "abc123",
+                "selected_spectral_configs_line": "Selected spectral configs from TRAIN split only: {\"percentile\": 95.0}",
+                "grid_edge_warnings": ["WARNING: selected percentile at search-grid edge"],
+                "cnn_preprocessing_selected_line": "CNN preprocessing selected on TRAIN split only: reflectance; scores={\"reflectance\": 0.75}",
+                "pytest_summary_line": "5 passed in 0.37s",
+            },
+        },
+        {
+            "split": "test",
+            "pipeline": "spectral",
+            "configuration": "percentile",
+            "metrics": {"tp": 1, "fp": 1, "fn": 1, "tn": 1},
+        },
+    ]
+    results_path.write_text(json.dumps(payload))
+
+    summary = write_run_summary(results_path, summary_path)
+
+    assert summary_path.read_text() == summary
+    assert "abc123" in summary
+    assert "Selected spectral configs from TRAIN split only:" in summary
+    assert "WARNING: selected percentile at search-grid edge" in summary
+    assert "CNN preprocessing selected on TRAIN split only: reflectance" in summary
+    assert "5 passed in 0.37s" in summary
+    assert "| spectral | percentile | 0.5000 | 0.5000 |" in summary
 
 
 def test_resume_key_includes_preprocess_and_grid_values():

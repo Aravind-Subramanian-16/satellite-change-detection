@@ -13,6 +13,7 @@ import itertools
 import json
 import sys
 import warnings
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -167,8 +168,8 @@ def select_configs(training: list[dict]) -> list[tuple[str, SpectralConfig]]:
     return [("hardcoded", hardcoded), ("otsu", SpectralConfig(mode="otsu", use_cloud_mask=False)), ("percentile", percentile)]
 
 
-def warn_grid_edges(name: str, config: SpectralConfig) -> None:
-    """Print a warning when a selected train configuration is on a search edge."""
+def grid_edge_warning(name: str, config: SpectralConfig) -> str | None:
+    """Return a warning when a selected train configuration is on a search edge."""
     edges = []
     if config.mode == "hardcoded":
         if config.ndvi_drop in (HARDCODED_NDVI_GRID[0], HARDCODED_NDVI_GRID[-1]):
@@ -177,8 +178,15 @@ def warn_grid_edges(name: str, config: SpectralConfig) -> None:
             edges.append(f"ndbi_rise={config.ndbi_rise}")
     elif config.mode == "percentile" and config.percentile in (PERCENTILE_GRID[0], PERCENTILE_GRID[-1]):
         edges.append(f"percentile={config.percentile}")
-    if edges:
-        print(f"WARNING: selected {name} value(s) at search-grid edge: {', '.join(edges)}")
+    if not edges:
+        return None
+    return f"WARNING: selected {name} value(s) at search-grid edge: {', '.join(edges)}"
+
+
+def warn_grid_edges(name: str, config: SpectralConfig) -> None:
+    warning = grid_edge_warning(name, config)
+    if warning:
+        print(warning)
 
 
 def run_key(city: str, pipeline: str, configuration: str, *, preprocess: str | None = None, grid_values: dict | None = None) -> str:
@@ -236,7 +244,10 @@ def main() -> None:
     print(f"Test cities ({len(test_cities)}): {', '.join(test_cities)}")
     training = [load_city(images, train_labels, city) for city in tqdm(train_cities, desc="Validating train cities")]
     configs = select_configs(training)
-    print("Selected spectral configs from TRAIN split only:", {name: config.__dict__ for name, config in configs})
+    selected_configs = {name: config.__dict__ for name, config in configs}
+    selected_spectral_line = "Selected spectral configs from TRAIN split only: " + json.dumps(selected_configs, sort_keys=True)
+    print(selected_spectral_line)
+    edge_warnings = [warning for name, config in configs if (warning := grid_edge_warning(name, config))]
     cnn_scores = {}
     for preprocess in CNN_PREPROCESS_VARIANTS:
         train_rows = []
@@ -245,9 +256,26 @@ def main() -> None:
             train_rows.append({"metrics": metrics(prediction, city_data["mask"])})
         cnn_scores[preprocess] = float(aggregate(train_rows)["f1"])
     chosen_preprocess = max(CNN_PREPROCESS_VARIANTS, key=lambda name: cnn_scores[name])
-    print(f"CNN preprocessing selected on TRAIN split only: {chosen_preprocess} (pooled F1={cnn_scores[chosen_preprocess]:.4f}); scores={cnn_scores}")
+    cnn_selection_line = f"CNN preprocessing selected on TRAIN split only: {chosen_preprocess} (pooled F1={cnn_scores[chosen_preprocess]:.4f}); scores={json.dumps(cnn_scores, sort_keys=True)}"
+    print(cnn_selection_line)
     result_path = args.output / "oscd_results_v2.json"; rows = load_rows(result_path)
-    finished = {row.get("run_key") for row in rows}
+    run_metadata = {
+        "run_date": date.today().isoformat(),
+        "code_commit": None,
+        "selected_spectral_configs_line": selected_spectral_line,
+        "grid_edge_warnings": edge_warnings,
+        "cnn_preprocessing_selected_line": cnn_selection_line,
+        "cnn_preprocessing_scores": cnn_scores,
+        "cnn_preprocessing_selected": chosen_preprocess,
+        "pytest_summary_line": None,
+    }
+    metadata_row = next((row for row in rows if row.get("record_type") == "run_metadata"), None)
+    if metadata_row is None:
+        metadata_row = {"record_type": "run_metadata"}
+        rows.insert(0, metadata_row)
+    metadata_row["metadata"] = run_metadata
+    finished = {row.get("run_key") for row in rows if row.get("record_type") != "run_metadata"}
+    checkpoint(result_path, rows)
     for city in tqdm(test_cities, desc="Scoring test cities"):
         data = load_city(images, test_labels, city)
         for name, config in configs:
