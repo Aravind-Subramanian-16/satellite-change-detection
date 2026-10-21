@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satellite Change Detection — Sentinel-2 land analysis</title>
-    <meta name="description" content="Compare Sentinel-2 dates or an uploaded image pair over a chosen area. Inspect spectral change evidence, export GeoJSON/CSV, and generate a provenance-rich PDF. Decision support, not ground truth.">
+    <title>Satellite Change Detection — see what changed on the ground</title>
+    <meta name="description" content="Pick a place, choose two dates, and compare free Sentinel-2 satellite images to spot what changed: farmland, new buildings, forest loss, water and more. Results are an automated estimate, not ground truth.">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%2367e8f9' stroke-width='2'/%3E%3Cellipse cx='16' cy='16' rx='14' ry='5.5' fill='none' stroke='%2367e8f9' stroke-width='1.5' transform='rotate(-28 16 16)'/%3E%3Ccircle cx='16' cy='16' r='2.4' fill='%2367e8f9'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/app.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
@@ -26,169 +27,289 @@
     </a>
 
     <nav class="tabs" role="tablist" aria-label="Analysis mode">
-        <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="view-live" data-tab="live">Live Sentinel-2</button>
-        <button class="tab" id="tab-upload" type="button" role="tab" aria-selected="false" aria-controls="view-upload" data-tab="upload" tabindex="-1">Upload pair</button>
+        <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="view-live" data-tab="live">Compare two dates</button>
+        <button class="tab" id="tab-upload" type="button" role="tab" aria-selected="false" aria-controls="view-upload" data-tab="upload" tabindex="-1">Upload two images <span class="tag">Experimental</span></button>
         <button class="tab" id="tab-history" type="button" role="tab" aria-selected="false" aria-controls="view-history" data-tab="history" tabindex="-1">History</button>
     </nav>
+
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
+            <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4L19 19M19 5l-1.6 1.6M6.6 17.4L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+        </svg>
+    </button>
 
     <p class="service-status" id="service-status" role="status" aria-live="polite">Checking service…</p>
 </header>
 
 <main id="main">
     <section class="intro" aria-labelledby="page-title">
-        <p class="eyebrow">Sentinel-2 L2A · 10 m · Copernicus Data Space</p>
+        <p class="eyebrow">Sentinel-2 satellite images · 10 m pixels · free Copernicus data</p>
         <h1 id="page-title">See what changed on the ground.</h1>
         <p class="lede">
-            Choose an area on the map, compare two dates of Sentinel-2 imagery, and review the spectral
-            evidence before you rely on it. Change labels are transparent heuristics, not a validated
-            land-cover classifier. Decision support, not ground truth.
+            Pick a place, choose two dates, and this app compares free satellite photos to show where the land
+            changed &mdash; farmland, new buildings, forest loss, water and more.
         </p>
         <ul class="intro-facts" aria-label="What this tool does">
-            <li>Cloud and shadow masking with visible masked area</li>
-            <li>Scene ranking, seasonal warnings, and minimum mapping units</li>
-            <li>GeoJSON, CSV, and PDF exports with provenance</li>
+            <li>Clouds and shadows are masked out automatically</li>
+            <li>Plain-English summary, change map, and downloads</li>
+            <li>Every result carries an honesty note and a data-quality check</li>
         </ul>
     </section>
 
+    <div class="honesty-note" id="honesty-note">
+        <p class="honesty-line"><strong>Results are an automated estimate, not ground truth.</strong> Check important findings on the ground.</p>
+        <button class="learn-more-btn" id="learn-more-btn" type="button" aria-expanded="false" aria-controls="learn-more">Learn more</button>
+        <div class="learn-more" id="learn-more" hidden>
+            <p>
+                This app compares two satellite images of the same place and flags pixels where the spectral
+                rules changed. It is a time-saving pointer, not a survey:
+            </p>
+            <ul>
+                <li>It works on free 10 m Sentinel-2 imagery, so anything smaller than about 10 m (individual buildings, most roads) is usually missed.</li>
+                <li>Change labels like &ldquo;New buildings&rdquo; or &ldquo;Forest loss&rdquo; are guesses from colour patterns; clouds, shadows, wet soil and harvest can be mistaken for change.</li>
+                <li>Only the built-up profile has been tested on a labelled dataset (one urban dataset, moderate scores). Farmland, forest, water and general detection are estimates, not validated.</li>
+                <li>Always confirm important findings with a site visit, local knowledge, or higher-resolution imagery.</li>
+            </ul>
+        </div>
+    </div>
+
     <!-- ══════════════════════ LIVE VIEW ══════════════════════ -->
     <div class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
-        <div class="workspace">
-            <section class="panel map-panel" aria-labelledby="map-heading">
-                <div class="panel-heading">
-                    <div>
-                        <p class="step-label">Step 1</p>
-                        <h2 id="map-heading">Choose an area</h2>
-                    </div>
-                    <span class="zoom-readout" id="zoom-level">Zoom —</span>
-                </div>
+        <nav class="wizard-progress" aria-label="Analysis steps">
+            <ol>
+                <li data-step="1" aria-current="step">
+                    <span class="step-bubble" aria-hidden="true">1</span>
+                    <span class="step-name">Pick an area</span>
+                </li>
+                <li data-step="2">
+                    <span class="step-bubble" aria-hidden="true">2</span>
+                    <span class="step-name">Pick two dates</span>
+                </li>
+                <li data-step="3">
+                    <span class="step-bubble" aria-hidden="true">3</span>
+                    <span class="step-name">See the results</span>
+                </li>
+            </ol>
+            <div class="progress-track" aria-hidden="true"><span class="progress-fill" id="wizard-fill"></span></div>
+        </nav>
 
-                <div class="search-field">
-                    <label for="place-search">Search a place</label>
-                    <div class="search-row">
-                        <input id="place-search" type="search" placeholder="e.g. Palm Jumeirah, Dubai" autocomplete="off" aria-describedby="place-help" aria-expanded="false" aria-controls="search-results" role="combobox">
-                        <span class="search-spinner" id="search-spinner" hidden aria-hidden="true"></span>
-                    </div>
-                    <p class="help" id="place-help">Suggestions come from OpenStreetMap Nominatim. Places larger than the analysis limit must be narrowed with a drawn box.</p>
-                    <div class="search-results" id="search-results" role="listbox" aria-label="Place suggestions" hidden></div>
-                </div>
-
-                <div class="map-shell">
-                    <div id="map" class="map" aria-label="Map for choosing the analysis area"></div>
-                    <div class="map-fallback" id="map-fallback" hidden>
-                        <p class="map-fallback-title">The interactive map could not load.</p>
-                        <p>You can still enter a bounding box below, or reload the page to retry the map tiles.</p>
-                    </div>
-                </div>
-
-                <p class="aoi-status" id="aoi-status" role="status" aria-live="polite">No area selected yet.</p>
-                <div class="aoi-actions">
-                    <button class="button button-quiet" id="use-view-btn" type="button">Use current map view</button>
-                    <button class="button button-quiet" id="clear-aoi-btn" type="button">Clear area</button>
-                </div>
-
-                <div class="aoi-info" id="aoi-info" hidden></div>
-
-                <details class="manual-aoi">
-                    <summary>Enter coordinates manually</summary>
-                    <div class="field">
-                        <label for="aoi-manual">Bounding box: west, south, east, north</label>
-                        <div class="inline-field">
-                            <input id="aoi-manual" type="text" inputmode="decimal" placeholder="-122.10, 37.35, -122.00, 37.45">
-                            <button class="button button-quiet" id="apply-bbox-btn" type="button">Apply</button>
+        <!-- ═══ STEP 1 · PICK AN AREA ═══ -->
+        <section class="step-panel" id="step-1" data-step-panel="1">
+            <div class="workspace">
+                <section class="panel map-panel" aria-labelledby="map-heading">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="step-label">Step 1 of 3</p>
+                            <h2 id="map-heading">Pick an area</h2>
+                            <p class="panel-sub">Draw a box on the map, search for a place, or type coordinates. Keep it small &mdash; from a few hectares up to a few kilometres across.</p>
                         </div>
-                        <p class="help">Decimal degrees (WGS 84). Max <span data-max-aoi>10</span> km per side. Draw a rectangle on the map for the same result.</p>
+                        <span class="zoom-readout" id="zoom-level">Zoom —</span>
                     </div>
-                </details>
-            </section>
 
-            <section class="panel settings-panel" aria-labelledby="settings-heading">
-                <div class="panel-heading">
-                    <div>
-                        <p class="step-label">Step 2</p>
-                        <h2 id="settings-heading">Dates and analysis</h2>
+                    <div class="search-field">
+                        <label for="place-search">Search a place</label>
+                        <div class="search-row">
+                            <input id="place-search" type="search" placeholder="e.g. Palm Jumeirah, Dubai" autocomplete="off" aria-describedby="place-help" aria-expanded="false" aria-controls="search-results" role="combobox">
+                            <span class="search-spinner" id="search-spinner" hidden aria-hidden="true"></span>
+                        </div>
+                        <p class="help" id="place-help">Suggestions come from OpenStreetMap Nominatim. Big places like countries are too large for analysis &mdash; draw a box around the part you care about instead.</p>
+                        <div class="search-results" id="search-results" role="listbox" aria-label="Place suggestions" hidden></div>
                     </div>
-                </div>
 
-                <form id="live-form" novalidate>
-                    <div class="date-grid">
+                    <div class="map-shell">
+                        <div id="map" class="map" aria-label="Map for choosing the analysis area"></div>
+                        <div class="map-fallback" id="map-fallback" hidden>
+                            <p class="map-fallback-title">The interactive map could not load.</p>
+                            <p>You can still enter a bounding box below, or reload the page to retry the map tiles.</p>
+                        </div>
+                    </div>
+
+                    <p class="aoi-status" id="aoi-status" role="status" aria-live="polite">No area selected yet.</p>
+                    <div class="aoi-actions">
+                        <button class="button button-quiet" id="use-view-btn" type="button">Use current map view</button>
+                        <button class="button button-quiet" id="clear-aoi-btn" type="button">Clear area</button>
+                    </div>
+                    <div class="preset-row" aria-label="Quick area sizes">
+                        <span class="preset-label">Quick sizes:</span>
+                        <button class="button button-tiny" type="button" data-preset-ha="1">about 1 ha</button>
+                        <button class="button button-tiny" type="button" data-preset-ha="5">about 5 ha</button>
+                        <button class="button button-tiny" type="button" data-preset-ha="25">about 25 ha</button>
+                    </div>
+
+                    <div class="aoi-info" id="aoi-info" hidden></div>
+
+                    <details class="manual-aoi">
+                        <summary>Enter coordinates manually</summary>
                         <div class="field">
-                            <label for="date-before">Before date</label>
-                            <input id="date-before" type="date" required>
+                            <label for="aoi-manual">Bounding box: west, south, east, north</label>
+                            <div class="inline-field">
+                                <input id="aoi-manual" type="text" inputmode="decimal" placeholder="-122.10, 37.35, -122.00, 37.45">
+                                <button class="button button-quiet" id="apply-bbox-btn" type="button">Apply</button>
+                            </div>
+                            <p class="help">Decimal degrees (WGS 84). Max <span data-max-aoi>10</span> km per side. Drawing a rectangle on the map gives the same result.</p>
                         </div>
-                        <div class="field">
-                            <label for="date-after">After date</label>
-                            <input id="date-after" type="date" required>
-                        </div>
-                    </div>
-
-                    <div class="field">
-                        <label for="window-days">Scene search window (± days)</label>
-                        <input id="window-days" type="number" min="1" max="120" step="1" value="30" inputmode="numeric">
-                        <p class="help">Wider windows improve the chance of a clear scene but move imagery away from your target dates.</p>
-                    </div>
-
-                    <p class="season-note" id="season-note" hidden></p>
-
-                    <div class="field">
-                        <label for="profile-select">Analysis profile</label>
-                        <select id="profile-select" aria-describedby="profile-info"></select>
-                        <div class="profile-info" id="profile-info" aria-live="polite">Loading profiles…</div>
-                    </div>
-
-                    <details class="advanced" open>
-                        <summary>Analysis options</summary>
-                        <div class="field">
-                            <label for="mmu-ha">Minimum mapping unit (hectares)</label>
-                            <input id="mmu-ha" type="number" min="0" max="100" step="0.05" placeholder="Profile default" inputmode="decimal">
-                            <p class="help">Connected regions below this area are discarded. Leave blank to use the profile default (0 for general and roads).</p>
-                        </div>
-                        <div class="field">
-                            <label for="composite-scenes">Scenes per date</label>
-                            <select id="composite-scenes">
-                                <option value="1" selected>1 — single scene</option>
-                                <option value="2">2 — temporal median (experimental)</option>
-                                <option value="3">3 — temporal median (experimental)</option>
-                            </select>
-                        </div>
-                        <div class="check-grid">
-                            <label class="check"><input id="normalise" type="checkbox"> Radiometric normalisation <span class="tag">experimental</span></label>
-                            <label class="check"><input id="cleanup" type="checkbox"> Morphological cleanup</label>
-                            <label class="check"><input id="include-road-context" type="checkbox"> OSM road context</label>
-                        </div>
-                        <p class="help">Road context is descriptive only; road pixels are usually sub-pixel at 10 m and no road detection is claimed.</p>
                     </details>
+                </section>
 
-                    <p class="form-error" id="live-error" role="alert" hidden></p>
-                    <button class="button button-primary" id="find-scenes-btn" type="submit" disabled>Find candidate scenes</button>
-                </form>
-            </section>
-        </div>
+                <aside class="panel next-panel" aria-labelledby="next-1-heading">
+                    <h2 class="next-heading" id="next-1-heading">What happens next</h2>
+                    <p class="next-line" id="next-1">Next you pick the two dates you want to compare, and tell us what kind of change you&rsquo;re looking for.</p>
+                    <button class="button button-primary" id="to-dates-btn" type="button" disabled>Continue: pick the dates</button>
+                    <p class="help" id="to-dates-help">Choose or draw an area first.</p>
+                    <hr class="panel-divider">
+                    <p class="help">Not sure where to start?</p>
+                    <button class="button button-quiet" id="load-example-btn" type="button">Load an example (Palm Jumeirah, Dubai)</button>
+                </aside>
+            </div>
+        </section>
 
+        <!-- ═══ STEP 2 · PICK TWO DATES ═══ -->
+        <section class="step-panel" id="step-2" data-step-panel="2" hidden>
+            <div class="workspace">
+                <section class="panel settings-panel" aria-labelledby="settings-heading">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="step-label">Step 2 of 3</p>
+                            <h2 id="settings-heading">Pick two dates</h2>
+                            <p class="panel-sub">Choose any two dates. We&rsquo;ll find the clearest satellite images near each date.</p>
+                        </div>
+                        <button class="button button-quiet" id="back-to-area-btn" type="button">Change area</button>
+                    </div>
+
+                    <form id="live-form" novalidate>
+                        <fieldset class="goal-picker">
+                            <legend>What do you want to look for?</legend>
+                            <div class="goal-grid">
+                                <label class="goal-card">
+                                    <input type="radio" name="goal" value="any" checked>
+                                    <span class="goal-title">Any change</span>
+                                    <span class="goal-desc">All kinds of change, labelled as best the rules can.</span>
+                                    <span class="badge badge-estimate">Estimate</span>
+                                </label>
+                                <label class="goal-card">
+                                    <input type="radio" name="goal" value="farmland">
+                                    <span class="goal-title">Farmland changes</span>
+                                    <span class="goal-desc">Fields becoming greener or barer, harvest, crop stress.</span>
+                                    <span class="badge badge-estimate">Estimate</span>
+                                </label>
+                                <label class="goal-card">
+                                    <input type="radio" name="goal" value="buildings">
+                                    <span class="goal-title">New buildings and roads</span>
+                                    <span class="goal-desc">More built-up surface between the two dates.</span>
+                                    <span class="badge badge-tested">Tested on one urban dataset</span>
+                                </label>
+                                <label class="goal-card">
+                                    <input type="radio" name="goal" value="forest">
+                                    <span class="goal-title">Forest loss</span>
+                                    <span class="goal-desc">Trees turning to bare ground or water.</span>
+                                    <span class="badge badge-estimate">Estimate</span>
+                                </label>
+                                <label class="goal-card">
+                                    <input type="radio" name="goal" value="water">
+                                    <span class="goal-title">Water changes</span>
+                                    <span class="goal-desc">Reservoirs, rivers and shorelines growing or shrinking.</span>
+                                    <span class="badge badge-estimate">Estimate</span>
+                                </label>
+                            </div>
+                            <p class="goal-note" id="goal-note" aria-live="polite"></p>
+                        </fieldset>
+
+                        <div class="date-grid">
+                            <div class="field">
+                                <label for="date-before">Before date</label>
+                                <input id="date-before" type="date" required>
+                            </div>
+                            <div class="field">
+                                <label for="date-after">After date</label>
+                                <input id="date-after" type="date" required>
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label for="window-days">How many days around each date to look for images</label>
+                            <input id="window-days" type="number" min="1" max="120" step="1" value="30" inputmode="numeric">
+                            <p class="help">A wider window finds a clearer image, but the image may land further from your chosen date.</p>
+                        </div>
+
+                        <p class="season-note" id="season-note" hidden></p>
+
+                        <details class="advanced">
+                            <summary>Advanced settings <span class="help-inline">(only if you know you need them)</span></summary>
+                            <div class="field">
+                                <label for="profile-select">Analysis profile</label>
+                                <select id="profile-select" aria-describedby="profile-info"></select>
+                                <div class="profile-info" id="profile-info" aria-live="polite">Loading profiles…</div>
+                            </div>
+                            <div class="field">
+                                <label for="mmu-ha">Ignore changes smaller than (hectares)</label>
+                                <input id="mmu-ha" type="number" min="0" max="100" step="0.05" placeholder="Profile default" inputmode="decimal">
+                                <p class="help">Connected patches smaller than this are left out. Blank uses the profile&rsquo;s default (0 for general and roads).</p>
+                            </div>
+                            <div class="field">
+                                <label for="composite-scenes">Images per date</label>
+                                <select id="composite-scenes">
+                                    <option value="1" selected>1 — single image</option>
+                                    <option value="2">2 — combine to reduce clouds (experimental)</option>
+                                    <option value="3">3 — combine to reduce clouds (experimental)</option>
+                                </select>
+                            </div>
+                            <div class="check-grid">
+                                <label class="check"><input id="normalise" type="checkbox"> Match brightness between dates <span class="tag">experimental</span></label>
+                                <label class="check"><input id="cleanup" type="checkbox"> Remove isolated specks</label>
+                                <label class="check"><input id="include-road-context" type="checkbox"> Mapped-road context (OSM)</label>
+                            </div>
+                            <p class="help">Road context is descriptive only; road pixels are usually smaller than a 10 m pixel and no road detection is claimed.</p>
+                        </details>
+
+                        <p class="form-error" id="live-error" role="alert" hidden></p>
+                        <button class="button button-primary" id="find-scenes-btn" type="submit" disabled>Find candidate images</button>
+                        <p class="help next-line" id="next-2">What happens next: we list the clearest images around each date, and you pick one per date.</p>
+                    </form>
+                </section>
+            </div>
+        </section>
+
+        <!-- ═══ STEP 2b · CHOOSE IMAGES ═══ -->
         <section class="panel scenes-panel" id="scene-section" aria-labelledby="scenes-heading" hidden>
             <div class="panel-heading">
                 <div>
-                    <p class="step-label">Step 3</p>
-                    <h2 id="scenes-heading">Choose scenes and run</h2>
+                    <p class="step-label">Step 2 of 3 &middot; images</p>
+                    <h2 id="scenes-heading">Choose the clearest images</h2>
                 </div>
                 <button class="button button-quiet" id="change-scenes-btn" type="button">Change dates</button>
             </div>
-            <p class="help">Candidates are ranked by AOI coverage, catalog cloud cover, and date proximity. AOI cloud fraction is measured after download; low catalog cloud does not guarantee a clear AOI.</p>
+            <p class="help">Ranked by how much of your area each image covers, how cloudy it is in the catalogue, and how close it is to your date. A low catalogue cloud figure does not guarantee a clear image over your area &mdash; we measure that after download.</p>
             <div class="season-warning" id="season-warning" hidden></div>
             <div class="scene-grid" id="scene-grid"></div>
             <p class="form-error" id="scene-error" role="alert" hidden></p>
-            <button class="button button-primary" id="run-analysis-btn" type="button" disabled>Run analysis on selected scenes</button>
-            <p class="help">Downloading imagery and computing indices can take up to a minute. Nothing is written to Copernicus.</p>
+            <button class="button button-primary" id="run-analysis-btn" type="button" disabled>Run the comparison</button>
+            <p class="help next-line" id="next-3">What happens next: we download both images, mask clouds, and measure the differences. This can take up to a minute.</p>
         </section>
 
-        <section class="panel results-panel" id="results-section" aria-labelledby="results-heading" hidden>
+        <!-- ═══ STEP 3 · RESULTS ═══ -->
+        <section class="panel results-panel step-panel" id="results-section" data-step-panel="3" aria-labelledby="results-heading" hidden>
             <div class="panel-heading results-head">
                 <div>
-                    <p class="step-label">Result</p>
-                    <h2 id="results-heading">Change evidence</h2>
+                    <p class="step-label">Step 3 of 3</p>
+                    <h2 id="results-heading">What changed</h2>
                     <p class="result-mode" id="result-mode"></p>
                 </div>
                 <button class="button button-quiet" id="new-analysis-btn" type="button">New analysis</button>
             </div>
+
+            <div class="quality-badge is-okay" id="quality-badge" hidden>
+                <span class="quality-light" aria-hidden="true"></span>
+                <div class="quality-body">
+                    <strong id="quality-text">Data quality: —</strong>
+                    <p id="quality-reasons"></p>
+                </div>
+            </div>
+
+            <div class="summary-cards" id="summary-cards"></div>
 
             <p class="summary" id="result-summary"></p>
             <div class="validation-banner" id="validation-banner"></div>
@@ -198,6 +319,7 @@
 
             <section class="result-block" aria-labelledby="compare-heading">
                 <h3 id="compare-heading">Before / after</h3>
+                <p class="help">Drag the handle to compare the two dates.</p>
                 <div class="compare" id="compare">
                     <img id="compare-before" alt="Before image for the analysed area">
                     <div class="compare-after-wrap" id="compare-after-wrap">
@@ -216,8 +338,8 @@
 
             <section class="result-block" aria-labelledby="evidence-heading">
                 <div class="block-heading">
-                    <h3 id="evidence-heading">Evidence layers</h3>
-                    <div class="segmented" role="tablist" aria-label="Evidence layer">
+                    <h3 id="evidence-heading">Change map</h3>
+                    <div class="segmented" role="tablist" aria-label="Change map layer">
                         <button class="segment" type="button" role="tab" aria-selected="true" data-evidence="overlay">Overlay</button>
                         <button class="segment" type="button" role="tab" aria-selected="false" data-evidence="mask">Mask</button>
                         <button class="segment" type="button" role="tab" aria-selected="false" data-evidence="heatmap">Rule evidence</button>
@@ -228,36 +350,36 @@
                     <canvas id="heatmap-canvas" role="img" aria-describedby="heatmap-legend" aria-label="Continuous spectral-rule evidence on a colour-blind-safe viridis scale: dark purple is low, yellow is high" hidden>Colour-blind-safe viridis heatmap of spectral rule evidence.</canvas>
                 </figure>
                 <p class="evidence-caption" id="evidence-caption"></p>
-                <p class="legend" id="heatmap-legend" hidden>Rule evidence: <span class="legend-swatch" aria-hidden="true"></span> dark purple low → yellow high (viridis, colour-blind-safe). This is a rescaled NDVI-loss / NDBI-gain magnitude, not a probability.</p>
+                <p class="legend" id="heatmap-legend" hidden>Rule evidence: <span class="legend-swatch" aria-hidden="true"></span> dark purple low &rarr; yellow high (viridis, colour-blind-safe). This is a rescaled NDVI-loss / NDBI-gain magnitude, not a probability.</p>
             </section>
 
             <section class="result-block" aria-labelledby="regions-heading">
                 <div class="block-heading">
-                    <h3 id="regions-heading">Changed regions</h3>
-                    <span class="count" id="region-count">0 regions</span>
+                    <h3 id="regions-heading">Changed patches</h3>
+                    <span class="count" id="region-count">0 patches</span>
                 </div>
                 <div class="regions-list" id="regions-list"></div>
                 <div class="road-context" id="road-context" hidden></div>
             </section>
 
             <section class="result-block" aria-labelledby="profile-notes-heading">
-                <h3 id="profile-notes-heading">How to read this profile</h3>
+                <h3 id="profile-notes-heading">How to read this result</h3>
                 <ul class="notes-list" id="profile-notes"></ul>
             </section>
 
             <section class="result-block timeline-card" id="timeline-card" aria-labelledby="timeline-heading" hidden>
                 <div class="block-heading">
-                    <h3 id="timeline-heading">NDVI timeline (optional)</h3>
+                    <h3 id="timeline-heading">Greenness timeline (optional)</h3>
                     <span class="tag">agriculture</span>
                 </div>
-                <p class="help">Three to five dates, cloud/shadow-masked mean NDVI. Few dates cannot resolve phenology. <span id="timeline-dates"></span></p>
-                <button class="button button-quiet" id="timeline-btn" type="button">Build NDVI timeline</button>
+                <p class="help">Three to five dates, cloud/shadow-masked mean NDVI. Few dates cannot resolve crop cycles. <span id="timeline-dates"></span></p>
+                <button class="button button-quiet" id="timeline-btn" type="button">Build greenness timeline</button>
                 <p class="form-error" id="timeline-status" role="status" hidden></p>
                 <div class="timeline-chart" id="timeline-chart"></div>
             </section>
 
             <section class="result-block" aria-labelledby="provenance-heading">
-                <h3 id="provenance-heading">Provenance</h3>
+                <h3 id="provenance-heading">Where the numbers come from</h3>
                 <dl class="provenance-list" id="provenance"></dl>
                 <details class="json-details">
                     <summary>Raw provenance JSON</summary>
@@ -265,13 +387,16 @@
                 </details>
             </section>
 
-            <div class="actions-bar">
-                <button class="button button-primary" id="download-pdf" type="button">Download PDF report</button>
-                <button class="button button-quiet" id="export-geojson" type="button">Export GeoJSON</button>
-                <button class="button button-quiet" id="export-csv" type="button">Export CSV</button>
-                <button class="button button-quiet" id="download-images" type="button">Download images</button>
-            </div>
-            <p class="help">Exports describe heuristically detected change. Verify before operational use.</p>
+            <section class="result-block download-panel" aria-labelledby="download-heading">
+                <h3 id="download-heading">Download the results</h3>
+                <div class="download-grid">
+                    <button class="button button-primary" id="download-pdf" type="button">PDF report</button>
+                    <button class="button button-quiet" id="export-geojson" type="button">GeoJSON map data</button>
+                    <button class="button button-quiet" id="export-csv" type="button">CSV table</button>
+                    <button class="button button-quiet" id="download-images" type="button">Before / after images</button>
+                </div>
+                <p class="help">Downloads describe heuristically detected change. Verify before operational use.</p>
+            </section>
         </section>
     </div>
 
@@ -279,7 +404,7 @@
     <div class="view" id="view-upload" role="tabpanel" aria-labelledby="tab-upload" tabindex="0" hidden>
         <section class="panel narrow-panel" aria-labelledby="upload-heading">
             <p class="step-label">Experimental pair mode</p>
-            <h2 id="upload-heading">Upload a before / after pair</h2>
+            <h2 id="upload-heading">Upload two images</h2>
             <p class="help" id="model-note">This route runs the optional CNN on the uploaded pixels. It was trained on 0.5 m aerial pairs (LEVIR-CD); transfer to 10 m Sentinel-2 is poor and is reported in the benchmark notes. No accuracy number is shown in this interface.</p>
 
             <form id="upload-form" novalidate>
@@ -298,7 +423,7 @@
                     </label>
                 </div>
                 <p class="form-error" id="upload-error" role="alert" hidden></p>
-                <button class="button button-primary" id="upload-submit" type="submit">Run CNN pair analysis</button>
+                <button class="button button-primary" id="upload-submit" type="submit">Run image-pair analysis</button>
                 <p class="help">For real land-change work prefer the live Sentinel-2 path with masking and provenance.</p>
             </form>
         </section>
@@ -314,7 +439,7 @@
                 </div>
                 <button class="button button-quiet" id="refresh-history-btn" type="button">Refresh</button>
             </div>
-            <p class="help">Stored in the server's local SQLite database. History may disappear when a hosted instance restarts or redeploys.</p>
+            <p class="help">Stored in the server&rsquo;s local SQLite database. History may disappear when a hosted instance restarts or redeploys.</p>
             <p class="form-error" id="history-status" role="status" hidden></p>
             <div class="history-list" id="history-list"></div>
         </section>
@@ -336,5 +461,14 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<aside class="hint-tour" id="hint-tour" aria-label="Quick tour" hidden>
+    <p class="hint-step-count" id="hint-step-count">Tip 1 of 3</p>
+    <p class="hint-text" id="hint-text"></p>
+    <div class="hint-actions">
+        <button class="button button-quiet" id="hint-skip" type="button">Skip tour</button>
+        <button class="button button-primary" id="hint-next" type="button">Next</button>
+    </div>
+</aside>
 </body>
 </html>
