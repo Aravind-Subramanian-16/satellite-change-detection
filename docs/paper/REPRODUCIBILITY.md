@@ -44,7 +44,7 @@ the torch-only crop-dataset smoke test.
 | `benchmarks/results/oscd_results_v2.md` | `b3033c59064a1c5f9b2c9efccc8ecfed595c186ba9aed6369dc15a29753ec738` |
 | `PAPER_NOTES.md` | `e0c0205ece2ce4e2a82529829eab69f952d81bf61ba2dfb7faf7c628487050a9` |
 | `scripts/make_paper_figures.py` | `bd45534d3c74fd000fd81f61eefdf0c68119828c4c51b217dba1fe56a699a966` |
-| `docs/paper/paper.tex` | `c3b105a6b2a1698c71802b1dd8067b5af245e2fbcae95b167a119b6e6ef369d3` |
+| `docs/paper/paper.tex` | `f2fc3c80ace352632eba97337f56f06a1428a6ddf8005471bc66697f423878df` |
 | `docs/paper/figures/figure_manifest.json` | `e2514b3b3e58056a22657d65ec33460c7f80fd493d4cfcc662fb8a1a4157fc6d` |
 
 The manifest is regenerated whenever figures are rebuilt; its own hash will
