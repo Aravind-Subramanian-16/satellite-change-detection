@@ -605,18 +605,51 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     (`docker --version` -> command not found); image build remains unverified.
   - Tests: `./venv/bin/python -m pytest -q` -> **128 passed, 3 skipped,
     1 warning in 25.11s** (same three environment skips as Step 5).
-- [ ] Step 7. One-click `notebooks/run_all_colab.ipynb`; results pending a
-  real Colab run and a `COLAB_RUN_SUMMARY.md` pulled from the remote.
+- [x] Step 7a. Create the one-click Colab hand-off notebook and its tested
+  summary renderer.
+  - Evidence: `notebooks/run_all_colab.ipynb` has 10 cells and no stored
+    outputs; its code cells compile. It mounts Drive, unzips only the
+    images/training-labels archive, clones/pulls the repository, copies the
+    Drive weights, installs benchmark dependencies without exact onnx/numpy
+    pins, then prints progress for (a) `pytest -q`, (b) the train-only
+    `benchmarks/oscd_loco_thresholds.py`, (c) the Drive `model.onnx`
+    size/SHA-256 and onnxruntime load, and (d) writes and prints
+    `benchmarks/results/COLAB_RUN_SUMMARY.md`. It never unzips
+    `test_labels.zip`, invokes `oscd_eval.py`, trains, fine-tunes or runs v3.
+  - `benchmarks/colab_run_summary.py` renders the summary only from the saved
+    LOCO JSON, model-check JSON and captured pytest line; it rejects official
+    test-city leakage and missing hashes. `tests/test_colab_run_summary.py`
+    (5 tests) and `tests/test_run_all_colab.py` (3 tests) cover the renderer
+    and notebook structure, including the exact
+    `Push skipped: copy the block above` phrase.
+  - The token is read from Colab Secrets and passed to git via a temporary
+    environment variable; it is not printed or written to disk. The notebook
+    stops if the remote checkout lacks the Step 7 files, so the current push
+    blocker must be resolved before a Colab run can succeed.
+  - Full suite: **136 passed, 3 skipped, 1 warning in 18.99s**.
+  - **Not run on Colab.** No `COLAB_RUN_SUMMARY.md`, LOCO result or model-check
+    JSON exists in this checkout. `docs/paper/ARTIFACT.md` marks them pending.
+- [ ] Step 7b. Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime,
+  pull `benchmarks/results/COLAB_RUN_SUMMARY.md` from the remote, fill only
+  dependent text from that summary, rebuild figures/claims audit, rerun tests,
+  and commit/push. Trigger: the owner says "Colab done".
 - [ ] End. Final `python -m pytest -q`, `docs/paper/SUBMISSION_NOTES.md`,
   remaining unverified claims, manual actions.
 
 ## Manual actions for the owner
 
+- Resolve the push blocker and push `main` (no force). The local branch is
+  **29 commits ahead** of `origin/main`; the Colab notebook clones the remote
+  and will stop if the Step 7 files are missing.
+- Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime with
+  `MyDrive/oscd/archive (1).zip` and `MyDrive/oscd/weights/model.onnx`; set
+  `GITHUB_TOKEN` in Colab Secrets only if you want the summary pushed. Then
+  say **"Colab done."**
 - Replace the invalid 60,534,573-byte `model.onnx` with the verified
   33,268,410-byte Drive copy and confirm input names `input_a`, `input_b`.
-- Run the Colab notebooks (`oscd_pixel_classifier.ipynb`,
-  `oscd_auto_improve.ipynb`) and paste the outputs; local checkout has no OSCD
-  data.
+- Run the other Colab notebooks (`oscd_pixel_classifier.ipynb`,
+  `oscd_auto_improve.ipynb`) only if those paused experiments are wanted; local
+  checkout has no OSCD data and their results are unverified.
 - Write and test a protocol-compliant v3 scorer **before** test access, then
   run the frozen v3 protocol once and never tune after seeing the result. The
   current checkout has no v3 scorer and no v3 output.

@@ -19,6 +19,7 @@ can be re-executed here: the imagery and the checkpoint are absent.
 | Degradation runner | `evaluate_degradation.py` | Present; cannot run without data/weights |
 | OSCD evidence script | `benchmarks/oscd_evidence.py` | Present; reads saved JSON only |
 | Train-only LOCO script | `benchmarks/oscd_loco_thresholds.py` | Present; real result pending Colab |
+| Colab hand-off | `notebooks/run_all_colab.ipynb`, `benchmarks/colab_run_summary.py` | Present; not run |
 | Web application | `app.py`, `static/`, `live_pipeline.py` | Runs locally; not validated end to end |
 
 Not included: LEVIR-CD imagery and labels, OSCD imagery and labels, the CNN
@@ -152,15 +153,27 @@ Existing notebooks:
 - `notebooks/oscd_auto_improve.ipynb` — validation-only search; not run, no
   pasted output.
 
-The one-click `notebooks/run_all_colab.ipynb` is the Step 7 deliverable and is
-not present at this commit. Colab runs must not score the official test cities
-for the learned classifier or the validation search. For the LOCO threshold
-check, the procedure is train-only and its real output is pending.
+The one-click `notebooks/run_all_colab.ipynb` is the Step 7 deliverable. It
+mounts Drive, unzips only the images/training-labels archive, clones or pulls
+the repository, copies the Drive weights, installs benchmark dependencies
+without exact onnx/numpy pins, runs pytest, runs the train-only LOCO script,
+checks the Drive `model.onnx` size/SHA-256 and onnxruntime load, and writes
+`benchmarks/results/COLAB_RUN_SUMMARY.md` from the saved JSON and pytest line.
+It does not unzip `test_labels.zip`, score a test city, train, fine-tune or run
+v3. Colab runs must not score the official test cities for the learned
+classifier or the validation search.
+
+The notebook has **not been run**, so no LOCO or summary result exists. Its
+setup cell also requires `REPO_URL` to contain this commit; if the local branch
+has not been pushed, it stops with a clear message instead of running stale
+code. Resolve the push blocker before using it.
 
 `GITHUB_TOKEN` handling for a Colab push: read it from Colab Secrets into
 memory, never print it, never write it to disk or the notebook output, and never
-commit it. If it is missing or the push fails, print exactly
-`Push skipped: copy the block above`. Do not paste secrets into chat.
+commit it. The token is passed to git only through a temporary
+`GIT_CONFIG_VALUE` environment variable. If it is missing or the push fails,
+the notebook prints exactly `Push skipped: copy the block above`. Do not paste
+secrets into chat.
 
 ## 9. Licences and legal review
 
@@ -186,7 +199,8 @@ commit it. If it is missing or the push fails, print exactly
 | v2 benchmark re-execution | Not possible here | OSCD imagery/labels and the checkpoint |
 | CNN inference re-execution | Not possible here | `best_model.pt` / valid `model.onnx` |
 | Train-only LOCO result | Pending | Colab run; do not guess values |
-| One-click Colab notebook | Not yet created | Step 7 deliverable |
+| One-click Colab notebook | Present, not run | Run on Colab after the current branch is pushed; summary pending |
+| Colab run summary | Pending | `benchmarks/results/COLAB_RUN_SUMMARY.md` will be created by the notebook |
 | Docker image | Unverified | Docker unavailable locally |
 | GitHub Actions | Unverified | Push blocked by HTTP 400 |
 | OSCD licence | Unverified externally | Official licence page and legal review |
@@ -195,14 +209,18 @@ commit it. If it is missing or the push fails, print exactly
 
 ## 11. Owner actions
 
-1. Supply the verified model checkpoint and confirm input names `input_a`,
+1. Resolve the push blocker and push `main` without force; the Colab notebook
+   clones the remote and stops if the Step 7 files are absent.
+2. Supply the verified model checkpoint and confirm input names `input_a`,
    `input_b`; do not replace it with the invalid local ONNX file.
-2. Make OSCD imagery and labels available in the expected layout if a rerun is
+3. Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime after the push;
+   the summary is written to `benchmarks/results/COLAB_RUN_SUMMARY.md` and the
+   notebook prints `Push skipped: copy the block above` if the secret or push
+   is unavailable.
+4. Make OSCD imagery and labels available in the expected layout if a rerun is
    required; do not score the test cities again for this paper.
-3. Compile `docs/paper/paper.tex` on Overleaf; check the four-page limit
+5. Compile `docs/paper/paper.tex` on Overleaf; check the four-page limit
    excluding references; add the bibliography after verifying every source.
-4. Confirm the author block and whether the venue requires anonymisation.
-5. Choose a code licence if one is desired; none is chosen here.
-6. Obtain legal review for OSCD, Copernicus and OSM terms.
-7. Resolve the push failure from the owner terminal with `git push origin main`;
-   do not force push.
+6. Confirm the author block and whether the venue requires anonymisation.
+7. Choose a code licence if one is desired; none is chosen here.
+8. Obtain legal review for OSCD, Copernicus and OSM terms.
