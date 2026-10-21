@@ -473,10 +473,32 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     blur/LANCZOS method and AdamW/27-epoch training details corrected; OSCD
     v2 results added; repeated test scoring disclosed; no one-shot claim;
     overclaims and unverified numbers removed or hedged. Commit `52c2130`.
-- [ ] Step 2. Source-backed OSCD evidence: trivial baselines, city bootstrap
+- [x] Step 2. Source-backed OSCD evidence: trivial baselines, city bootstrap
   CIs (seed 0, 10,000), paired bootstrap, failure/correlation analysis,
   CNN input and blur specifications, train-only LOCO script with a synthetic
   test; LOCO result pending Colab run.
+  - Evidence: `benchmarks/oscd_evidence.py` reads only
+    `benchmarks/results/oscd_results_v2.json` (SHA-256 `37ffe2bb...`, unchanged)
+    and writes `benchmarks/results/oscd_evidence.json` plus `.md`. It adds
+    all-no-change and random-at-prevalence baselines, a seed-0/10,000-resample
+    city bootstrap with percentile intervals and paired differences against the
+    hardcoded rule, per-city predicted/true fractions, correlations, and the
+    exact band/scaling/tiling/degradation specification. No imagery or test
+    labels are read. `tests/test_oscd_evidence.py` checks validation, baselines,
+    bootstrap pairing, failure flags, and the saved v2 values.
+  - Evidence: `benchmarks/oscd_loco_thresholds.py` selects hardcoded and
+    percentile thresholds on 13 training cities and scores the held-out
+    training city using the same grids as `benchmarks/oscd_eval.py`; it rejects
+    official test cities in `train.txt` and accepts no test-label path.
+    `tests/test_oscd_loco.py` covers the selection/exclusion logic, tie order,
+    guards, and report assembly with synthetic index arrays. The real OSCD
+    result is **pending Colab run**; no LOCO output file exists locally.
+  - Tests: `126 passed, 3 skipped, 1 warning in 20.78s`
+    (`venv/bin/python -m pytest -q`, 2026-10-21). Commits `b819f53`,
+    `6454b87`. The `.gitignore` root-results pattern was narrowed so
+    `benchmarks/results/` evidence stays trackable. Push remains blocked by the
+    environment after the earlier HTTP 400 failures; no force push or history
+    rewrite was attempted.
 - [ ] Step 3. IEEEtran paper within four pages excluding references, with
   `[CITE: topic]` placeholders only and figures generated from saved JSON.
 - [ ] Step 4. Reviewer-readiness documents (claims audit, objections,
