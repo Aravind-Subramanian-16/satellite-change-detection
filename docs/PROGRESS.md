@@ -26,12 +26,13 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **72 passed, 2 skipped, 1 warning in
-    7.87s** after the Phase D additions (Phase B/C run: 60 passed, 2 skipped,
-    3.87s; initial Phase A run: 41 passed, 2 skipped, 4.64s). Skips: the
-    Pipeline A regression (needs `model.onnx` and a dataset sample) and OSCD
-    label tests (rasterio is benchmark-only on this host). Details:
-    `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
+    `./venv/bin/python -m pytest -q` → **96 passed, 3 skipped, 1 warning in
+    10.82s** after the Phase D2 additions (at the Phase D commit: 72 passed, 2
+    skipped, 7.87s; Phase B/C run: 60 passed, 2 skipped, 3.87s; initial Phase A
+    run: 41 passed, 2 skipped, 4.64s). Skips: the Pipeline A regression (needs
+    `model.onnx` and a dataset sample), OSCD label tests (rasterio is
+    benchmark-only on this host) and the torch-only crop-dataset smoke test.
+    Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
 - [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
   heatmap, report download and History; save screenshots; record console errors;
   mark anything not run unverified.
@@ -218,7 +219,7 @@ number is claimed.
     errors, test-city guard) and `tests/test_learned_pipeline.py` (6 tests:
     fake-model prediction, threshold override, feature-layout mismatch, missing
     model, npz validation, endpoint status/disabled/503/400/success). Full suite
-    72 passed, 2 skipped.
+    after Phase D2: 96 passed, 3 skipped.
 - [x] D5. Test-set scoring deferred to Phase D2 step 6 for pre-registered
   systems only.
   - Evidence: trainer never scores a test city and writes
@@ -228,28 +229,68 @@ number is claimed.
 
 ## Phase D2 — X-factors and autonomous accuracy improvement
 
-- [ ] D2.1. `docs/paper/XFACTORS.md`: differentiators, evidence needed, prior-work
+- [x] D2.1. `docs/paper/XFACTORS.md`: differentiators, evidence needed, prior-work
   comparison topics as `[CITE: topic]`, status implemented/partial/idea.
-- [ ] D2.2. Implement behind flags, each with a synthetic-data test, default
+  - Evidence: `docs/paper/XFACTORS.md` lists eight candidates with status,
+    local evidence, missing evidence and citation topics; it makes no priority
+    or superiority claim.
+- [x] D2.2. Implement behind flags, each with a synthetic-data test, default
   pipeline unchanged: (a) radiometric normalisation, (b) temporal median
   compositing, (c) morphological cleanup + object MMU, (d) CNN fine-tuning on
   OSCD train only (new file, never `best_model.pt`), (e) fusion/stacking, (f)
   uncertainty from model agreement with ECE on held-out train cities.
-- [ ] D2.3. `benchmarks/auto_improve.py`: fixed search space/seeds,
+  - Evidence:
+    (a) `radiometric.py`, `tests/test_radiometric_compositing.py` (affine
+    recovery, no-op, clipping, profile-level false-positive removal); UI flag
+    `normalise` is off by default.
+    (b) `compositing.py`, same test file (median excludes masks, all-masked
+    → NaN, clear fraction); API option `composite_scenes` is 1–3, default 1.
+    (c) `postprocess.py`, `tests/test_profiles.py` (MMU, cleanup no-op) and
+    `tests/test_radiometric_compositing.py`; API flag `cleanup` default false.
+    (d) `benchmarks/finetune_cnn.py` writes a new checkpoint, guards
+    `best_model.pt`/`model.onnx`, uses 3 held-out TRAIN cities and logs
+    `test_split_read: false`; `tests/test_finetune_cnn.py` covers guards,
+    crops, threshold sweep, and a torch-only dataset test (**skipped locally**).
+    Actual fine-tuning is unverified.
+    (e) `fusion.py`, `tests/test_fusion.py` (complementary-signal recovery,
+    weight/threshold selection); not wired into the default app.
+    (f) `uncertainty.py`, `tests/test_uncertainty.py` (ECE, overconfidence,
+    agreement, held-out-TRAIN guard). Real calibration is unverified.
+    Default spectral/live behaviour is unchanged; full suite 96 passed,
+    3 skipped.
+- [x] D2.3. `benchmarks/auto_improve.py`: fixed search space/seeds,
   leave-city-out CV over 14 train cities, hard trial budget, every trial logged
   to `benchmarks/results/auto_improve_log.json` including failures, selection by
   validation F1 only, guard that raises if any test city is read, ablation tables
   on validation only.
-- [ ] D2.4. `notebooks/oscd_auto_improve.ipynb` (Colab); not run locally; gains
+  - Evidence: 12 fixed systems, `HARD_TRIAL_BUDGET=12`, 14 leave-one-city-out
+    folds, threshold grids refit on the 13 fit cities, `assert_no_test_cities`
+    before any load, JSON checkpoint after every trial, markdown tables with
+    mean±SD per-city F1 and paired component deltas. Tests:
+    `tests/test_auto_improve.py` (guard, hard budget, failure logging,
+    checkpointed output, validation-only metadata). **No log exists yet**;
+    owner must run the notebook.
+- [x] D2.4. `notebooks/oscd_auto_improve.ipynb` (Colab); not run locally; gains
   unverified until owner pastes output.
-- [ ] D2.5. `docs/paper/PREREGISTRATION.md` committed before any test scoring,
+  - Evidence: notebook exists; mounts Drive, verifies 14 TRAIN cities, runs the
+    12-trial search into `benchmarks/results/auto_improve_log.json`, copies it
+    to Drive, asserts 12 trials and `test_split_read: false`, and leaves CNN
+    fine-tuning off by default. **No output pasted; not executed locally.**
+- [x] D2.5. `docs/paper/PREREGISTRATION.md` committed before any test scoring,
   listing exact systems, metrics and selection rule.
+  - Evidence: committed protocol dated 2026-10-21 (this commit precedes any v3
+    file); exact S0–S3 definitions, fixed metrics, training-only selection rule,
+    one-event protocol, deviation rules and no-post-test-tuning clause.
 - [ ] D2.6. Score the 10 test cities ONCE for pre-registered systems into
   `oscd_results_v3.json/.md` without overwriting v2; record the third scoring; no
   tuning/reselection after seeing results. **Blocked: OSCD data and weights
   absent locally; only Colab can run it.**
-- [ ] D2.7. Report improvements with variance across cities; drop and log
+- [x] D2.7. Report improvements with variance across cities; drop and log
   components that do not help on validation.
+  - Evidence: `auto_improve.py` records pooled and per-city F1, mean±SD,
+    min/max, paired component deltas, a `kept`/`dropped` decision per component,
+    and a recommendation that excludes dropped components. This is implemented
+    and synthetic-tested only; **no real validation result exists yet**.
 
 ## Phase E — Production hardening
 

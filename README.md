@@ -221,6 +221,16 @@ export LEARNED_MODEL_PATH=artifacts/learned_pixel_model.joblib
 
 Without the flag or artifact the endpoint returns HTTP 503 and the spectral/live pipelines are unchanged. Learned results always report `display_metrics: false` and an experimental validation status; a test-city score is deferred to the preregistered Phase D2 scoring run.
 
+## Experimental options and validation-only research
+
+The live workflow exposes three off-by-default options: `composite_scenes` (2–3 scenes per window, temporal median of the clearest pixels), `normalise` (PIF gain/offset matching of NDVI/NDBI) and `cleanup` (3×3 morphological opening/closing plus the existing MMU). They are covered by synthetic tests, but no accuracy improvement is claimed; the v2 benchmark did not use them and OSCD supplies one pair per city.
+
+Research-only code is not on the default path:
+
+- `benchmarks/auto_improve.py` runs a fixed 12-system search with leave-one-city-out validation on the 14 TRAIN cities, a hard trial budget, and a checkpointed log that includes failures. It refuses official test cities. Its results are **unverified** until the owner runs [`notebooks/oscd_auto_improve.ipynb`](notebooks/oscd_auto_improve.ipynb) on Colab.
+- `fusion.py` fuses spectral evidence and learned probabilities; `uncertainty.py` computes model agreement and ECE on held-out TRAIN cities; `benchmarks/finetune_cnn.py` fine-tunes a new CNN checkpoint without reading or writing `best_model.pt`/`model.onnx`.
+- `docs/paper/PREREGISTRATION.md` freezes the systems, metrics and one-shot test-scoring rule. No v3 test result exists in this checkout; v2 remains the only scored test result and its earlier preliminary scoring event is disclosed above.
+
 ## Deployment
 
 Build with `docker build -t satellite-change .` and run `docker run -p 8000:8000 --env-file .env satellite-change`. Supply `COPERNICUS_CLIENT_ID` and `COPERNICUS_CLIENT_SECRET` through the platform secret manager, never source control. For Render/Railway/Fly.io: select Docker deployment, expose port 8000, set the two secrets, and configure health check `/health`. Use one CPU worker because ONNX model memory and free-tier cold starts are limiting.

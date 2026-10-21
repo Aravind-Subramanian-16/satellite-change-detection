@@ -1,6 +1,8 @@
 """Temporal median compositing of the clearest scenes (Phase D2b, behind a flag)."""
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 
@@ -14,7 +16,8 @@ def median_composite(arrays: list[np.ndarray], masks: list[np.ndarray] | None = 
         if mask_stack.shape != stack.shape:
             raise ValueError("masks must match the array shape")
         stack = np.where(mask_stack, np.nan, stack)
-    with np.errstate(invalid="ignore"):
+    with np.errstate(invalid="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
         return np.nanmedian(stack, axis=0).astype(np.float32)
 
 
