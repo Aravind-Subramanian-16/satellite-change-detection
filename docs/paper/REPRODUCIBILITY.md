@@ -1,8 +1,15 @@
-# Reproducibility package
+# Reproducibility package (historical)
 
-This document records what can and cannot be reproduced from the current
-checkout, with exact commands, versions, hashes and owner actions. It refers to
-the manuscript in `docs/paper/paper.tex` and the v2 result files.
+> **Superseded for the submission package.** This is a Phase F record of an
+> earlier manuscript, test suite and figure generator. Use `ARTIFACT.md` for the
+> current commands, hashes and owner actions, and `CLAIMS_AUDIT.md` for the
+> current claims. The counts and hashes below are snapshots and may no longer
+> match the checkout; the current paper does not include the v3 protocol or the
+> earlier app-validation framing described here.
+
+This document records what could and could not be reproduced at the Phase F
+checkpoint, with commands, versions, hashes and owner actions. It refers to the
+manuscript in `docs/paper/paper.tex` and the v2 result files.
 
 ## 1. Status at a glance
 
