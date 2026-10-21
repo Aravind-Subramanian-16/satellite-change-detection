@@ -155,8 +155,28 @@ def predict_change(
     return mask, probability_map, metadata
 
 
+def _learned_pixel_limit() -> int:
+    try:
+        value = int(os.environ.get("MAX_LEARNED_PIXELS", "4000000"))
+    except ValueError:
+        value = 4_000_000
+    return max(1, value)
+
+
+def _npz_uncompressed_limit() -> int:
+    try:
+        megabytes = float(os.environ.get("MAX_NPZ_UNCOMPRESSED_MB", "150"))
+    except ValueError:
+        megabytes = 150.0
+    return max(1, int(megabytes * 1024 * 1024))
+
+
 def bands_from_npz(payload: bytes) -> dict:
-    """Read an uploaded .npz with B02/B03/B04/B08/B11/B12 reflectance arrays."""
+    """Read an uploaded .npz with B02/B03/B04/B08/B11/B12 reflectance arrays.
+
+    Sizes are checked from the zip directory before decompression, then each
+    band is shape- and pixel-limited, so malformed archives cannot exhaust RAM.
+    """
     try:
         archive = np.load(io.BytesIO(payload), allow_pickle=False)
     except Exception as exc:
@@ -167,9 +187,35 @@ def bands_from_npz(payload: bytes) -> dict:
     if missing:
         raise ValueError(f"Uploaded archive is missing bands: {', '.join(missing)}")
     try:
-        return {key: np.asarray(archive[key], dtype=np.float32) for key in BAND_KEYS}
+        zip_file = getattr(archive, "zip", None)
+        if zip_file is not None:
+            declared = 0
+            for key in BAND_KEYS:
+                try:
+                    declared += int(zip_file.getinfo(f"{key}.npy").file_size)
+                except KeyError:
+                    declared = 0
+                    break
+            if declared > _npz_uncompressed_limit():
+                raise ValueError(
+                    "Uploaded archive expands beyond the band memory limit; "
+                    "downsample the scene before exporting .npz."
+                )
+        bands = {key: np.asarray(archive[key], dtype=np.float32) for key in BAND_KEYS}
     finally:
         archive.close()
+    shapes = {band.shape for band in bands.values()}
+    if any(band.ndim != 2 for band in bands.values()) or len(shapes) != 1:
+        raise ValueError("Every uploaded band must be a 2-D array of identical shape")
+    height, width = next(iter(shapes))
+    if height * width > _learned_pixel_limit():
+        raise ValueError(
+            f"Uploaded scene has {height * width:,} pixels; the learned path limit is "
+            f"{_learned_pixel_limit():,}. Downsample before exporting .npz."
+        )
+    if not all(np.isfinite(band).all() for band in bands.values()):
+        raise ValueError("Uploaded bands contain non-finite values")
+    return bands
 
 
 def rgb_from_bands(bands: dict) -> np.ndarray:

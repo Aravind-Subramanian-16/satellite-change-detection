@@ -26,12 +26,13 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **96 passed, 3 skipped, 1 warning in
-    10.82s** after the Phase D2 additions (at the Phase D commit: 72 passed, 2
-    skipped, 7.87s; Phase B/C run: 60 passed, 2 skipped, 3.87s; initial Phase A
-    run: 41 passed, 2 skipped, 4.64s). Skips: the Pipeline A regression (needs
-    `model.onnx` and a dataset sample), OSCD label tests (rasterio is
-    benchmark-only on this host) and the torch-only crop-dataset smoke test.
+    `./venv/bin/python -m pytest -q` → **108 passed, 3 skipped, 1 warning in
+    11.09s** after the Phase E hardening tests (Phase D2: 96 passed, 3 skipped,
+    10.82s; Phase D: 72 passed, 2 skipped, 7.87s; Phase B/C: 60 passed, 2
+    skipped, 3.87s; initial Phase A: 41 passed, 2 skipped, 4.64s). Skips: the
+    Pipeline A regression (needs `model.onnx` and a dataset sample), OSCD label
+    tests (rasterio is benchmark-only on this host) and the torch-only
+    crop-dataset smoke test.
     Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
 - [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
   heatmap, report download and History; save screenshots; record console errors;
@@ -294,19 +295,56 @@ number is claimed.
 
 ## Phase E — Production hardening
 
-- [ ] E1. Upload validation (type, size, dimensions), rate limiting, strict
+- [x] E1. Upload validation (type, size, dimensions), rate limiting, strict
   CORS, security headers, no secrets in logs, structured logging, request IDs,
   non-root Docker user, pinned compatible dependency ranges that install on
   Colab (no onnx pin; onnx only in `requirements-dev.txt`).
-- [ ] E2. GitHub Actions workflow running pytest on push with model-dependent
+  - Evidence: `security.py` + 12 tests in `tests/test_security.py` cover
+    extension/content-type/byte/dimension rejection (400/413/415), `.npz`
+    declared-size and pixel caps, per-IP/per-path sliding-window 429 with
+    `Retry-After`, same-origin-by-default CORS (`ALLOWED_ORIGINS`, `*` ignored),
+    CSP/nosniff/frame/referrer/permissions headers, validated or generated
+    `X-Request-ID` echoed on responses and errors, JSON access logs and
+    credential redaction. `Dockerfile` already ran as UID 10001; it now also
+    runs uvicorn with `--no-access-log` because the app emits structured access
+    logs. Dependency ranges were already compatible with Colab and keep ONNX
+    out of the runtime pin. **Docker build remains unverified (Docker absent).**
+- [x] E2. GitHub Actions workflow running pytest on push with model-dependent
   tests skipped cleanly.
-- [ ] E3. Accessibility/UX review: keyboard slider, colour-blind-safe heatmap,
+  - Evidence: `.github/workflows/tests.yml` runs `python -m pytest -q` on
+    Python 3.10 for push/PR with a 20-minute timeout and failure artifact; the
+    three model/data-dependent skips are enforced by the tests themselves and
+    reproduced locally. **The workflow has not run on GitHub because every push
+    failed with HTTP 400; remote CI remains unverified.**
+- [x] E3. Accessibility/UX review: keyboard slider, colour-blind-safe heatmap,
   legends/units, loading and error states for every failure, responsive layout,
   empty states.
-- [ ] E4. Provenance on every result: commit hash, pipeline, profile,
+  - Evidence: the before/after control is a native range input with a visible
+    label and percentage; the heatmap now uses a viridis palette with monotonic
+    luminance, matching CSS swatch, canvas `role="img"`/label and a text legend
+    that states it is not a probability. Tabs, segmented controls, sliders and
+    AOI inputs have keyboard handlers and `aria-selected`/`aria-live`/`role`
+    annotations; loading uses a labelled busy overlay, and history, search,
+    scenes, regions and errors have explicit empty/loading/error text. A live
+    browser check loaded Leaflet and six OSM tiles under the new CSP with no
+    console messages; Phase B's mocked responsive check recorded 0 px
+    horizontal overflow on mobile. A formal screen-reader and zoom audit was
+    **not** performed.
+- [x] E4. Provenance on every result: commit hash, pipeline, profile,
   thresholds, scene IDs, dates, percent masked, timestamp.
-- [ ] E5. `docs/LIMITATIONS.md`: 10 m resolution, seasonal confusion, clouds,
+  - Evidence: `provenance.py` emits commit, app version, pipeline, profile,
+    thresholds, scene IDs, dates, percent masked and UTC timestamp; live,
+    learned, CNN and exported/report paths attach or render it, with tests in
+    `tests/test_provenance.py`, `tests/test_live_api.py`,
+    `tests/test_exports_and_osm.py` and `tests/test_reports.py`. Optional
+    compositing/normalisation/MMU settings are included in live provenance.
+- [x] E5. `docs/LIMITATIONS.md`: 10 m resolution, seasonal confusion, clouds,
   no ground-truth guarantee.
+  - Evidence: `docs/LIMITATIONS.md` covers resolution/mixed pixels, per-profile
+    validation status and v2 numbers, spectral confusion, clouds/shadow,
+    temporal/geometric limits, MMU/compositing/PIF, the experimental learned
+    model, OSM/licensing, missing authentication/history privacy, rate-limiter
+    scope and the evidence needed before operational use.
 
 ## Phase F — Paper and presentation
 
@@ -341,9 +379,15 @@ number is claimed.
 
 - Phase A checkpoint: rebased onto remote v2 results; commit hash recorded in
   `git log` (message begins “feat: harden model fallback”). Push attempted.
-- Phase B commit/push: pending.
-- Phase C commit/push: pending.
-- Phase D commit/push: pending; v3 is not run locally.
+- Phase B/C commit: `dc5009b` (live map workflow, profiles, reports). Push
+  attempted with `git push origin main`; failed with
+  `RPC failed; HTTP 400 curl 22` and the remote still reported “Everything
+  up-to-date”. No force push.
+- Phase D commit: `376325f` (optional learned pixel classifier). Same push
+  failure; local branch then ahead of `origin/main`.
+- Phase D2 commit: `0d7082d` (validation-only search, fusion, uncertainty,
+  fine-tuning, preregistration). Same push failure. At the time of writing,
+  `main...origin/main [ahead 5]`; v3 is not run locally.
 - Phase E commit/push: pending.
 - Phase F commit/push: pending.
 

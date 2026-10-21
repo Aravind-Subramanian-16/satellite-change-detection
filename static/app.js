@@ -1335,11 +1335,13 @@
     }
 
     function evidenceColor(value) {
+        // Viridis: monotonic luminance keeps the scale readable for common colour-vision deficiencies.
         const stops = [
-            [0.0, [29, 78, 216]],
-            [0.35, [56, 189, 248]],
-            [0.62, [250, 204, 21]],
-            [1.0, [239, 68, 68]],
+            [0.0, [68, 1, 84]],
+            [0.25, [59, 82, 139]],
+            [0.5, [33, 145, 140]],
+            [0.75, [94, 201, 98]],
+            [1.0, [253, 231, 37]],
         ];
         const clamped = Math.max(0, Math.min(1, value));
         for (let index = 1; index < stops.length; index += 1) {

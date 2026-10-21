@@ -231,6 +231,12 @@ Research-only code is not on the default path:
 - `fusion.py` fuses spectral evidence and learned probabilities; `uncertainty.py` computes model agreement and ECE on held-out TRAIN cities; `benchmarks/finetune_cnn.py` fine-tunes a new CNN checkpoint without reading or writing `best_model.pt`/`model.onnx`.
 - `docs/paper/PREREGISTRATION.md` freezes the systems, metrics and one-shot test-scoring rule. No v3 test result exists in this checkout; v2 remains the only scored test result and its earlier preliminary scoring event is disclosed above.
 
+## Security and limits
+
+Uploads are limited by type, bytes and decoded dimensions; `.npz` archives also have declared-size and pixel caps. API routes use an in-process per-path rate limit, responses carry a request ID and security headers, CORS is same-origin unless `ALLOWED_ORIGINS` lists explicit origins, and access logs are structured JSON with credential redaction. There is **no authentication**: `/history` exposes stored previews, AOIs and results to anyone who can reach the service, so put public deployments behind an authenticated proxy. Rate limiting is per process and resets on restart. See [DEPLOY.md](DEPLOY.md) for variables and proxy guidance.
+
+Intended use, validation status, privacy, licensing and operational limits are documented in [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Treat every region as a candidate to verify, not a finding.
+
 ## Deployment
 
 Build with `docker build -t satellite-change .` and run `docker run -p 8000:8000 --env-file .env satellite-change`. Supply `COPERNICUS_CLIENT_ID` and `COPERNICUS_CLIENT_SECRET` through the platform secret manager, never source control. For Render/Railway/Fly.io: select Docker deployment, expose port 8000, set the two secrets, and configure health check `/health`. Use one CPU worker because ONNX model memory and free-tier cold starts are limiting.

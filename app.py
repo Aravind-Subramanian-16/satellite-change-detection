@@ -1,9 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+import time
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -21,6 +23,7 @@ import base64
 from change_reasoner import reason_regions
 import copernicus_client as copernicus
 import learned_pipeline
+import security
 from copernicus_client import CopernicusError, MissingCredentialsError, NoScenesError
 from geocoding import geocode_place, suggest_places
 from exports import csv_bytes, geojson_bytes
@@ -53,6 +56,7 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logger.addHandler(handler)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+security.configure_redaction(logger)
 
 class SceneSearchRequest(BaseModel):
     bbox: List[float]
@@ -88,6 +92,51 @@ class ReportRequest(BaseModel):
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+_allowed_origins = security.cors_origins()
+if _allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", security.REQUEST_ID_HEADER],
+        expose_headers=[security.REQUEST_ID_HEADER],
+        allow_credentials=False,
+        max_age=600,
+    )
+
+
+@app.middleware("http")
+async def harden_request(request: Request, call_next):
+    request_id = security.request_id_from_header(request.headers.get(security.REQUEST_ID_HEADER))
+    token = security.set_request_id(request_id)
+    started = time.perf_counter()
+    try:
+        response = security.request_too_large(request)
+        if response is None:
+            response = security.rate_limit_response(request)
+        if response is None:
+            response = await call_next(request)
+    except Exception:
+        security.log_access(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status=500,
+            duration_ms=(time.perf_counter() - started) * 1000.0,
+        )
+        raise
+    finally:
+        security.reset_request_id(token)
+    security.apply_security_headers(response, request_id, request.url.path)
+    security.log_access(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=(time.perf_counter() - started) * 1000.0,
+    )
+    return response
 
 MODEL_ONNX_PATH = Path(os.environ.get("MODEL_ONNX_PATH", "model.onnx"))
 EXPECTED_ONNX_BYTES = 33268410
@@ -213,8 +262,23 @@ async def predict_learned(
                 "model": learned_pipeline.model_status(),
             },
         )
-    before_bytes = await bands_before.read()
-    after_bytes = await bands_after.read()
+    try:
+        before_bytes = await security.read_upload(
+            bands_before,
+            max_bytes=security.max_npz_bytes(),
+            allowed_content_types={"application/zip", "application/x-npz", "application/x-zip-compressed"},
+            allowed_extensions=(".npz",),
+            label="Before bands archive",
+        )
+        after_bytes = await security.read_upload(
+            bands_after,
+            max_bytes=security.max_npz_bytes(),
+            allowed_content_types={"application/zip", "application/x-npz", "application/x-zip-compressed"},
+            allowed_extensions=(".npz",),
+            label="After bands archive",
+        )
+    except security.UploadRejected as exc:
+        return _error(exc.status_code, exc.code, str(exc))
     try:
         bands_a = learned_pipeline.bands_from_npz(before_bytes)
         bands_b = learned_pipeline.bands_from_npz(after_bytes)
@@ -377,8 +441,25 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
 
 @app.post("/predict")
 async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(...)):
-    img_a_bytes = await image_a.read()
-    img_b_bytes = await image_b.read()
+    try:
+        img_a_bytes = await security.read_upload(
+            image_a,
+            max_bytes=security.max_upload_bytes(),
+            allowed_content_types={"image/png", "image/jpeg"},
+            allowed_extensions=(".png", ".jpg", ".jpeg"),
+            label="Before image",
+        )
+        img_b_bytes = await security.read_upload(
+            image_b,
+            max_bytes=security.max_upload_bytes(),
+            allowed_content_types={"image/png", "image/jpeg"},
+            allowed_extensions=(".png", ".jpg", ".jpeg"),
+            label="After image",
+        )
+        security.validate_image_bytes(img_a_bytes)
+        security.validate_image_bytes(img_b_bytes)
+    except security.UploadRejected as exc:
+        return _error(exc.status_code, exc.code, str(exc))
 
     try:
         result = run_inference_pipeline(img_a_bytes, img_b_bytes)
@@ -411,7 +492,7 @@ async def download_report(req: ReportRequest):
 
 @app.get("/history")
 async def history(limit: int = 50):
-    return list_analyses(limit)
+    return list_analyses(max(1, min(int(limit), 200)))
 
 @app.get("/history/{analysis_id}")
 async def history_detail(analysis_id: int):
@@ -421,7 +502,7 @@ async def history_detail(analysis_id: int):
     return item
 
 def _error(status: int, code: str, message: str, hint: str | None = None, details: dict | None = None) -> JSONResponse:
-    payload = {"error": message, "code": code}
+    payload = {"error": message, "code": code, "request_id": security.current_request_id() or None}
     if hint:
         payload["hint"] = hint
     if details:
@@ -637,13 +718,17 @@ async def export_history(analysis_id: int, fmt: str):
 
 @app.get("/geocode-suggest")
 async def geocode_suggest(q: str):
-    if not q or len(q.strip()) < 2:
-        return JSONResponse(status_code=400, content={"error": "Query too short"})
+    query = q.strip()
+    if len(query) < 2:
+        return _error(400, "invalid_request", "Search query must be at least 2 characters.")
+    if len(query) > 120:
+        return _error(400, "invalid_request", "Search query must be at most 120 characters.")
     try:
-        results = suggest_places(q.strip())
+        results = suggest_places(query)
         return JSONResponse(content=results)
     except Exception as e:
-        return JSONResponse(status_code=502, content={"error": str(e)})
+        logger.warning("Geocoding suggestion failed: %s", type(e).__name__)
+        return _error(502, "geocoding_error", "Place suggestions are unavailable right now.")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

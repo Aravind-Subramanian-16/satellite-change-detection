@@ -225,10 +225,10 @@
                 </div>
                 <figure class="evidence-figure">
                     <img id="evidence-image" alt="Overlay of detected change on the after image">
-                    <canvas id="heatmap-canvas" hidden aria-label="Continuous spectral-rule evidence, blue low to yellow high"></canvas>
+                    <canvas id="heatmap-canvas" role="img" aria-describedby="heatmap-legend" aria-label="Continuous spectral-rule evidence on a colour-blind-safe viridis scale: dark purple is low, yellow is high" hidden>Colour-blind-safe viridis heatmap of spectral rule evidence.</canvas>
                 </figure>
                 <p class="evidence-caption" id="evidence-caption"></p>
-                <p class="legend" id="heatmap-legend" hidden>Rule evidence: <span class="legend-swatch" aria-hidden="true"></span> low → high. This is a rescaled NDVI-loss / NDBI-gain magnitude, not a probability.</p>
+                <p class="legend" id="heatmap-legend" hidden>Rule evidence: <span class="legend-swatch" aria-hidden="true"></span> dark purple low → yellow high (viridis, colour-blind-safe). This is a rescaled NDVI-loss / NDBI-gain magnitude, not a probability.</p>
             </section>
 
             <section class="result-block" aria-labelledby="regions-heading">

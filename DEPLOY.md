@@ -98,6 +98,43 @@ There is no static-only mode: live scene search, PDF reports, history and
 exports are server endpoints. Leaflet and map tiles are loaded from pinned
 CDNs; Copernicus credentials stay server-side.
 
+## Hardening and operational limits
+
+- The app sends `X-Request-ID` (validated or generated), `X-Content-Type-Options:
+  nosniff`, `X-Frame-Options: DENY`, a restrictive CSP, a referrer policy and a
+  permissions policy. Responses containing analyses are `Cache-Control:
+  no-store`. Access logs are one JSON object per request; credential patterns
+  are redacted.
+- Uploads are checked by extension, content type, byte size and decoded image
+  dimensions before inference. `.npz` archives are checked for declared
+  uncompressed size and pixel count. Rejections use 400/413/415 with a
+  machine-readable `code`.
+- `RATE_LIMIT_PER_MINUTE` is an in-process sliding window keyed by client and
+  path. It resets on restart and is not shared across workers; the deployment
+  target is one worker. Enforce additional limits at the proxy. Only set
+  `TRUST_PROXY_HEADERS=1` when a trusted proxy overwrites `X-Forwarded-For`.
+- CORS is disabled by default. `ALLOWED_ORIGINS` is an explicit comma-separated
+  list; `*` is ignored and credentials are not allowed.
+- There is no authentication. `/history` can expose uploaded previews, AOIs,
+  filenames and results to anyone who can reach the service. Put a public
+  deployment behind an authenticated reverse proxy, and restrict
+  `/model-status`, `/history` and exports if that metadata is sensitive.
+- Logs do not include request bodies or query strings. The app never logs
+  `COPERNICUS_CLIENT_SECRET` or `COPERNICUS_CLIENT_ID`; a redaction filter
+  removes common credential patterns and configured values.
+- The Docker image runs as UID 10001 (non-root) and excludes tests, docs,
+  benchmarks, notebooks, `.env`, weights and datasets from the build context.
+  Dependency ranges in `requirements.txt` install on Colab and in the image;
+  no ONNX pin is imposed.
+- `.github/workflows/tests.yml` runs `python -m pytest -q` on Python 3.10 for
+  pushes and pull requests. Model-dependent tests skip when weights/data are
+  absent. The current local counts and skips are recorded in
+  [`docs/PROGRESS.md`](docs/PROGRESS.md).
+
+Known limitations, including the absence of authentication, history privacy,
+rate-limiter scope and data licensing, are documented in
+[`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+
 ## Environment variables
 
 | Variable | Default | Meaning |
@@ -105,18 +142,25 @@ CDNs; Copernicus credentials stay server-side.
 | `COPERNICUS_CLIENT_ID`, `COPERNICUS_CLIENT_SECRET` | unset | CDSE OAuth client. Missing values produce a clear 400, not a crash. |
 | `MODEL_ONNX_PATH` | `model.onnx` | Optional CNN weights. |
 | `MODEL_PT_PATH` | `best_model.pt` | Read-only PyTorch checkpoint for training utilities. |
-| `LEARNED_MODEL_PATH` | `models/pixel_classifier.joblib` | Optional Phase D model, outside git. |
-| `ENABLE_LEARNED_MODEL` | `0` | Exposes learned pipeline metadata/loader. |
+| `LEARNED_MODEL_PATH` | `artifacts/learned_pixel_model.joblib` | Optional Phase D model, outside git. |
+| `ENABLE_LEARNED_MODEL` | `0` | Exposes the opt-in learned endpoint. |
 | `ANALYSIS_DB_PATH` | `analysis_history.sqlite3` | SQLite history. |
 | `OSM_CACHE_DIR` | `cache/osm` | Overpass response cache. |
 | `MAX_AOI_KM` | `10` | Maximum AOI side length. |
 | `DEFAULT_WINDOW_DAYS` | `30` | ± scene search window. |
 | `CLOUD_WARN_PERCENT` | `30` | SCL cloud+shadow warning threshold. |
 | `MAX_ANALYSIS_PX` | `1024` | Cap on requested raster dimension. |
-| `RATE_LIMIT_PER_MINUTE` | `60` | Per-IP request budget for API routes. |
-| `MAX_UPLOAD_MB` | `10` | Upload size cap per file. |
-| `ALLOWED_ORIGINS` | empty | Comma-separated CORS origins. Empty means same-origin only. |
-| `LOG_LEVEL` | `INFO` | Structured log level; secrets are never logged. |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Per-IP, per-path request budget for API routes; `0` disables it. |
+| `MAX_UPLOAD_MB` | `10` | Image upload cap per file. |
+| `MAX_NPZ_MB` | `25` | Compressed `.npz` band-archive cap per file. |
+| `MAX_REQUEST_MB` | `60` | `Content-Length` cap for JSON/multipart requests. |
+| `MAX_IMAGE_PIXELS` | `25000000` | Decoded image pixel cap. |
+| `MAX_IMAGE_DIMENSION` | `8000` | Decoded image side-length cap in pixels. |
+| `MAX_LEARNED_PIXELS` | `4000000` | Pixel cap for the optional learned `.npz` path. |
+| `MAX_NPZ_UNCOMPRESSED_MB` | `150` | Declared uncompressed-band cap for `.npz` archives. |
+| `ALLOWED_ORIGINS` | empty | Comma-separated CORS origins. Empty means same-origin only; `*` is ignored. |
+| `TRUST_PROXY_HEADERS` | `0` | Use the first `X-Forwarded-For` hop for rate limiting. Only behind a trusted proxy. |
+| `LOG_LEVEL` | `INFO` | Log level for the app logger; access logs are structured JSON with request IDs. |
 
 ## Colab
 

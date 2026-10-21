@@ -715,7 +715,7 @@ input[type="date"] { color-scheme: dark; }
     width: 90px;
     height: 10px;
     border-radius: 99px;
-    background: linear-gradient(90deg, #1d4ed8, #38bdf8, #facc15, #ef4444);
+    background: linear-gradient(90deg, #440154, #3b528b, #21918c, #5ec962, #fde725);
 }
 
 .count { font-size: 0.78rem; color: var(--dim); font-variant-numeric: tabular-nums; }
