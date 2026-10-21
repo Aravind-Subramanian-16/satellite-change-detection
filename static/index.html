@@ -27,8 +27,8 @@
     </a>
 
     <nav class="tabs" role="tablist" aria-label="Analysis mode">
-        <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="view-live" data-tab="live">Compare two dates</button>
-        <button class="tab" id="tab-upload" type="button" role="tab" aria-selected="false" aria-controls="view-upload" data-tab="upload" tabindex="-1">Upload two images <span class="tag">Experimental</span></button>
+        <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="view-live" data-tab="live"><span class="tab-label-full">Compare two dates</span><span class="tab-label-short">Compare</span></button>
+        <button class="tab" id="tab-upload" type="button" role="tab" aria-selected="false" aria-controls="view-upload" aria-label="Upload two images, experimental" data-tab="upload" tabindex="-1"><span class="tab-label-full">Upload two images</span><span class="tab-label-short">Upload</span> <span class="tag">Experimental</span></button>
         <button class="tab" id="tab-history" type="button" role="tab" aria-selected="false" aria-controls="view-history" data-tab="history" tabindex="-1">History</button>
     </nav>
 
@@ -462,6 +462,29 @@
             </div>
             <p class="help">Stored in the server&rsquo;s local SQLite database. History may disappear when a hosted instance restarts or redeploys.</p>
             <p class="form-error" id="history-status" role="status" hidden></p>
+
+            <section class="history-dashboard" id="history-dashboard" aria-labelledby="history-dashboard-heading" hidden>
+                <div class="dashboard-heading">
+                    <div>
+                        <p class="step-label">At a glance</p>
+                        <h3 id="history-dashboard-heading">Saved analyses dashboard</h3>
+                    </div>
+                    <p class="help-inline" id="history-dashboard-count"></p>
+                </div>
+                <dl class="dashboard-stats" id="history-stats"></dl>
+                <div class="dashboard-charts">
+                    <figure class="dashboard-chart">
+                        <figcaption>Flagged share of each saved analysis</figcaption>
+                        <div class="chart-rows" id="history-recent-chart" role="list"></div>
+                    </figure>
+                    <figure class="dashboard-chart">
+                        <figcaption>How many analyses fall in each range</figcaption>
+                        <div class="chart-rows" id="history-range-chart" role="list"></div>
+                    </figure>
+                </div>
+                <p class="help">Simple summaries of the saved numbers, not a measure of detection performance. The dashboard covers the most recent 50 saved analyses.</p>
+            </section>
+
             <div class="history-list" id="history-list"></div>
         </section>
     </div>

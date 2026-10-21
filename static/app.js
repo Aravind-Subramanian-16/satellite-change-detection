@@ -104,6 +104,11 @@
         modelNote: $("#model-note"),
         historyStatus: $("#history-status"),
         historyList: $("#history-list"),
+        historyDashboard: $("#history-dashboard"),
+        historyDashboardCount: $("#history-dashboard-count"),
+        historyStats: $("#history-stats"),
+        historyRecentChart: $("#history-recent-chart"),
+        historyRangeChart: $("#history-range-chart"),
         footerVersion: $("#footer-version"),
         busy: $("#busy"),
         busyText: $("#busy-text"),
@@ -330,6 +335,7 @@
     /* ── Tabs ────────────────────────────────────────────────────────────── */
 
     function activateTab(name, focusTab = false) {
+        document.body.dataset.view = name;
         Object.entries(els.views).forEach(([key, view]) => {
             view.hidden = key !== name;
         });
@@ -2281,7 +2287,93 @@
         return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
     }
 
+    function renderChartRows(container, items, ceiling) {
+        clear(container);
+        const max = Math.max(Number(ceiling) || 0, 1);
+        items.forEach((item) => {
+            const row = el("div", "chart-row");
+            row.setAttribute("role", "listitem");
+            const label = el("span", "chart-label", item.label);
+            if (item.title) label.title = item.title;
+            row.appendChild(label);
+            row.appendChild(el("span", "chart-value", item.valueText));
+            const track = el("span", "chart-track");
+            track.setAttribute("aria-hidden", "true");
+            const bar = el("span", "chart-bar");
+            const width = item.value > 0 ? Math.max(2, (item.value / max) * 100) : 0;
+            bar.style.width = `${Math.min(100, width)}%`;
+            track.appendChild(bar);
+            row.appendChild(track);
+            container.appendChild(row);
+        });
+    }
+
+    function renderHistoryDashboard(rows) {
+        if (!els.historyDashboard) return;
+        if (!rows.length) {
+            els.historyDashboard.hidden = true;
+            return;
+        }
+        els.historyDashboard.hidden = false;
+
+        const values = rows.map((row) => {
+            const value = Number(row.percent_changed);
+            return Number.isFinite(value) ? Math.max(0, value) : 0;
+        });
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const largest = Math.max(...values);
+        const uploads = rows.filter((row) => row.pipeline === "cnn").length;
+        const live = rows.length - uploads;
+
+        els.historyDashboardCount.textContent =
+            `${rows.length} saved ${rows.length === 1 ? "analysis" : "analyses"} · most recent first`;
+
+        clear(els.historyStats);
+        [
+            { label: "Saved analyses", value: String(rows.length), note: "in the local database" },
+            { label: "Live / image pair", value: `${live} / ${uploads}`, note: "from the saved pipeline" },
+            { label: "Average flagged", value: pct(mean), note: "simple mean, not area-weighted" },
+            { label: "Largest flagged", value: pct(largest), note: "single saved analysis" },
+        ].forEach((stat) => {
+            const wrapper = el("div", "dashboard-stat");
+            wrapper.appendChild(el("dt", null, stat.label));
+            const value = el("dd", null, stat.value);
+            value.appendChild(el("span", "stat-note", stat.note));
+            wrapper.appendChild(value);
+            els.historyStats.appendChild(wrapper);
+        });
+
+        const recent = rows.slice(0, 10);
+        renderChartRows(
+            els.historyRecentChart,
+            recent.map((row, index) => ({
+                label: `#${row.id} · ${row.location || (row.pipeline === "cnn" ? "Image pair" : "Live analysis")}`,
+                value: values[index],
+                valueText: pct(values[index]),
+                title: formatTimestamp(row.created_at),
+            })),
+            Math.max(...values.slice(0, 10), 0)
+        );
+
+        const ranges = [
+            { label: "Under 1%", count: values.filter((value) => value < 1).length },
+            { label: "1% to under 5%", count: values.filter((value) => value >= 1 && value < 5).length },
+            { label: "5% to under 10%", count: values.filter((value) => value >= 5 && value < 10).length },
+            { label: "10% or more", count: values.filter((value) => value >= 10).length },
+        ];
+        renderChartRows(
+            els.historyRangeChart,
+            ranges.map((range) => ({
+                label: range.label,
+                value: range.count,
+                valueText: `${range.count} ${range.count === 1 ? "analysis" : "analyses"}`,
+            })),
+            Math.max(...ranges.map((range) => range.count), 0)
+        );
+    }
+
     function renderHistory(rows) {
+        renderHistoryDashboard(rows);
         clear(els.historyList);
         if (!rows.length) {
             els.historyList.appendChild(el("p", "history-empty", "No analyses yet. Run one from the live Sentinel-2 tab."));
@@ -2435,6 +2527,7 @@
     /* ── Init ────────────────────────────────────────────────────────────── */
 
     function init() {
+        document.body.dataset.view = "live";
         wireThemeToggle();
         wireHonestyNote();
         wireTabs();
