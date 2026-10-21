@@ -92,10 +92,22 @@ def _result_fixture():
         "change_regions": [
             {"bounding_box": [10, 20, 30, 40], "pixel_area": 320, "area_ha": 0.32,
              "change_type": "Urban expansion / new construction", "confidence_label": "Medium",
+             "explanation": "The built-up index rose while vegetation fell, and the patch looks uniform and grey in the after image.",
              "stats": {"veg_ratio_before": 0.4, "veg_ratio_after": 0.1}},
             {"bounding_box": [50, 60, 10, 10], "pixel_area": 90, "area_ha": 0.09,
              "change_type": "Vegetation gain / reforestation", "confidence_label": "Low", "stats": {}},
         ],
+        "class_table": {
+            "rows": [
+                {"change_type": "Urban expansion / new construction", "area_ha": 0.32, "area_m2": 3200.0,
+                 "percent_of_aoi": 0.065, "region_count": 1},
+                {"change_type": "Vegetation gain / reforestation", "area_ha": 0.09, "area_m2": 900.0,
+                 "percent_of_aoi": 0.018, "region_count": 1},
+            ],
+            "total": {"change_type": "Total", "area_ha": 0.41, "area_m2": 4100.0,
+                      "percent_of_aoi": 0.083, "region_count": 2},
+            "note": "Area per type is summed over the patches shown.",
+        },
         "validation_status": "This profile has not been tested on labelled data.",
         "display_metrics": False,
         "image_a": _png_b64((40, 70, 40)),
@@ -174,7 +186,8 @@ def test_wizard_flow_goal_sync_and_area_formatting(page):
     assert page.locator("#profile-select").input_value() == "agriculture"
     assert "crop" in page.locator("#goal-note").inner_text().lower()
     page.locator(".goal-card", has_text="Water changes").click()
-    assert page.locator("#profile-select").input_value() == "general"
+    assert page.locator("#profile-select").input_value() == "water"
+    assert "moisture" in page.locator("#goal-note").inner_text().lower()
 
 
 def test_theme_toggle_and_friendly_network_error(page):
@@ -232,6 +245,16 @@ def test_results_dashboard_and_mobile_layout(page):
     assert "0.00 km²" not in cards
     assert "2 patches" in page.locator("#region-count").inner_text()
     assert page.locator("#download-heading").inner_text() == "Download the results"
+
+    assert page.locator("#class-table-block").is_visible()
+    table_text = page.locator("#class-table-body").inner_text()
+    assert "Urban expansion / new construction" in table_text
+    assert "Vegetation gain" in table_text
+    assert "Total" in table_text
+    assert "m²" in table_text or "ha" in table_text  # small class areas never shown as 0.00 km²
+    assert "km²" not in table_text
+    page.locator(".region-why summary").first.click()
+    assert "built-up index" in page.locator(".region-why p").first.inner_text()
 
     page.set_viewport_size({"width": 375, "height": 812})
     page.wait_for_timeout(300)
