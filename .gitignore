@@ -71,7 +71,7 @@ docs/paper/*.synctex.gz
 docs/paper/*.pdf
 
 # ── Large result artefacts ───────────────────────────────
-results/
+/results/
 *.csv.gz
 *.h5
 *.hdf5
