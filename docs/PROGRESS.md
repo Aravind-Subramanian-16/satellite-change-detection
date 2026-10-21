@@ -353,16 +353,13 @@ number is claimed.
 - [x] F1. `docs/paper/paper.tex` (IEEEtran) with abstract, introduction,
   related work placeholders, methods, experiments, results tables generated from
   JSON, ablations, discussion, limitations, conclusion.
-  - Evidence: `docs/paper/paper.tex` (IEEEtran conference): abstract,
-    introduction, related work with `[CITE: ...]` slots, data/task, methods,
-    protocol/scoring history, results using generated tables, validation-only
-    ablations, discussion with future work, limitations,
-    reproducibility/ethics, conclusion and appendix. It was **not compiled**:
-    no `pdflatex`/`tectonic`/`latexmk` on this host.
+  - Evidence: this Phase F draft was superseded by the Step 3 manuscript
+    below. It was **not compiled**: no `pdflatex`/`tectonic`/`latexmk` on this
+    host.
 - [x] F2. Honest framing (negative transfer: aggregate CNN F1 0.0007; spectral
   percentile F1 0.1176, hardcoded 0.0782, Otsu F1 0.0953 with OA 0.3439 as its
-  headline; two prior test-scoring events disclosed; third preregistered as v3
-  and uncomputed; four non-built-up profiles unvalidated).
+  headline; prior test scoring disclosed, total event count not recorded; v3
+  uncomputed; four non-built-up profiles unvalidated).
   - Evidence: abstract and results in `paper.tex`; v2 JSON/MD; the four
     unvalidated profiles are `general`, `agriculture`, `deforestation` and
     `roads` (plus experimental learned/fusion paths). `CLAIMS_AUDIT.md` lists
@@ -378,13 +375,10 @@ number is claimed.
   `docs/paper/figures/` (per-city F1, predicted vs true fraction,
   precision–recall, ablation, reliability, qualitative placeholder); test with
   fake JSON.
-  - Evidence: `scripts/make_paper_figures.py` strictly validates 10 cities ×
-    5 methods and writes six PNGs, three `.tex` tables and
-    `figure_manifest.json` (v2 hash
-    `37ffe2bbd01a43c07f04740847843f0176ea1118c17283456c34d2ff2a2bef8f`).
-    Ablation/reliability are labelled placeholders without inputs. Five tests
-    in `tests/test_paper_figures.py`, including rejection of missing methods,
-    duplicates and non-test rows.
+  - Evidence: superseded by Step 3, where the generator was rewritten to write
+    two figures and two tables from the saved OSCD JSON and degradation CSV.
+    The Phase F version wrote six PNGs and three `.tex` tables and validated
+    10 cities × 5 methods.
 - [x] F5. `CLAIMS_AUDIT.md`, `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md`
   (commands, hashes, seeds, Colab steps, OSCD CC BY-NC-SA and commercial-use
   caveat).
@@ -468,7 +462,8 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     `docs/paper/paper_draft_revised.docx`. Original left untouched at
     `/Users/aravind/Downloads/IEEE_Paper_Draft_Resolution_Mismatch_Change_Detection.docx`
     (SHA-256 `69442ffb...`). Table I recomputed from
-    `degradation_results.csv`; Table II corrected to 924+3+6+2=935;
+    `degradation_results.csv`; Table II corrected to 924+4+5+2=935 (revision
+    note in `DRAFT_CORRECTION_LOG.md`; commit `f317d89`);
     “stable between 0.5 and 1 m” and “precision above 97%” fixed; exact
     blur/LANCZOS method and AdamW/27-epoch training details corrected; OSCD
     v2 results added; repeated test scoring disclosed; no one-shot claim;
@@ -499,8 +494,39 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     `benchmarks/results/` evidence stays trackable. Push remains blocked by the
     environment after the earlier HTTP 400 failures; no force push or history
     rewrite was attempted.
-- [ ] Step 3. IEEEtran paper within four pages excluding references, with
+- [x] Step 3. IEEEtran paper within four pages excluding references, with
   `[CITE: topic]` placeholders only and figures generated from saved JSON.
+  - Evidence: `docs/paper/paper.tex` is a new IEEEtran conference manuscript
+    (title: “Resolution-Induced Performance Collapse of a CNN Change Detector:
+    Simulated and Real Sentinel-2 Evidence”) with a one-paragraph system
+    overview, the controlled degradation experiment, the OSCD evaluation,
+    discussion, limitations, conclusion and 15 `[CITE: ...]` slots; there is no
+    bibliography and no asserted reference metadata. About 2,609 source words
+    by `python` count with commands stripped; four floats (two figures, two
+    generated tables).
+  - Assets: `scripts/make_paper_figures.py` reads only
+    `benchmarks/results/oscd_results_v2.json` (SHA-256 `37ffe2bb...`) and
+    `degradation_results.csv`; it wrote
+    `fig_f1_vs_resolution.png`, `fig_oscd_per_city_and_fractions.png`,
+    `generated_degradation_table.tex`, `generated_oscd_table.tex` and
+    `figure_manifest.json` (commit `730b025`). The OSCD table includes OA so
+    Otsu's headline score is visible.
+  - Number cross-check: recomputing from `degradation_results.csv` gives, at
+    10 m, 2,048 images, 935 changed, 91,006 predicted pixels, 6,837,404
+    changed ground-truth pixels, TP 90,527, FP 479, and 924/4/5/2 images with
+    no prediction / IoU < 0.1 / 0.1–0.5 / ≥ 0.5. Pooled F1 values are 87.06,
+    70.81, 4.41, 2.84, 2.61 and 2.61 from factors 1–20. OSCD values match
+    `benchmarks/results/oscd_evidence.json`.
+  - Static checks: braces balanced (77/77 with `\input` expanded); all labels
+    resolve (`tab:degradation`, `tab:oscd`, `fig:resolution`, `fig:oscd`); all
+    four assets exist; no occurrence of “first”, “novel”, “state of the art”,
+    “one-shot”, “resolution-agnostic” or “under-studied”.
+  - Tests: `128 passed, 3 skipped, 1 warning in 10.35s`
+    (`./venv/bin/python -m pytest -q`), including `tests/test_paper_figures.py`.
+  - **Page count is unverified.** `pdflatex`, `tectonic` and `latexmk` are all
+    absent from this host, so no PDF was built. The owner must compile
+    `docs/paper/paper.tex` on Overleaf with IEEEtran and check the four-page
+    limit excluding references. Commits `f317d89`, `730b025`, `33146c4`.
 - [ ] Step 4. Reviewer-readiness documents (claims audit, objections,
   positioning, references to verify, threats, artifact, anonymisation).
 - [ ] Step 5. Twelve-slide talk, 10-minute notes, claims-on-slides, 20 Q&A,
