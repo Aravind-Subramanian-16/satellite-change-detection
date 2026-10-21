@@ -14,6 +14,7 @@ from PIL import Image
 
 import app as app_module
 import history_store
+import security
 from copernicus_client import MissingCredentialsError
 from spectral_pipeline import encode_indices
 
@@ -370,13 +371,13 @@ def _pdf_text(data: bytes) -> str:
     import zlib
 
     chunks = []
-    for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.S):
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.DOTALL):
         raw = match.group(1).strip()
         try:
             if raw.endswith(b"~>"):
                 raw = base64.a85decode(raw, adobe=True)
             raw = zlib.decompress(raw)
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - image streams use filters we do not decode
             continue
         chunks.append(raw.decode("latin-1", "replace"))
     return "\n".join(chunks)
@@ -402,6 +403,26 @@ def test_report_endpoint_returns_pdf_with_the_same_numbers(client, monkeypatch):
     empty = client.post("/report", json={"result": {}})
     assert empty.status_code == 200
     assert empty.content.startswith(b"%PDF")
+
+
+def test_history_report_endpoint_returns_the_stored_pdf(client, monkeypatch):
+    pytest.importorskip("reportlab")
+    _use_fake(monkeypatch, FakeCopernicusClient())
+    data = client.post("/fetch-and-predict", json=_live_payload()).json()
+
+    report = client.get(f"/history/{data['history_id']}/report")
+    assert report.status_code == 200
+    assert report.headers["content-type"] == "application/pdf"
+    assert report.content.startswith(b"%PDF")
+
+    missing = client.get("/history/999999/report")
+    assert missing.status_code == 404
+
+
+def test_history_routes_are_rate_limited():
+    assert security.is_rate_limited_path("/history")
+    assert security.is_rate_limited_path("/history/12/report")
+    assert security.is_rate_limited_path("/history/12/export/geojson")
 
 
 @pytest.mark.parametrize(

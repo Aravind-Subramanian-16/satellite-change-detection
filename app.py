@@ -485,12 +485,30 @@ async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(..
 @app.post("/report")
 async def download_report(req: ReportRequest):
     """Render a self-contained PDF from a completed API response."""
+    return _pdf_response(req.result)
+
+
+def _pdf_response(result: dict) -> Response:
     try:
         with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
-            build_report(req.result, tmp.name)
-            return Response(content=open(tmp.name, "rb").read(), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=change-report.pdf"})
-    except Exception as exc:
+            build_report(result, tmp.name)
+            with open(tmp.name, "rb") as handle:
+                content = handle.read()
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=change-report.pdf"},
+        )
+    except Exception as exc:  # noqa: BLE001 - any rendering failure must be a clear 500
         raise HTTPException(status_code=500, detail=f"Could not generate report: {exc}")
+
+@app.get("/history/{analysis_id}/report")
+async def history_report(analysis_id: int):
+    """Render the PDF report for a stored analysis without re-posting it."""
+    item = get_analysis(analysis_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return _pdf_response(item["result"])
 
 @app.get("/history")
 async def history(limit: int = 50):

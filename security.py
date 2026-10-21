@@ -106,7 +106,7 @@ def client_identity(request: Request) -> str:
 
 
 class SlidingWindowLimiter:
-    """Thread-safe per-client sliding window; only failed requests are counted."""
+    """Thread-safe per-client sliding window; every limited request counts."""
 
     def __init__(self, window_seconds: float = 60.0):
         self.window_seconds = float(window_seconds)
@@ -153,6 +153,7 @@ LIMITED_PATHS = (
     "/geocode-suggest",
     "/report",
     "/export/",
+    "/history",
 )
 
 
