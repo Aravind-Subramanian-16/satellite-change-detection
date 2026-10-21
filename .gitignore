@@ -46,3 +46,36 @@ server_log.txt
 # ── Test outputs & scratch ───────────────────────────────
 response.json
 test_result.json
+
+# ── Archives & media (keep out of history) ──────────────
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# ── LaTeX build artefacts ────────────────────────────────
+docs/paper/*.aux
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.toc
+docs/paper/*.bbl
+docs/paper/*.blg
+docs/paper/*.fls
+docs/paper/*.fdb_latexmk
+docs/paper/*.synctex.gz
+docs/paper/*.pdf
+
+# ── Large result artefacts ───────────────────────────────
+results/
+*.csv.gz
+*.h5
+*.hdf5
+*.pkl
+
+# ── Colab / notebook checkpoints ─────────────────────────
+.ipynb_checkpoints/
