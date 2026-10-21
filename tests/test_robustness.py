@@ -8,12 +8,16 @@ from __future__ import annotations
 import io
 import tarfile
 
+import numpy as np
 import pytest
 import requests
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import app as app_module
 import copernicus_client as cc
+from live_pipeline import _fetch_window
+from spectral_pipeline import encode_indices
 
 
 class FakeResponse:
@@ -211,3 +215,42 @@ def test_health_reports_cnn_and_spectral_availability(monkeypatch, tmp_path):
     assert payload["cnn_available"] is False
     assert payload["spectral_available"] is True
     assert payload["model_present"] is False
+
+
+# ── Composite without extended indices + history limits ─────────────────────
+
+
+def _png_bytes(array: np.ndarray) -> bytes:
+    buffer = io.BytesIO()
+    Image.fromarray(np.asarray(array, dtype=np.uint8)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_fetch_window_composites_when_indices_ext_is_missing():
+    shape = (8, 8)
+    ndvi = np.full(shape, 0.5, dtype=np.float32)
+    ndbi = np.zeros(shape, dtype=np.float32)
+    scl = np.zeros(shape, dtype=np.uint8)
+    indices_png = _png_bytes(encode_indices(ndvi, ndbi, scl))
+    rgb_png = _png_bytes(np.full(shape + (3,), 90))
+
+    class ClientWithoutExt:
+        def fetch_scene(self, bbox, scene, output_size=None):
+            return {
+                "rgb": rgb_png,
+                "indices": indices_png,
+                "indices_ext": b"",
+                "scene_id": scene["id"],
+                "datetime": "2025-05-01T10:00:00Z",
+                "width": shape[1],
+                "height": shape[0],
+            }
+
+    ranked = [
+        {"id": "A", "datetime": "2025-05-01T10:00:00Z", "cloud_cover_percent": 2.0},
+        {"id": "B", "datetime": "2025-05-02T10:00:00Z", "cloud_cover_percent": 3.0},
+    ]
+    window = _fetch_window(ClientWithoutExt(), [10.0, 20.0, 10.01, 20.01], ranked, ranked[0], shape, 2)
+    assert window["composite_count"] == 2
+    assert window["decoded_bundle"]["ext"] is None
+    assert window["decoded_bundle"]["decoded"]["ndvi"].shape == shape

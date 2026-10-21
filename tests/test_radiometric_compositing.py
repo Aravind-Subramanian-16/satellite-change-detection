@@ -82,3 +82,13 @@ def test_radiometric_normalisation_removes_gain_offset_false_positives():
     assert corrected[10:20, 10:20].all()
     assert corrected_meta["radiometric_normalisation"]["ndvi"]["applied"] is True
     assert raw_meta["radiometric_normalisation"] is None
+
+
+def test_median_composite_broadcasts_pixel_masks_across_bands():
+    first = np.ones((2, 2, 3), np.float32)
+    second = np.full((2, 2, 3), 5.0, np.float32)
+    result = median_composite(
+        [first, second],
+        [np.zeros((2, 2), bool), np.ones((2, 2), bool)],
+    )
+    assert np.allclose(result, 1.0)  # the fully masked second scene is ignored

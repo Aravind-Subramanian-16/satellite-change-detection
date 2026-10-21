@@ -10,10 +10,14 @@ from PIL import Image
 
 from change_reasoner import reason_regions
 from compositing import median_composite
-from copernicus_client import CopernicusError, MissingCredentialsError, NoScenesError
+from copernicus_client import CopernicusError, NoScenesError
 from osm_roads import OsmError, osm_road_context
 from profiles import get_profile, profile_public
-from profiles.detection import detect_profile, indices_from_encoded, relabel_water_regions
+from profiles.detection import (
+    detect_profile,
+    indices_from_encoded,
+    relabel_water_regions,
+)
 from profiles.explanations import explain_region
 from provenance import build_provenance
 from scene_selection import rank_scenes, season_warning, validate_aoi
@@ -133,11 +137,15 @@ def _fetch_window(
         masks = [np.isin(bundle["decoded_bundle"]["scl"], CLOUD_CLASSES) for bundle in bundles]
         rgb = median_composite([bundle["decoded_bundle"]["rgb"] for bundle in bundles], masks)
         indices = median_composite([bundle["decoded_bundle"]["indices"] for bundle in bundles], masks)
-        ext = median_composite([bundle["decoded_bundle"]["ext"] for bundle in bundles], masks)
+        ext_values = [bundle["decoded_bundle"]["ext"] for bundle in bundles]
+        if all(value is not None for value in ext_values):
+            ext = median_composite(ext_values, masks)
+            ext = np.nan_to_num(ext, nan=0.0).clip(0, 255).astype(np.float32)
+        else:
+            ext = None
         rgb = np.nan_to_num(rgb, nan=0.0).clip(0, 255).astype(np.uint8)
         indices = np.nan_to_num(indices, nan=0.0).clip(0, 255).astype(np.float32)
-        ext = np.nan_to_num(ext, nan=0.0).clip(0, 255).astype(np.float32)
-        decoded, scl = indices_from_encoded(indices, ext if ext.size else None)
+        decoded, scl = indices_from_encoded(indices, ext if ext is not None and ext.size else None)
         result["decoded_bundle"] = {"rgb": rgb, "indices": indices, "ext": ext, "decoded": decoded, "scl": scl}
         result["cloud_fraction"] = cloud_fraction(scl)
         result["composite_count"] = len(bundles)

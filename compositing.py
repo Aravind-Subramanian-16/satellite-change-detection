@@ -14,7 +14,10 @@ def median_composite(arrays: list[np.ndarray], masks: list[np.ndarray] | None = 
     if masks is not None:
         mask_stack = np.stack([np.asarray(mask, dtype=bool) for mask in masks])
         if mask_stack.shape != stack.shape:
-            raise ValueError("masks must match the array shape")
+            if stack.ndim == mask_stack.ndim + 1 and stack.shape[:-1] == mask_stack.shape:
+                mask_stack = np.broadcast_to(mask_stack[..., None], stack.shape)
+            else:
+                raise ValueError("masks must match the array shape")
         stack = np.where(mask_stack, np.nan, stack)
     with np.errstate(invalid="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
