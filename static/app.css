@@ -1084,6 +1084,43 @@ input[type="date"] { color-scheme: dark; }
 .region-meta b { color: var(--text); font-weight: 600; }
 .region-empty { font-size: 0.84rem; color: var(--dim); }
 
+.region-why { margin-top: 0.45rem; font-size: 0.8rem; }
+.region-why summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.76rem;
+    user-select: none;
+}
+.region-why summary:hover { text-decoration: underline; }
+.region-why p { margin: 0.35rem 0 0; color: var(--muted); line-height: 1.45; }
+
+.table-wrap { overflow-x: auto; }
+.class-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+.class-table th,
+.class-table td {
+    text-align: left;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.class-table thead th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    border-bottom: 2px solid var(--line-strong);
+}
+.class-table tbody th { font-weight: 600; color: var(--text); }
+.class-table tr.is-total th,
+.class-table tr.is-total td { border-top: 2px solid var(--line-strong); border-bottom: none; color: var(--text); font-weight: 700; }
+.class-table-note { margin-top: 0.35rem; }
+
 .road-context {
     margin-top: 0.9rem;
     border: 1px solid var(--line);

@@ -78,6 +78,9 @@
         regionCount: $("#region-count"),
         roadContext: $("#road-context"),
         profileNotes: $("#profile-notes"),
+        classTableBlock: $("#class-table-block"),
+        classTableBody: $("#class-table-body"),
+        classTableNote: $("#class-table-note"),
         timelineCard: $("#timeline-card"),
         timelineDates: $("#timeline-dates"),
         timelineBtn: $("#timeline-btn"),
@@ -927,20 +930,21 @@
         farmland: "agriculture",
         buildings: "builtup",
         forest: "deforestation",
-        water: "general",
+        water: "water",
     };
     const PROFILE_GOALS = {
         general: "any",
         agriculture: "farmland",
         builtup: "buildings",
         deforestation: "forest",
+        water: "water",
     };
     const GOAL_NOTES = {
         any: "Looks at every kind of change and labels each patch as best the rules can. The clearest signals are usually vegetation loss or new bare ground; fine detail is missed at 10 m.",
-        farmland: "Compares how green and how wet the fields were: spots harvest, clearing, and stressed crops. Comparing different seasons can confuse crop cycles with damage.",
+        farmland: "Compares how green and how wet the fields were: spots patches that lost greenness, patches that became greener, and stressed crops. Comparing different seasons can confuse crop cycles with damage.",
         buildings: "Looks for more built-up surface between the two dates. Tested on one urban dataset with moderate scores; individual buildings (under about 10 m) are usually missed.",
         forest: "Looks for trees turning to bare ground or water. Seasonal leaf change can be mistaken for loss, so compare similar seasons where you can.",
-        water: "Looks for water appearing or disappearing. The general rules are used for now, so shadows and wet soil can be mistaken for water.",
+        water: "Looks for open water appearing or disappearing using two moisture rules. This has not been tested against labelled data, and wet soil or shadows can be mistaken for water.",
     };
 
     function selectedGoal() {
@@ -1350,6 +1354,7 @@
         renderSummaryCards(result, isCnn);
         renderWarnings(result);
         renderStats(result, isCnn);
+        renderClassTable(result);
         renderCompare(result);
         renderEvidence(result);
         renderRegions(result);
@@ -1547,6 +1552,34 @@
             addStat("Raster", `${fmtNumber(result.image_shape[1], 0)} × ${fmtNumber(result.image_shape[0], 0)} px`);
         }
         if (isCnn) addStat("Mode", "pair upload");
+    }
+
+    function renderClassTable(result) {
+        const table = result.class_table;
+        clear(els.classTableBody);
+        if (!table || !Array.isArray(table.rows) || !table.rows.length) {
+            els.classTableBlock.hidden = true;
+            return;
+        }
+        els.classTableBlock.hidden = false;
+        table.rows.forEach((row) => {
+            const tr = el("tr");
+            tr.appendChild(el("th", "class-name", row.change_type || "Unlabelled change"));
+            tr.appendChild(el("td", null, formatAreaKm2(Number(row.area_ha || 0) / 100)));
+            tr.appendChild(el("td", null, pct(row.percent_of_aoi)));
+            tr.appendChild(el("td", null, String(row.region_count ?? 0)));
+            els.classTableBody.appendChild(tr);
+        });
+        const total = table.total;
+        if (total) {
+            const tr = el("tr", "is-total");
+            tr.appendChild(el("th", "class-name", total.change_type || "Total"));
+            tr.appendChild(el("td", null, formatAreaKm2(Number(total.area_ha || 0) / 100)));
+            tr.appendChild(el("td", null, pct(total.percent_of_aoi)));
+            tr.appendChild(el("td", null, String(total.region_count ?? 0)));
+            els.classTableBody.appendChild(tr);
+        }
+        els.classTableNote.textContent = table.note || "";
     }
 
     function setComparePosition(value) {
@@ -1811,6 +1844,13 @@
                 }
             }
             card.appendChild(meta);
+            if (region.explanation) {
+                const why = el("details", "region-why");
+                const summary = el("summary", null, "Why we think this changed");
+                why.appendChild(summary);
+                why.appendChild(el("p", null, region.explanation));
+                card.appendChild(why);
+            }
             els.regionsList.appendChild(card);
         });
         renderRoadContext(result);
