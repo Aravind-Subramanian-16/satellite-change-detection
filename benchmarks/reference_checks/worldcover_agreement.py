@@ -29,10 +29,14 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agreement import WORLDCOVER_NAMES, build_agreement_report  # noqa: E402
+from agreement import WORLDCOVER_NAMES, build_agreement_report
 
 
 def _load_result(path: str) -> dict:
@@ -51,13 +55,13 @@ def _validate_result(result: dict) -> None:
         raise SystemExit("The result has no aoi.bbox; pixel boxes cannot be placed geographically.")
 
 
-def _align_reference(reference: str, result: dict) -> "numpy.ndarray":  # noqa: F821
+def _align_reference(reference: str, result: dict) -> np.ndarray:
     try:
         import numpy as np
         import rasterio
-        from rasterio.warp import calculate_default_transform, reproject, Resampling
         from rasterio.crs import CRS
         from rasterio.transform import from_bounds
+        from rasterio.warp import Resampling, reproject
     except ImportError as exc:
         raise SystemExit(
             "rasterio is needed to align the reference GeoTIFF (pip install rasterio). "
@@ -71,18 +75,19 @@ def _align_reference(reference: str, result: dict) -> "numpy.ndarray":  # noqa: 
     destination = np.zeros((height, width), dtype=np.uint8)
     try:
         with rasterio.open(reference) as src:
-            transform, _, _ = calculate_default_transform(
-                src.crs, dst_crs, src.width, src.height, *src.bounds, dst_width=width, dst_height=height
-            )
+            if src.crs is None:
+                raise SystemExit("The reference raster has no CRS; reprojection is impossible.")
             reproject(
                 source=rasterio.band(src, 1),
                 destination=destination,
                 src_transform=src.transform,
                 src_crs=src.crs,
-                dst_transform=transform,
+                dst_transform=dst_transform,
                 dst_crs=dst_crs,
                 resampling=Resampling.mode,
             )
+    except SystemExit:
+        raise
     except Exception as exc:
         raise SystemExit(f"Could not read or align the reference raster: {exc}") from exc
     return destination

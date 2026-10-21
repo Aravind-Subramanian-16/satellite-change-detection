@@ -5,7 +5,12 @@ import numpy as np
 
 from postprocess import apply_mmu, morphological_cleanup
 from profiles import ProfileConfig
-from spectral_pipeline import SpectralConfig, cloud_mask, decode_indices, detect_from_indices
+from spectral_pipeline import (
+    SpectralConfig,
+    cloud_mask,
+    decode_indices,
+    detect_from_indices,
+)
 
 INDEX_KEYS = ("ndvi", "ndbi", "nbr", "ndmi", "bsi")
 

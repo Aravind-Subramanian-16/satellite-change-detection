@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks" / "reference_checks"))
 
-from agreement import (  # noqa: E402
+from agreement import (
     REPORT_NOTE,
     WORLDCOVER_NAMES,
     build_agreement_report,
