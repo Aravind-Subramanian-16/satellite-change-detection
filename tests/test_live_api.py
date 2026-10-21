@@ -313,6 +313,57 @@ def test_fetch_and_predict_supports_builtup_extended_indices(client, monkeypatch
     assert data["change_regions"]
 
 
+def test_fetch_and_predict_water_profile_reports_honest_plumbing(client, monkeypatch):
+    _use_fake(monkeypatch, FakeCopernicusClient())
+    response = client.post("/fetch-and-predict", json=_live_payload(profile="water"))
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["profile"] == "water"
+    assert data["validation_status"] == "unvalidated, qualitative only"
+    assert data["display_metrics"] is False
+    provenance = data["provenance"]["threshold_provenance"]
+    assert provenance["water_ndvi_max"].startswith("chosen by developer, untested")
+    assert data["class_table"] == {"rows": [], "total": {
+        "change_type": "Total", "area_ha": 0.0, "area_m2": 0.0,
+        "percent_of_aoi": 0.0, "region_count": 0,
+    }, "note": data["class_table"]["note"]}
+
+
+def test_fetch_and_predict_agriculture_adds_crop_cycle_note_and_explanations(client, monkeypatch):
+    _use_fake(monkeypatch, FakeCopernicusClient())
+    response = client.post("/fetch-and-predict", json=_live_payload(profile="agriculture"))
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    codes = [warning["code"] for warning in data["warnings"]]
+    assert "crop_cycle" in codes
+    assert data["change_regions"]
+    assert all(region["explanation"] for region in data["change_regions"])
+    assert data["class_table"]["rows"]
+    assert data["class_table"]["total"]["region_count"] == len(data["change_regions"])
+
+
+def test_exported_class_table_matches_the_api_response(client, monkeypatch):
+    _use_fake(monkeypatch, FakeCopernicusClient())
+    response = client.post("/fetch-and-predict", json=_live_payload(profile="agriculture"))
+    data = response.json()
+
+    geojson = client.post("/export/geojson", json={"result": data})
+    assert geojson.status_code == 200
+    assert geojson.json()["metadata"]["class_table"]["rows"] == data["class_table"]["rows"]
+
+    csv = client.post("/export/csv", json={"result": data})
+    assert csv.status_code == 200
+    assert "\nclass_summary\n" in csv.text
+    block = [line for line in csv.text.split("class_summary\n", 1)[1].strip().splitlines() if not line.startswith("#")]
+    header = block[0].split(",")
+    total = block[-1].split(",")
+    assert header[:2] == ["class", "area_ha"]
+    assert total[0] == "Total"
+    assert float(total[1]) == pytest.approx(data["class_table"]["total"]["area_ha"])
+
+
 @pytest.mark.parametrize(
     ("overrides", "fragment"),
     [
