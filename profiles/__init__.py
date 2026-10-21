@@ -23,6 +23,7 @@ class ProfileConfig:
     show_road_context: bool = False
     report_wording: tuple[str, ...] = ()
     honesty_notes: tuple[str, ...] = ()
+    threshold_provenance: dict = field(default_factory=dict)
     extra: dict = field(default_factory=dict)
 
 
@@ -46,21 +47,28 @@ PROFILES: dict[str, ProfileConfig] = {
     "agriculture": ProfileConfig(
         key="agriculture",
         label="Agriculture",
-        description="NDVI and NDMI (B08/B11) difference for cropland stress or vegetation loss.",
+        description="NDVI and NDMI (B08/B11) difference for cropland stress, vegetation loss or gain.",
         indices=("ndvi", "ndmi"),
-        thresholds={"ndvi_drop": 0.15, "ndmi_drop": 0.12, "stress_ndvi_drop": 0.05},
+        thresholds={"ndvi_drop": 0.15, "ndmi_drop": 0.12, "stress_ndvi_drop": 0.05, "ndvi_gain": 0.15},
         mmu_ha=0.5,
         season_warning=True,
         supports_timeline=True,
         report_wording=(
             "A single NDVI/NDMI pair confuses harvest, irrigation scheduling and seasonal phenology with crop damage.",
             "Use the multi-date NDVI timeline and field knowledge before interpreting a loss as stress.",
+            "Patches that became greener are reported separately from patches that lost greenness.",
         ),
         honesty_notes=(
             "Unvalidated, qualitative only: no labelled agriculture dataset has been scored.",
             "At 10 m, small fields, mixed crops and field boundaries are sub-pixel or mixed.",
             "A same-season pair is required for interpretation; cross-season results are flagged.",
         ),
+        threshold_provenance={
+            "ndvi_drop": "pre-existing threshold, unchanged in this redesign.",
+            "ndmi_drop": "pre-existing threshold, unchanged in this redesign.",
+            "stress_ndvi_drop": "pre-existing threshold, unchanged in this redesign.",
+            "ndvi_gain": "chosen by developer, untested: mirrors the magnitude of ndvi_drop so greening and browning are treated symmetrically.",
+        },
     ),
     "deforestation": ProfileConfig(
         key="deforestation",
@@ -118,6 +126,30 @@ PROFILES: dict[str, ProfileConfig] = {
             "Changed area near a mapped road is not evidence that the road itself changed.",
         ),
     ),
+    "water": ProfileConfig(
+        key="water",
+        label="Water",
+        description="NDVI and NDMI (moisture) rules for open water appearing or disappearing. The green band needed for the usual water index is not fetched, so this is a coarse estimate.",
+        indices=("ndvi", "ndmi"),
+        thresholds={"water_ndvi_max": -0.05, "water_ndmi_max": -0.15},
+        mmu_ha=0.25,
+        season_warning=True,
+        cloud_mask_mandatory=True,
+        report_wording=(
+            "Water is estimated from two moisture-sensitive indices (NDVI and NDMI). Wet soil, shadow and dark surfaces can be confused with open water.",
+            "Cloud and shadow masking is mandatory for this profile because shadows look like water.",
+            "Patches are labelled 'New surface water' or 'Water lost' by comparing the before and after indices.",
+        ),
+        honesty_notes=(
+            "Unvalidated, qualitative only: no labelled water dataset has been scored.",
+            "Seasonal floods, tides, irrigation and reservoir operation change water extent between any two dates; this is not a flood assessment.",
+            "A 0.25 ha minimum mapping unit at 10 m is about 25 pixels; smaller ponds are intentionally discarded.",
+        ),
+        threshold_provenance={
+            "water_ndvi_max": "chosen by developer, untested: open water typically has NDVI below 0; -0.05 admits mixed shoreline pixels.",
+            "water_ndmi_max": "chosen by developer, untested: NDMI (B08/B11 moisture index) is negative over open water; -0.15 requires a clear moisture signal.",
+        },
+    ),
 }
 
 
@@ -148,6 +180,7 @@ def profile_public(key: str | None) -> dict:
         "show_road_context": config.show_road_context,
         "report_wording": list(config.report_wording),
         "honesty_notes": list(config.honesty_notes),
+        "threshold_provenance": dict(config.threshold_provenance),
         "validation_status": registry.get("status", "unvalidated, qualitative only"),
         "validation_short": registry.get("short", "unvalidated"),
         "validation_evidence": registry.get("evidence", ""),

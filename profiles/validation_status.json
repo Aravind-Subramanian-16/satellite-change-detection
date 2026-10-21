@@ -28,5 +28,11 @@
     "short": "unvalidated",
     "display_metrics": false,
     "evidence": "No road labels have been scored. Roads narrower than about 20 m are mostly sub-pixel at 10 m Sentinel-2 resolution, so this profile does not claim road detection; OSM is context only."
+  },
+  "water": {
+    "status": "unvalidated, qualitative only",
+    "short": "unvalidated",
+    "display_metrics": false,
+    "evidence": "No labelled water dataset has been scored. The profile uses NDVI/NDMI thresholds chosen by the developer; the green-band water index (NDWI) is not available in the current Evalscript, so wet soil, shadow and dark surfaces can be confused with open water."
   }
 }

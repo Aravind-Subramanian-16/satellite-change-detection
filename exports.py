@@ -51,26 +51,31 @@ def regions_to_geojson(result: dict) -> dict:
             "area_m2": region.get("area_m2"),
             "area_ha": region.get("area_ha"),
             "uncertainty": region.get("uncertainty"),
+            "explanation": region.get("explanation"),
             "profile": result.get("profile", "general"),
             **centroid,
         }
         features.append({"type": "Feature", "geometry": geometry, "properties": properties})
     provenance = result.get("provenance") or {}
+    metadata = {
+        "coordinate_reference_system": "EPSG:4326" if aoi and shape else "image-pixel (origin top-left)",
+        "pipeline": result.get("pipeline"),
+        "profile": result.get("profile", "general"),
+        "validation_status": result.get("validation_status"),
+        "scene_ids": provenance.get("scene_ids"),
+        "dates": provenance.get("dates"),
+        "commit": provenance.get("commit"),
+        "timestamp_utc": provenance.get("timestamp_utc"),
+        "percent_masked": result.get("percent_cloud_masked"),
+        "note": "Bounding-box polygons. Decision support, not ground truth.",
+    }
+    class_table = result.get("class_table")
+    if class_table and class_table.get("rows"):
+        metadata["class_table"] = class_table
     return {
         "type": "FeatureCollection",
         "features": features,
-        "metadata": {
-            "coordinate_reference_system": "EPSG:4326" if aoi and shape else "image-pixel (origin top-left)",
-            "pipeline": result.get("pipeline"),
-            "profile": result.get("profile", "general"),
-            "validation_status": result.get("validation_status"),
-            "scene_ids": provenance.get("scene_ids"),
-            "dates": provenance.get("dates"),
-            "commit": provenance.get("commit"),
-            "timestamp_utc": provenance.get("timestamp_utc"),
-            "percent_masked": result.get("percent_cloud_masked"),
-            "note": "Bounding-box polygons. Decision support, not ground truth.",
-        },
+        "metadata": metadata,
     }
 
 
@@ -79,6 +84,7 @@ def regions_to_csv(result: dict) -> str:
     columns = [
         "region_id", "change_type", "confidence", "pixel_area", "area_m2", "area_ha",
         "uncertainty", "x", "y", "width", "height", "centroid_lon", "centroid_lat",
+        "explanation",
     ]
     writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
     writer.writeheader()
@@ -99,8 +105,41 @@ def regions_to_csv(result: dict) -> str:
                 "x": x, "y": y, "width": width, "height": height,
                 "centroid_lon": centroid.get("centroid_lon", ""),
                 "centroid_lat": centroid.get("centroid_lat", ""),
+                "explanation": region.get("explanation", ""),
             }
         )
+    class_table = result.get("class_table")
+    if class_table and class_table.get("rows"):
+        summary_writer = csv.DictWriter(
+            buffer,
+            fieldnames=["class", "area_ha", "area_m2", "percent_of_aoi", "region_count"],
+            lineterminator="\n",
+        )
+        buffer.write("\nclass_summary\n")
+        summary_writer.writeheader()
+        for row in class_table["rows"]:
+            summary_writer.writerow(
+                {
+                    "class": row["change_type"],
+                    "area_ha": row["area_ha"],
+                    "area_m2": row["area_m2"],
+                    "percent_of_aoi": row["percent_of_aoi"],
+                    "region_count": row["region_count"],
+                }
+            )
+        total = class_table.get("total") or {}
+        summary_writer.writerow(
+            {
+                "class": total.get("change_type", "Total"),
+                "area_ha": total.get("area_ha", ""),
+                "area_m2": total.get("area_m2", ""),
+                "percent_of_aoi": total.get("percent_of_aoi", ""),
+                "region_count": total.get("region_count", ""),
+            }
+        )
+        note = class_table.get("note")
+        if note:
+            buffer.write(f"# {note}\n")
     return buffer.getvalue()
 
 

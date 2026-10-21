@@ -13,7 +13,8 @@ from compositing import median_composite
 from copernicus_client import CopernicusError, MissingCredentialsError, NoScenesError
 from osm_roads import OsmError, osm_road_context
 from profiles import get_profile, profile_public
-from profiles.detection import detect_profile, indices_from_encoded
+from profiles.detection import detect_profile, indices_from_encoded, relabel_water_regions
+from profiles.explanations import explain_region
 from provenance import build_provenance
 from scene_selection import rank_scenes, season_warning, validate_aoi
 from spectral_pipeline import CLOUD_CLASSES
@@ -170,6 +171,69 @@ def _enrich_regions(regions: list[dict], pixel_area_m2: float) -> list[dict]:
     return regions
 
 
+def build_class_table(regions: list[dict], aoi_area_ha: float) -> dict:
+    """Aggregate patch areas per change type; one source of truth for UI, CSV and GeoJSON."""
+    rows: dict[str, dict] = {}
+    for region in regions:
+        change_type = region.get("change_type") or "Unlabelled change"
+        row = rows.setdefault(
+            change_type,
+            {"change_type": change_type, "area_ha": 0.0, "area_m2": 0.0, "region_count": 0},
+        )
+        row["area_ha"] += float(region.get("area_ha") or 0.0)
+        row["area_m2"] += float(region.get("area_m2") or 0.0)
+        row["region_count"] += 1
+    table = sorted(rows.values(), key=lambda row: row["area_ha"], reverse=True)
+    for row in table:
+        row["area_ha"] = round(row["area_ha"], 3)
+        row["area_m2"] = round(row["area_m2"], 2)
+        row["percent_of_aoi"] = round(100.0 * row["area_ha"] / aoi_area_ha, 3) if aoi_area_ha > 0 else 0.0
+    total_ha = sum(row["area_ha"] for row in table)
+    total = {
+        "change_type": "Total",
+        "area_ha": round(total_ha, 3),
+        "area_m2": round(total_ha * 10_000.0, 2),
+        "percent_of_aoi": round(100.0 * total_ha / aoi_area_ha, 3) if aoi_area_ha > 0 else 0.0,
+        "region_count": len(regions),
+    }
+    return {
+        "rows": table,
+        "total": total,
+        "note": (
+            "Area per type is summed over the patches shown (the largest 20), not over every "
+            "flagged pixel; masked and sub-threshold pixels are not counted."
+        ),
+    }
+
+
+def profile_warnings(profile_key: str, regions: list[dict]) -> list[dict]:
+    """Plain-language caveats tied to a profile and the labels it produced."""
+    warnings: list[dict] = []
+    if profile_key == "agriculture":
+        warnings.append(
+            {
+                "code": "crop_cycle",
+                "severity": "info",
+                "message": (
+                    "Two single dates cannot separate harvest, ploughing or irrigation from crop "
+                    "damage. Use the greenness timeline below and local crop calendars before acting."
+                ),
+            }
+        )
+        if any(region.get("change_type") == "Likely bare soil / land clearing" for region in regions):
+            warnings.append(
+                {
+                    "code": "agriculture_ambiguity",
+                    "severity": "warning",
+                    "message": (
+                        "Some flagged patches look like bare soil or harvested fields in the after "
+                        "image. This is often a normal part of the crop cycle, not damage."
+                    ),
+                }
+            )
+    return warnings
+
+
 def _summary(percent: float, regions: list[dict], profile_label: str, place: str, before: str, after: str) -> str:
     if percent < 5:
         severity = "minimal"
@@ -315,6 +379,12 @@ def analyse_pair(
         idx_b=after_bundle["indices"],
     )
     _enrich_regions(regions, pixel_area_m2)
+    if config.key == "water":
+        relabel_water_regions(regions, float(config.thresholds["water_ndvi_max"]))
+    for region in regions:
+        region["explanation"] = explain_region(region, config.key)
+    class_table = build_class_table(regions, float(aoi["area_km2"]) * 100.0)
+    warnings.extend(profile_warnings(config.key, regions))
 
     road_context = None
     if (config.show_road_context or include_road_context) and mask.any():
@@ -364,6 +434,7 @@ def analyse_pair(
             },
             "aoi": {"bbox": bbox, "area_km2": aoi["area_km2"]},
             "pixel_size_m": [round(pixel_x, 2), round(pixel_y, 2)],
+            "threshold_provenance": dict(config.threshold_provenance),
         },
     )
     result = {
@@ -376,6 +447,7 @@ def analyse_pair(
         "overlay_base64": _encode(overlay_image),
         "confidence_base64": _encode(Image.fromarray((confidence * 255).astype(np.uint8))),
         "change_regions": regions,
+        "class_table": class_table,
         "thresholds": meta,
         "pipeline": "spectral",
         "profile": config.key,

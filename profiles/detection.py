@@ -144,8 +144,13 @@ def detect_profile(
         d_ndmi = indices_b["ndmi"] - indices_a["ndmi"]
         stress = (d_ndmi < -float(t["ndmi_drop"])) & (d_ndvi < -float(t["stress_ndvi_drop"]))
         vegetation_loss = d_ndvi < -float(t["ndvi_drop"])
-        mask = (stress | vegetation_loss) & valid
-        flags = {"cropland_stress": int(stress.sum()), "vegetation_loss": int(vegetation_loss.sum())}
+        vegetation_gain = d_ndvi > float(t.get("ndvi_gain", 0.15))
+        mask = (stress | vegetation_loss | vegetation_gain) & valid
+        flags = {
+            "cropland_stress": int(stress.sum()),
+            "vegetation_loss": int(vegetation_loss.sum()),
+            "vegetation_gain": int(vegetation_gain.sum()),
+        }
     elif profile.key == "deforestation":
         nbr_drop = indices_a["nbr"] - indices_b["nbr"]
         ndvi_drop = indices_a["ndvi"] - indices_b["ndvi"]
@@ -189,6 +194,17 @@ def detect_profile(
             }
         )
         return np.asarray(mask, dtype=np.uint8), invalid, meta
+    elif profile.key == "water":
+        water_a = (indices_a["ndvi"] < float(t["water_ndvi_max"])) & (
+            indices_a["ndmi"] < float(t["water_ndmi_max"])
+        )
+        water_b = (indices_b["ndvi"] < float(t["water_ndvi_max"])) & (
+            indices_b["ndmi"] < float(t["water_ndmi_max"])
+        )
+        gain = water_b & ~water_a
+        loss = water_a & ~water_b
+        mask = (gain | loss) & valid
+        flags = {"water_gain_pixels": int(gain.sum()), "water_loss_pixels": int(loss.sum())}
     else:  # pragma: no cover - get_profile prevents this
         raise ValueError(f"Unsupported profile: {profile.key}")
 
@@ -212,3 +228,29 @@ def detect_profile(
         "morphological_cleanup": bool(cleanup),
     }
     return mask.astype(np.uint8), invalid, meta
+
+
+WATER_GAIN_LABEL = "New surface water"
+WATER_LOSS_LABEL = "Water lost"
+
+
+def relabel_water_regions(regions: list[dict], water_ndvi_max: float = -0.05) -> list[dict]:
+    """Replace region change types with water gain/loss labels from NDVI stats.
+
+    The water mask is built from NDVI/NDMI rules; the generic reasoner has no
+    notion of a water profile, so labels are assigned here from the same
+    indices the mask used. A patch that is water-like in both dates (e.g. a
+    lake that shifted) is labelled by its after state; per-pixel gain/loss
+    counts stay available in the detection metadata flags.
+    """
+    for region in regions:
+        stats = region.get("stats") or {}
+        ndvi_after = stats.get("ndvi_after")
+        ndvi_before = stats.get("ndvi_before")
+        if ndvi_after is None or ndvi_before is None:
+            continue
+        if float(ndvi_after) < water_ndvi_max:
+            region["change_type"] = WATER_GAIN_LABEL
+        elif float(ndvi_before) < water_ndvi_max:
+            region["change_type"] = WATER_LOSS_LABEL
+    return regions
