@@ -52,17 +52,20 @@ curl -s -X POST http://localhost:8000/predict \
   -F "image_b=@dataset/test/B/test_102_512_0.png;type=image/png"
 ```
 
-## 3. Final Results Table
+## 3. Controlled-resolution result
 
-Evaluated on the full 2,048 image LEVIR-CD test set:
+Evaluated on the full 2,048-pair LEVIR-CD test set at factor 1 (0.5 m) of the
+controlled degradation protocol:
 
 | Model | Precision | Recall | F1 Score | IoU |
 |---|---|---|---|---|
-| STANet (Ref) | - | - | ~87.3% | ~77.4% |
-| BIT (Ref) | - | - | ~89.4% | ~80.8% |
 | **MobileNetV2_3D_CDNet (Ours)** | **88.82%** | **85.36%** | **87.06%** | **77.08%** |
 
-Our lightweight MobileNetV2-based architecture achieves performance highly competitive with STANet and approaches BIT, while remaining extremely efficient for inference.
+These are pooled pixel counts at 0.5 m. The same checkpoint falls to F1 4.41%
+at 2 m and 2.61% at 8-10 m; see `degradation_results.csv` and the manuscript.
+Unverified STANet/BIT comparison rows that appeared in an earlier README have
+been removed. No published baseline is asserted here; see
+`docs/paper/REFERENCES_TO_VERIFY.md`.
 
 ## 4. Training Details
 
@@ -83,30 +86,48 @@ The `change_reasoner.py` module post-processes the model's binary mask using det
 
 The application integrates directly with the **Copernicus Data Space Ecosystem (CDSE)** via the `/fetch-and-predict` endpoint.
 
-**Crucial Architecture Choice (CNN vs Spectral Indices):**
-While the `/predict` endpoint uses a CNN trained on 0.5m LEVIR-CD imagery, live Sentinel-2 data has a 10m spatial resolution. Running 10m imagery through a CNN expecting 0.5m structural features (buildings, cars) causes total signal loss. 
+**Why the live path uses spectral indices:**
+The `/predict` endpoint uses a CNN trained on 0.5 m LEVIR-CD imagery; live
+Sentinel-2 data are 10 m. Resolution is one candidate explanation for the
+near-empty CNN predictions on OSCD, but that comparison confounds resolution
+with sensor, geography and season. The manuscript does not make a causal claim.
 
-To solve this, the `/fetch-and-predict` live path **bypasses the CNN entirely**. Instead, it uses a custom Sentinel Hub Evalscript to compute **NDVI** (Normalized Difference Vegetation Index) and **NDBI** (Normalized Difference Built-up Index) directly at the source, returning them as a hidden data layer alongside the RGB image. 
+The `/fetch-and-predict` live path therefore **does not use the CNN**. It uses
+a custom Sentinel Hub Evalscript to compute **NDVI** (Normalized Difference
+Vegetation Index) and **NDBI** (Normalized Difference Built-up Index) at the
+source and performs threshold-based spectral differencing on them. This is a
+decision-support heuristic, not a validated detector.
 
-The backend performs threshold-based **Spectral Differencing** on these indices (e.g., identifying severe NDVI drops paired with NDBI spikes) to generate the change mask. This ensures robust, resolution-appropriate change detection for live satellite data.
-
-- **Smart Catalog Search**: The backend uses the CDSE Catalog API to scan a ±5 day window of the requested dates, automatically identifying and fetching the scene with the absolute lowest cloud coverage.
-- **Robustness**: Includes explicit aggressive timeouts and wraps all network/authentication faults gracefully to avoid server crashes. Cloud coverage stats are returned dynamically to the frontend dashboard.
+- **Catalog search**: The backend queries the CDSE Catalog API over a
+  configurable window (default ±30 days as set by `DEFAULT_WINDOW_DAYS`) and
+  ranks candidates by AOI coverage, cloud cover and closeness to the requested
+  date, returning the top five per window.
+- **Network handling**: Requests use explicit timeouts and API/authentication
+  faults return structured errors instead of crashing. Cloud statistics are
+  returned to the dashboard.
 
 ## 7. Docker Deployment & Validation
 
 For deployment, we provide a highly optimized `Dockerfile` that packages only the ONNX runtime and FastAPI, explicitly excluding PyTorch and CUDA. 
 
-- **Projected Image Size:** ~356 MB (uncompressed), which is roughly **7x smaller** than an equivalent PyTorch-based image (~2.5 GB).
-- See [`dockerfile_report.md`](dockerfile_report.md) for a full layer-by-layer breakdown.
-- *Note:* Build validation was performed via exact PyPI Linux wheel-size measurement due to a macOS/Docker Desktop version incompatibility on the development machine. The build context is kept tiny (~68 KB excluding the model) via a strict `.dockerignore` whitelist.
+- The Docker image was **not built or measured in this checkout** because
+  Docker is unavailable on the verification host. No image-size or savings
+  figure is claimed.
+- [`dockerfile_report.md`](dockerfile_report.md) is a historical projection,
+  not a verified build record.
 
-## 8. References
+## 8. Legacy references (unverified)
 
-- **Dataset:** Chen, H., & Shi, Z. (2020). A Spatial-Temporal Attention-Based Method and a New Dataset for Remote Sensing Image Change Detection. *Remote Sensing*, 12(10), 1662. [DOI:10.3390/rs12101662](https://doi.org/10.3390/rs12101662)
+The entries below predate the citation audit. They have **not** been verified
+against the original sources for this submission, are not used as citations in
+`docs/paper/paper.tex`, and must not be treated as validated. The manuscript
+uses deliberate `[CITE: ...]` placeholders. See
+[`docs/paper/REFERENCES_TO_VERIFY.md`](docs/paper/REFERENCES_TO_VERIFY.md).
+
+- **Dataset:** Chen, H., & Shi, Z. (2020). A Spatial-Temporal Attention-Based Method and a New Dataset for Remote Sensing Image Change Detection. *Remote Sensing*, 12(10), 1662.
 - **FC-EF / FC-Siam:** Daudt, R. C., Le Saux, B., & Boulch, A. (2018). Fully Convolutional Siamese Networks for Change Detection. *arXiv preprint arXiv:1810.08462*.
 - **AFCF3D-Net:** (3D convolution fusion concepts) *arXiv preprint arXiv:2302.05109*.
-- **BIT:** Chen, H., Qi, Z., & Shi, Z. (2021). Remote Sensing Image Change Detection with Transformers. *IEEE Transactions on Geoscience and Remote Sensing*. [DOI:10.1109/TGRS.2021.3095166](https://doi.org/10.1109/TGRS.2021.3095166)
+- **BIT:** Chen, H., Qi, Z., & Shi, Z. (2021). Remote Sensing Image Change Detection with Transformers. *IEEE Transactions on Geoscience and Remote Sensing*.
 
 ## Product features
 
@@ -133,7 +154,7 @@ missing.
 
 ## OSCD benchmark reproduction and v2 results
 
-OSCD is obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; images and weights are not committed. The dataset provides 14 train and 10 official test cities. Thresholds and the CNN preprocessing variant are selected on the 14 training cities only, before scoring the test cities.
+OSCD is obtained from the [official OSCD page](https://rcdaudt.github.io/oscd/) / linked IEEE DataPort download; images and weights are not committed. The dataset provides 14 train and 10 official test cities. Thresholds and the CNN preprocessing variant are selected on the 14 training cities only, before the v2 scoring run. The official test split had already been scored in earlier work, as disclosed below; v2 is not an independent test.
 
 The evaluator reads `B02`, `B03`, `B04`, `B08`, and `B11` from each acquisition, and reads labels from the city-named change-label GeoTIFF. It refuses dimension mismatches rather than resizing. Spectral configurations are selected by pooled training F1: the v2 hardcoded choice is NDVI drop `-0.30` or NDBI rise `+0.30` (both at the edge of their search grids), and percentile mode selects `99.0`. The CNN preprocessing marked chosen on train is `joint_percentile`; `reflectance` is reported as the other ablation. The saved test artifacts do not include the CNN training scores.
 
@@ -229,7 +250,7 @@ Research-only code is not on the default path:
 
 - `benchmarks/auto_improve.py` runs a fixed 12-system search with leave-one-city-out validation on the 14 TRAIN cities, a hard trial budget, and a checkpointed log that includes failures. It refuses official test cities. Its results are **unverified** until the owner runs [`notebooks/oscd_auto_improve.ipynb`](notebooks/oscd_auto_improve.ipynb) on Colab.
 - `fusion.py` fuses spectral evidence and learned probabilities; `uncertainty.py` computes model agreement and ECE on held-out TRAIN cities; `benchmarks/finetune_cnn.py` fine-tunes a new CNN checkpoint without reading or writing `best_model.pt`/`model.onnx`.
-- `docs/paper/PREREGISTRATION.md` freezes the systems, metrics and one-shot test-scoring rule. No v3 test result exists in this checkout; v2 remains the only scored test result and its earlier preliminary scoring event is disclosed above.
+- `docs/paper/PREREGISTRATION.md` records the planned systems, metrics and single frozen test-scoring rule. It is a planning document, not evidence that the evaluation is independent or that the result is confirmed. No v3 test result exists in this checkout; v2 remains the latest scored result and earlier scoring events are disclosed above.
 
 ## Paper and audits
 
@@ -245,8 +266,9 @@ The manuscript and its supporting audits are in `docs/paper/`:
   seeds, versions and unverified items.
 - [`NOVELTY_CHECKLIST.md`](docs/paper/NOVELTY_CHECKLIST.md) — shallow search
   log; status unverified, no priority claim.
-- [`TODO_CITATIONS.md`](docs/paper/TODO_CITATIONS.md) — 18 unfilled citation
-  slots; no invented references.
+- [`TODO_CITATIONS.md`](docs/paper/TODO_CITATIONS.md) — 18 citation topics
+  covering 15 `[CITE: ...]` occurrences (14 body slots plus one explanatory
+  example); no invented references.
 - [`VENUES.md`](docs/paper/VENUES.md) and
   [`SUBMISSION_CHECKLIST.md`](docs/paper/SUBMISSION_CHECKLIST.md) — venue
   options and submission blockers.
