@@ -451,6 +451,45 @@ number is claimed.
   the owner terminal (no force):
   `git push origin main`.
 
+## Submission task (2026-10-21)
+
+New ordered scope: correct the existing draft, add saved-data evidence, build an
+IEEEtran paper, prepare reviewer materials, a talk, verify the app, and hand off
+a one-click Colab notebook. No test re-scoring, no v3, no training.
+
+- [x] Step 0. Push diagnosis and repository size audit.
+  - Evidence: `docs/REPO_PUSH_DIAGNOSIS.md`; `git rev-list --objects --all`
+    blob scan returned no blob >20 MB; `.git` 8.7 MB; largest blob 1.74 MB;
+    preventive `.gitignore` entries added. Commits `8989525`, `e068b23`.
+    `git push origin main` still fails with HTTP 400 on a small commit, so
+    large files are not the cause. No history rewrite performed.
+- [x] Step 1. Correct the existing draft on a copy.
+  - Evidence: `docs/paper/DRAFT_CORRECTION_LOG.md` and
+    `docs/paper/paper_draft_revised.docx`. Original left untouched at
+    `/Users/aravind/Downloads/IEEE_Paper_Draft_Resolution_Mismatch_Change_Detection.docx`
+    (SHA-256 `69442ffb...`). Table I recomputed from
+    `degradation_results.csv`; Table II corrected to 924+3+6+2=935;
+    “stable between 0.5 and 1 m” and “precision above 97%” fixed; exact
+    blur/LANCZOS method and AdamW/27-epoch training details corrected; OSCD
+    v2 results added; repeated test scoring disclosed; no one-shot claim;
+    overclaims and unverified numbers removed or hedged. Commit `52c2130`.
+- [ ] Step 2. Source-backed OSCD evidence: trivial baselines, city bootstrap
+  CIs (seed 0, 10,000), paired bootstrap, failure/correlation analysis,
+  CNN input and blur specifications, train-only LOCO script with a synthetic
+  test; LOCO result pending Colab run.
+- [ ] Step 3. IEEEtran paper within four pages excluding references, with
+  `[CITE: topic]` placeholders only and figures generated from saved JSON.
+- [ ] Step 4. Reviewer-readiness documents (claims audit, objections,
+  positioning, references to verify, threats, artifact, anonymisation).
+- [ ] Step 5. Twelve-slide talk, 10-minute notes, claims-on-slides, 20 Q&A,
+  demo script and handout.
+- [ ] Step 6. Re-verify the app and Phase A evidence; screenshots, console
+  errors, Docker; mark anything not run unverified.
+- [ ] Step 7. One-click `notebooks/run_all_colab.ipynb`; results pending a
+  real Colab run and a `COLAB_RUN_SUMMARY.md` pulled from the remote.
+- [ ] End. Final `python -m pytest -q`, `docs/paper/SUBMISSION_NOTES.md`,
+  remaining unverified claims, manual actions.
+
 ## Manual actions for the owner
 
 - Replace the invalid 60,534,573-byte `model.onnx` with the verified
