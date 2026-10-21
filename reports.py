@@ -1,6 +1,7 @@
 """Reproducible PDF report for one completed analysis.
 
-The report repeats the method, profile, thresholds, scenes, provenance and
+The report opens with a one-page plain-language summary, then repeats the
+method, profile, thresholds, scenes, class table, credits, provenance and
 honesty notes so a reader can tell what was and was not validated.
 """
 from __future__ import annotations
@@ -19,7 +20,7 @@ try:
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
-    from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     _HAVE_REPORTLAB = True
 except ImportError:  # pragma: no cover - exercised only without the dependency
     _HAVE_REPORTLAB = False
@@ -32,6 +33,30 @@ FIXED_LIMITATIONS = (
     "Change types are deterministic spectral/colour heuristics, not a trained land-cover classifier.",
     "Decision support only. Verify every region against imagery and local knowledge before acting.",
 )
+
+THRESHOLD_PLAIN = {
+    "ndvi_drop": "Greenness change threshold (NDVI, a −1 to +1 scale)",
+    "ndmi_drop": "Moisture change threshold (NDMI, a −1 to +1 scale)",
+    "stress_ndvi_drop": "Mild greenness drop counted as crop stress (NDVI)",
+    "ndvi_gain": "Greenness gain threshold (NDVI, a −1 to +1 scale)",
+    "nbr_drop": "Burn-ratio change threshold (NBR, a −1 to +1 scale)",
+    "ndbi_rise": "Built-up index rise threshold (NDBI, a −1 to +1 scale)",
+    "bsi_rise": "Bare-soil index rise threshold (BSI, a −1 to +1 scale)",
+    "water_ndvi_max": "Water ceiling (NDVI at or below this counts as water)",
+    "water_ndmi_max": "Water ceiling (NDMI at or below this counts as water)",
+    "mmu_ha": "Smallest patch kept (hectares)",
+}
+
+
+def _format_area(area_ha: float) -> str:
+    """Mirror the UI formatter so the PDF shows the same units and numbers."""
+    area_ha = float(area_ha)
+    area_km2 = area_ha / 100.0
+    if area_km2 >= 1:
+        return f"{area_km2:.2f} km² ({area_ha:,.0f} ha)"
+    if area_ha >= 0.01:
+        return f"{area_ha:.2f} ha ({area_ha * 2.47105:.1f} acres)"
+    return f"{area_km2 * 1e6:,.0f} m² ({area_ha:.3f} ha)"
 
 
 def _paragraph(text, style):
@@ -71,6 +96,24 @@ def _kv_table(rows, styles, width_mm=170):
     return table
 
 
+def _boxed(story, sentences, styles, fill="#f0fdfa", border="#0f766e"):
+    cell = [Paragraph(escape(str(sentence)), styles["Body"]) for sentence in sentences]
+    table = Table([[cell]], colWidths=[170 * mm])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(fill)),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor(border)),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(table)
+
+
 def _footer(canvas_obj, doc):
     canvas_obj.saveState()
     canvas_obj.setFont("Helvetica", 7.5)
@@ -78,6 +121,93 @@ def _footer(canvas_obj, doc):
     canvas_obj.drawString(18 * mm, 11 * mm, "Decision support only — not ground truth. Verify before acting.")
     canvas_obj.drawRightString(A4[0] - 18 * mm, 11 * mm, f"Page {doc.page}")
     canvas_obj.restoreState()
+
+
+def _summary_text(result, styles=None):
+    location = result.get("resolved_place_name") or result.get("location") or "the selected area"
+    before = result.get("date_before", "the earlier date")
+    after = result.get("date_after", "the later date")
+    profile_label = result.get("profile_label") or result.get("profile", "general")
+    pipeline = result.get("pipeline", "cnn")
+    method = "a learned pixel model" if pipeline == "cnn" else "rules that compare two satellite images"
+    changed = float(result.get("percent_changed") or 0.0)
+    regions = result.get("change_regions") or []
+    patch_word = "patch" if len(regions) == 1 else "patches"
+    sentences = [
+        f"This report compares two images of {location}, one from {before} and one from {after}.",
+        f"The {profile_label} profile ({method}) flagged {changed:.2f}% of the pixels as changed, grouped into {len(regions)} {patch_word}.",
+    ]
+    class_table = result.get("class_table") or {}
+    rows = class_table.get("rows") or []
+    if rows:
+        top = ", ".join(f"{row.get('change_type', 'unknown')} ({_format_area(row.get('area_ha') or 0)})" for row in rows[:3])
+        sentences.append(f"Largest detected types: {top}.")
+    if result.get("display_metrics"):
+        sentences.append(f"Quality: {result.get('validation_status') or 'see the quality section'}.")
+    else:
+        sentences.append(
+            "Quality: this profile has not been tested against labelled data, so the numbers below "
+            "are estimates, not measurements. Treat them as hints for where to look."
+        )
+    sentences.append("Next step: look at the images and the change map, then check the flagged patches before drawing conclusions.")
+    return sentences
+
+
+def _badge_reasons(result):
+    reasons = []
+    if not result.get("display_metrics"):
+        reasons.append("No labelled evaluation exists for this profile, so no performance number is shown anywhere in this report.")
+    masked = result.get("percent_cloud_masked")
+    if masked is not None:
+        reasons.append(f"{float(masked):.2f}% of the pixels were excluded as cloud, shadow or invalid before the statistics were computed.")
+    warnings = result.get("warnings") or []
+    if warnings:
+        reasons.append("The scene-quality notes below also apply to these numbers.")
+    return reasons
+
+
+def _settings_section(result, styles, story):
+    meta = result.get("thresholds") or {}
+    thresholds = meta.get("thresholds") if isinstance(meta, dict) else None
+    for key, value in sorted((thresholds or {}).items()):
+        name = THRESHOLD_PLAIN.get(key, f"Rule value “{key}”")
+        story.append(_paragraph(f"• {name}: {value}", styles["Body"]))
+    mmu = (meta.get("mmu") if isinstance(meta, dict) else None) or {}
+    if mmu.get("mmu_ha"):
+        story.append(
+            _paragraph(
+                f"• Patches smaller than {mmu['mmu_ha']} ha were dropped as noise "
+                f"({mmu.get('removed_components', 0)} patches removed).",
+                styles["Body"],
+            )
+        )
+    for note in result.get("profile_notes") or []:
+        story.append(_paragraph("• " + str(note), styles["Body"]))
+    provenance_notes = (result.get("provenance") or {}).get("threshold_provenance") or {}
+    if provenance_notes:
+        story.append(_paragraph("Where these numbers come from", styles["H"]))
+        for key, sentence in sorted(provenance_notes.items()):
+            story.append(_paragraph(f"• {key}: {sentence}", styles["Small"]))
+
+
+def _credits_section(result, styles, story):
+    story.append(_paragraph("Data and credits", styles["H"]))
+    credits = []
+    if result.get("pipeline") == "cnn":
+        credits.append("Imagery: the two images uploaded by the user (pair mode).")
+    else:
+        year = str(result.get("date_after") or result.get("date_before") or "")[:4] or "the analysis year"
+        credits.append(f"Imagery: contains modified Copernicus Sentinel data [{year}], ESA / European Commission.")
+    if result.get("road_context"):
+        credits.append("Road data: © OpenStreetMap contributors, Open Database Licence.")
+    app_version = (result.get("provenance") or {}).get("app_version")
+    credits.append(
+        "Report and analysis: generated by the open Satellite change detection app"
+        + (f" (version {app_version})" if app_version else "")
+        + ", a research prototype for decision support."
+    )
+    for credit in credits:
+        story.append(_paragraph("• " + credit, styles["Small"]))
 
 
 def build_report(result: dict, output: str | Path) -> Path:
@@ -98,6 +228,9 @@ def build_report(result: dict, output: str | Path) -> Path:
     story = []
     story.append(_paragraph("Satellite change analysis", styles["Title"]))
     story.append(_paragraph("Decision support report generated by the open satellite-change-detection app.", styles["Subtitle"]))
+
+    story.append(_paragraph("Summary in plain language", styles["H"]))
+    _boxed(story, _summary_text(result), styles)
 
     provenance = result.get("provenance") or {}
     location = result.get("resolved_place_name") or result.get("location") or "Uploaded imagery"
@@ -136,6 +269,11 @@ def build_report(result: dict, output: str | Path) -> Path:
     badge = Table([[_paragraph(badge_text, styles["Badge"])]], colWidths=[170 * mm])
     badge.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor(badge_color)), ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor(badge_color)), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")), ("LEFTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     story.append(badge)
+    reasons = _badge_reasons(result)
+    if reasons:
+        story.append(_paragraph("Why this badge", styles["H"]))
+        for reason in reasons:
+            story.append(_paragraph("• " + reason, styles["Body"]))
 
     warnings = result.get("warnings") or []
     if result.get("season_warning") and not any(w.get("code") == "season" for w in warnings):
@@ -148,7 +286,8 @@ def build_report(result: dict, output: str | Path) -> Path:
     images = [
         ("Before", result.get("image_a_base64")),
         ("After", result.get("image_b_base64")),
-        ("Change overlay", result.get("overlay_base64")),
+        ("Change map", result.get("overlay_base64")),
+        ("Cloud mask", result.get("mask_base64")),
     ]
     rendered = [(label, _image(data)) for label, data in images]
     rendered = [(label, image) for label, image in rendered if image is not None]
@@ -160,15 +299,46 @@ def build_report(result: dict, output: str | Path) -> Path:
             width = 82 * mm if len(pair) == 2 else 170 * mm
             table = Table(data, colWidths=[width / len(pair)] * len(pair))
             table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-            story.append(table)
+            story.append(KeepTogether(table))
+        legend = []
+        if result.get("overlay_base64"):
+            legend.append("Change map: red = pixels the rules flagged as changed, drawn over the after image.")
+        if result.get("mask_base64"):
+            legend.append("Cloud mask: white = pixels excluded from the statistics (cloud, shadow or invalid).")
+        if result.get("image_a_base64"):
+            legend.append("Before and after: true-colour views of the two scenes.")
+        if legend:
+            story.append(_paragraph("Legend", styles["H"]))
+            for line in legend:
+                story.append(_paragraph("• " + line, styles["Body"]))
+
+    class_table = result.get("class_table") or {}
+    class_rows = class_table.get("rows") or []
+    if class_rows:
+        story.append(_paragraph("What we found, by type", styles["H"]))
+        data = [["Change type", "Area", "Share of the area", "Patches"]]
+        for row in class_rows:
+            data.append([
+                _paragraph(row.get("change_type", "unknown"), styles["Small"]),
+                _paragraph(_format_area(row.get("area_ha") or 0), styles["Small"]),
+                _paragraph(f"{float(row.get('percent_of_aoi') or 0):.2f}%", styles["Small"]),
+                _paragraph(str(int(row.get("region_count") or 0)), styles["Small"]),
+            ])
+        total = class_table.get("total") or {}
+        data.append([
+            _paragraph("Total", styles["Label"]),
+            _paragraph(_format_area(total.get("area_ha") or 0), styles["Label"]),
+            _paragraph(f"{float(total.get('percent_of_aoi') or 0):.2f}%", styles["Label"]),
+            _paragraph(str(int(total.get("region_count") or 0)), styles["Label"]),
+        ])
+        table = Table(data, colWidths=[76 * mm, 42 * mm, 27 * mm, 25 * mm], repeatRows=1)
+        table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")), ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("FONTSIZE", (0, 0), (-1, -1), 7.5), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]))
+        story.append(table)
+        if class_table.get("note"):
+            story.append(_paragraph(class_table["note"], styles["Small"]))
 
     story.append(_paragraph("Method and settings", styles["H"]))
-    thresholds = result.get("thresholds")
-    if thresholds:
-        story.append(_paragraph(json.dumps(thresholds, indent=1, sort_keys=True, default=str), styles["Small"]))
-    if result.get("profile_notes"):
-        for note in result["profile_notes"]:
-            story.append(_paragraph("• " + str(note), styles["Body"]))
+    _settings_section(result, styles, story)
     road = result.get("road_context")
     if road:
         story.append(_paragraph("Road context (context only, not road detection)", styles["H"]))
@@ -199,9 +369,12 @@ def build_report(result: dict, output: str | Path) -> Path:
     for note in FIXED_LIMITATIONS:
         story.append(_paragraph("• " + note, styles["Body"]))
 
+    _credits_section(result, styles, story)
+
     story.append(_paragraph("Provenance", styles["H"]))
     p_rows = [
         ("Code commit", provenance.get("commit") or "unavailable"),
+        ("App version", provenance.get("app_version") or "unavailable"),
         ("Generated (UTC)", provenance.get("timestamp_utc") or "unavailable"),
         ("Pipeline / profile", f"{provenance.get('pipeline', pipeline)} / {provenance.get('profile', profile)}"),
         ("Scene IDs", ", ".join(provenance.get("scene_ids") or []) or "n/a"),
