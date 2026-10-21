@@ -527,8 +527,34 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     absent from this host, so no PDF was built. The owner must compile
     `docs/paper/paper.tex` on Overleaf with IEEEtran and check the four-page
     limit excluding references. Commits `f317d89`, `730b025`, `33146c4`.
-- [ ] Step 4. Reviewer-readiness documents (claims audit, objections,
+- [x] Step 4. Reviewer-readiness documents (claims audit, objections,
   positioning, references to verify, threats, artifact, anonymisation).
+  - Evidence: `docs/paper/CLAIMS_AUDIT.md` rewritten for the Step 3 manuscript
+    with 37 claim rows (D1–D13, O1–O21, G1–G3), every row tied to a tracked
+    file, plus an explicit not-claimed list and numerical consistency checks.
+    `docs/paper/THREATS_TO_VALIDITY.md` rewritten around the degradation
+    simulation, the confounded OSCD comparison, repeated test use, one
+    checkpoint/run, interval limitations and missing artefacts.
+  - `docs/paper/REVIEWER_OBJECTIONS.md` has exactly 12 objections with
+    evidence-backed responses and a “do not say” list.
+    `docs/paper/POSITIONING.md` contains an empty six-row published-method
+    table whose cells all read “TODO - fill from original paper”; no published
+    number was entered.
+  - `docs/paper/REFERENCES_TO_VERIFY.md` lists 12 unique topics / 14 body
+    slots, all unverified, and flags the legacy duplicate STANet entries and
+    the unverified FC-Siam record without correcting them from memory.
+    `docs/paper/ARTIFACT.md` gives exact setup, generation, test and hash
+    commands, the current commits, seed 0/10,000 bootstrap settings, the
+    unrecorded training seed, Colab status, OSCD CC BY-NC-SA legal-review
+    requirement and the explicit “no code licence chosen” statement.
+    `docs/paper/ANONYMISATION.md` records that the manuscript is currently
+    identifying and lists what a double-blind release must remove; no history
+    rewrite was performed.
+  - Checks: 12 objections, 6 empty positioning rows, 12 reference topics, 37
+    claims; zero prohibited priority/originality wording in `paper.tex` and the
+    seven submission documents. `REPRODUCIBILITY.md` is marked historical and
+    points to `ARTIFACT.md`.
+  - Commits `7cc7519`, `e9607d5`, `36fd9c8`, `42755e2`.
 - [ ] Step 5. Twelve-slide talk, 10-minute notes, claims-on-slides, 20 Q&A,
   demo script and handout.
 - [ ] Step 6. Re-verify the app and Phase A evidence; screenshots, console
