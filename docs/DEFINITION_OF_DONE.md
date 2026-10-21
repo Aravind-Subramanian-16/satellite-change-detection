@@ -2,16 +2,23 @@
 
 Date: 2026-10-21 · Based on [PROJECT_AUDIT.md](PROJECT_AUDIT.md)
 
-Completion status: **Phases 0–5 complete on `final-polish`**, with the caveats
-written next to each item below. Final suite: **194 passed, 3 skipped, 1
-warning**. Nothing was pushed; the merge order and the push command are in
-[FINAL_REPORT.md](FINAL_REPORT.md).
+Completion status: **the scoped deliverables for Phases 0–5 are complete on
+`final-polish`**. Three checklist items are partly done and the remaining
+follow-ups are explicitly not done; both are listed below. Final suite:
+**194 passed, 3 skipped, 1 warning**. Nothing was pushed; the merge order and
+the push command are in [FINAL_REPORT.md](FINAL_REPORT.md).
 
 ## How this works
 
-Each phase below has a checklist. A ticked box carries evidence (file, commit
-hash, test count, screenshot path). Counts are from real runs in this
-checkout, not estimates.
+Each phase below has a checklist. Every item is marked with one of:
+
+- `[x]` **Done** — delivered and evidenced (file, commit hash, test count,
+  screenshot path).
+- `[~]` **Partly done** — the delivered part is evidenced, and the missing part
+  is stated on the same item or in the not-done list below.
+- `[ ]` **Not done** — not delivered or not verified; the reason is stated.
+
+Counts are from real runs in this checkout, not estimates.
 
 ## Branch and commit policy (global rule 1)
 
@@ -171,13 +178,13 @@ contains Phase 3 commits; its end-of-branch suite is **179 passed, 3 skipped**
       numbers in UI, CSV and GeoJSON (evidence: `build_class_table` in
       `live_pipeline.py`; `exports.py` class_summary block/metadata;
       `tests/test_reports.py` and `tests/test_live_api.py` parity tests)
-- [x] Optional reference check (e.g. ESA WorldCover) labelled "agreement with
-      a reference map", never "accuracy", with date-mismatch caveat; scripts
-      under `benchmarks/reference_checks/`; download sizes stated first
-      (evidence: `benchmarks/reference_checks/README.md`, `agreement.py`,
-      `worldcover_agreement.py`, `tests/test_reference_check.py`; **not run
-      against a real WorldCover tile in this checkout**, stated in the final
-      report)
+- [~] **Partly done:** optional reference check (e.g. ESA WorldCover) labelled
+      "agreement with a reference map", never "accuracy", with date-mismatch
+      caveat; scripts under `benchmarks/reference_checks/`; download sizes
+      stated first. **Not run against a real WorldCover tile in this
+      checkout** (evidence: `benchmarks/reference_checks/README.md`,
+      `agreement.py`, `worldcover_agreement.py`,
+      `tests/test_reference_check.py`; gap also in the final report)
 - [x] Synthetic tests: vegetation-loss patch, built-up patch, water patch —
       each asserting the right class and area; plus small-area and
       cloud-warning logic tests (evidence: `tests/test_profiles_phase2.py`:
@@ -245,17 +252,18 @@ Branch commits: `f1720b5` (retries + scene cache), `6957eba` (health fields),
       broadcasting; `live_pipeline._fetch_window` skips the ext composite when
       absent; `test_fetch_window_composites_when_indices_ext_is_missing`;
       `test_median_composite_broadcasts_pixel_masks_across_bands`)
-- [x] Dockerfile + short Cloud Run deployment guide with env-var secrets, no
-      weights/credentials baked in (evidence: `DEPLOY.md` Cloud Run section,
-      Secret Manager flags, max-instances 1; Dockerfile excludes weights.
-      Docker is not installed locally, so the image build is **unverified**;
-      stated in the final report.)
-- [x] Full test suite + linter + quick load test of the main flow; fix what is
-      found (evidence: 193 passed / 3 skipped; `ruff check` clean on every
-      changed Python file except `app.py`, which keeps 27 pre-existing findings
-      (`main`'s `app.py` had 29) — intentionally not mass-fixed; load test: 120/120 analysis
+- [~] **Partly done:** Dockerfile and short Cloud Run deployment guide with
+      env-var secrets, no weights/credentials baked in; the image build and
+      deployment were **not run** because Docker is not installed locally
+      (evidence: `DEPLOY.md` Cloud Run section, Secret Manager flags,
+      max-instances 1; Dockerfile excludes weights)
+- [~] **Partly done:** full test suite and quick load test pass, but full-repo
+      lint is not clean. `ruff check` is clean on every changed Python file
+      except `app.py`, which keeps 27 pre-existing findings (`main`'s `app.py`
+      had 29); intentionally not mass-fixed. Load test: 120/120 analysis
       requests and 200/200 page requests against a local server with a fake
-      upstream, no failures)
+      upstream, no failures (evidence: 193 passed / 3 skipped at this phase;
+      194 after the dashboard)
 
 ## Phase 5 — documentation and honesty
 
@@ -335,16 +343,23 @@ changing the API, database schema or detection path.
 
 ## Items that are explicitly not done or not verified
 
-- Docker image build/run: Docker is not installed on this host.
-- Cloud Run/Render deployment: documented, not executed.
-- Real-world reference check (ESA WorldCover): scripts and tests only; no
-  download or comparison run.
-- Labelled evaluation of the general, agriculture, deforestation, roads and
-  water profiles: none exists here; all are labelled estimates in the UI.
-- Formal screen-reader/zoom audit: not performed; contrast and keyboard paths
-  were checked manually.
-- Full-repository lint cleanup: pre-existing style findings remain outside the
-  changed files.
-- Audit bugs 4 (hardcoded built-up NDVI cue not in provenance), 6 (history list
-  decodes full results) and 9 (Nominatim cache): not fixed; documented as
-  optional.
+- [ ] **Not done:** Docker image build/run — Docker is not installed on this
+      host.
+- [ ] **Not done:** Cloud Run/Render deployment — documented, not executed.
+- [ ] **Not done:** real ONNX inference — the model file is absent; `/health`
+      reports it unavailable and the UI falls back.
+- [ ] **Not done:** live CDSE end-to-end with real credentials in this
+      checkout — live tests use a fake client and browser tests mock routes.
+- [ ] **Not done:** labelled evaluation of the general, agriculture,
+      deforestation, roads and water profiles — none exists here; all are
+      labelled estimates in the UI.
+- [ ] **Not done:** formal screen-reader/zoom audit — contrast and keyboard
+      paths were checked manually, but no formal audit was performed.
+- [ ] **Not done:** visual review of PDF pages after the first — covered by
+      text assertions only.
+- [ ] **Not done:** full-repository lint cleanup — 27 pre-existing `app.py`
+      findings remain (see Phase 4); intentionally not mass-fixed.
+- [ ] **Not done:** audit bugs 4 (hardcoded built-up NDVI cue not in
+      provenance), 6 (history list decodes full results) and 9 (Nominatim
+      cache) — documented as optional.
+- [ ] **Not done:** OSCD test split — intentionally not run; it stays frozen.

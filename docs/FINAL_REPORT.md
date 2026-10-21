@@ -40,7 +40,7 @@ All branches are linear and fast-forwardable; no merge commits exist.
 | `main` | `a02b27a` | `origin/main` at the same commit |
 | `ui-redesign` | `fbea861` | `origin/ui-redesign` at the same commit |
 | `analysis-profiles` | `44ac7e0` | `origin/analysis-profiles` at the same commit |
-| `final-polish` | `af46bda` + this correction commit | **local only** |
+| `final-polish` | `af46bda` + `c571e8f` + this status commit | **local only** |
 
 ### Commits by branch (oldest → newest)
 
@@ -62,7 +62,7 @@ d967a91 Enrich PDF report with plain summary, legend, class table and credits
 44ac7e0 Test PDF sections, honesty wording, missing inputs and number parity
 ```
 
-**`analysis-profiles..final-polish`** (17)
+**`analysis-profiles..final-polish`** (18)
 ```
 f1720b5 Retry transient Copernicus calls and cache scene downloads in memory
 6957eba Report CNN and spectral availability in /health
@@ -80,7 +80,8 @@ c0d6627 Add final release report
 2a8c344 Add saved-analyses dashboard and compact mobile tab labels
 8870e59 Test history dashboard aggregates and capture responsive screenshots
 af46bda Document the history dashboard and final counts
-(this commit) Correct final report commit count and run timing
+c571e8f Correct final report commit count and run timing
+(this commit) Make DoD statuses explicit and list unverified items
 ```
 
 Use `git rev-parse --short final-polish` after checkout for the exact tip.
@@ -346,16 +347,17 @@ If you only merge into `main`, the branch push is optional.
 
 ## 10. Definition of Done
 
-Every phase box in `DEFINITION_OF_DONE.md` is ticked with evidence; the
-caveats next to each item are part of the record.
+`DEFINITION_OF_DONE.md` marks every item Done, Partly done or Not done with
+evidence; three items are partly done and the not-done list is explicit. Those
+caveats are part of the record.
 
 | Phase | Status | Evidence anchor |
 |---|---|---|
 | 0 — Audit | Complete | `docs/PROJECT_AUDIT.md`, `docs/DEFINITION_OF_DONE.md` |
 | 1 — UI redesign | Complete | `ui-redesign` tip `fbea861`, 140 passed / 3 skipped, screenshots 01–10 |
-| 2 — Analysis profiles | Complete | `analysis-profiles` tip `44ac7e0`, 179 passed / 3 skipped, screenshots 11–12 |
+| 2 — Analysis profiles | Done, with one partly-done item | `analysis-profiles` tip `44ac7e0`, 179 passed / 3 skipped, screenshots 11–12; WorldCover check script not run on a real tile |
 | 3 — Reports and exports | Complete | `reports.py`, `tests/test_reports.py`, `/history/{id}/report` |
-| 4 — Robustness | Complete | retries, cache, `/health`, rate limits, composite fix, 194-test suite |
+| 4 — Robustness | Done, with two partly-done items | retries, cache, `/health`, rate limits, composite fix, 194-test suite; Docker build unverified, full-repo lint not clean |
 | 5 — Docs and honesty | Complete | README, USER_GUIDE, LIMITATIONS, CLAIMS_AUDIT_ADDENDUM, PROGRESS, this report |
 
 Global rules: no push of `final-polish`; protected paths untouched; no
