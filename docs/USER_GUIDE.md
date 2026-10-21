@@ -162,6 +162,27 @@ your area or on individual structures.
 - The report's **PDF numbers, CSV table and on-screen table come from the same
   calculation**; if they differ, that is a bug, not an alternative estimate.
 
+## The History dashboard
+
+Open the **History** tab to see analyses saved on this server. Above the list,
+the dashboard summarises them:
+
+- **Saved analyses** — how many results are stored (the dashboard reads the
+  most recent 50).
+- **Live / image pair** — how many came from the Sentinel-2 path and how many
+  from the upload tab.
+- **Average flagged** — the simple mean of each saved result's flagged share.
+  It is **not area-weighted**: a 1 ha and a 100 ha analysis count equally.
+- **Largest flagged** — the highest flagged share among the saved results.
+- The two bar charts show each recent analysis and how many analyses fall in
+  each flagged-share range.
+
+These are summaries of saved numbers, **not a measure of detection
+performance**. A high percentage is not "more change" in a comparable sense
+across different areas, seasons or profiles. Use **Open** to revisit a result
+and **GeoJSON** / **CSV** to export it. If no analyses are saved, the dashboard
+is hidden and the list shows an empty-state message.
+
 ## When something goes wrong
 
 | Message or symptom | What to do |

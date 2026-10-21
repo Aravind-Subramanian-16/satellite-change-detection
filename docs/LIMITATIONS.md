@@ -122,6 +122,12 @@ The limits below are part of the result, not fine print.
   upstream service is available or that an image is cloud-free.
 - History reads and report/export routes now count toward the same per-path
   rate limit as new analyses. The limit remains per process and per path.
+- The History dashboard is computed in the browser from the saved summary
+  fields of the most recent 50 analyses. Its "average flagged" is a simple,
+  unweighted mean of flagged percentages, not an area-weighted statistic, and
+  none of its tiles or bars is a measure of detection quality. History lives in
+  the server's local SQLite file and can disappear on redeploy or restart; an
+  empty history is not evidence that no analyses were run elsewhere.
 
 ## Optional learned classifier
 

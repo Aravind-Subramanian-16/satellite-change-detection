@@ -27,14 +27,22 @@ Every flagged patch needs a human check against imagery or local knowledge.
   of PNG/JPEG images. This needs `model.onnx`; without it the page says so and
   the live path still works.
 - **History**: stored analyses can be reopened, exported and re-rendered as a
-  PDF without re-running the analysis.
+  PDF without re-running the analysis. The History view also has a dashboard
+  that summarises the saved analyses: counts, a simple mean flagged share, the
+  live/upload split, and per-analysis and per-range bars.
 
 | Results dashboard | Mobile |
 |---|---|
 | ![Results with class table](docs/screenshots/11-results-class-table-dark-1440.png) | ![Mobile step 2](docs/screenshots/09-mobile-step2-375.png) |
 
+| History dashboard | History on mobile |
+|---|---|
+| ![Saved analyses dashboard](docs/screenshots/13-history-dashboard-1440.png) | ![History dashboard on a phone](docs/screenshots/15-history-dashboard-375.png) |
+
 These screenshots come from the Playwright browser tests with Copernicus routes
-mocked. They show the interface and its wiring, not a live satellite analysis.
+mocked. They show the interface and its wiring, not a live satellite analysis;
+the history dashboard screenshots use example rows from the browser test
+fixture, not real saved analyses.
 
 ## Quick start (under 5 minutes once dependencies are installed)
 
@@ -129,7 +137,7 @@ releases; report-only and class-summary fields are additive.
 ./venv/bin/python -m pytest -q
 ```
 
-Last full run in this checkout: **193 passed, 3 skipped, 1 warning** (about 45 s; well under 5 minutes).
+Last full run in this checkout: **194 passed, 3 skipped, 1 warning** (about 60 s; well under 5 minutes).
 The three skips are environment gaps, not failures:
 
 | Skip | Reason |

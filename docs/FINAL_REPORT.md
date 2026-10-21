@@ -2,7 +2,7 @@
 
 **Date:** 21 October 2026
 **Branch:** `final-polish` (local only; not merged, not pushed)
-**Final suite:** **193 passed, 3 skipped, 1 warning in 42.00 s** (a prior run took 45.47 s)
+**Final suite:** **194 passed, 3 skipped, 1 warning in 61.04 s** (the pre-dashboard run took 42.00 s)
 
 This report closes Phases 0–5 of the redesign. It states what was delivered, the
 exact test results, what is verified and what is not, and the commands to merge
@@ -18,11 +18,12 @@ otherwise.
 | Friendly UI | Three-step wizard (area → dates → run), map and upload modes, goal picker, plain-English labels, dark/light theme, responsive layout to 375 px, data-quality badge with reasons, friendly network errors, keyboard focus styles | `static/index.html`, `static/app.js`, `static/app.css` |
 | Analysis profiles | General, agriculture (loss **and** gain), deforestation, built-up, water, roads-as-context. Each carries a validation status; profiles add contextual warnings. Per-region "Why we think this changed" explanations | `profiles/`, `live_pipeline.py` |
 | Results dashboard | Class table with area per change type, percentages, region counts; one source of truth shared by UI, CSV and PDF | `build_class_table` in `live_pipeline.py` |
+| History dashboard | Client-side dashboard over saved analyses: count, live/upload split, simple mean and largest flagged share, per-analysis bars, range distribution, empty state. No API or database change | `static/index.html`, `static/app.js`, `static/app.css` |
 | Reports | PDF with a one-page plain summary, badge, legend, class table, per-region reasons, provenance and credits; CSV; GeoJSON. New `GET /history/{id}/report` renders a stored analysis without re-posting it | `reports.py`, `app.py` |
 | Robustness | Retries with backoff and `Retry-After` on transient Copernicus calls; bounded in-memory scene cache (64 MB / 32 entries, per process); `/health` reports CNN and spectral availability; history routes rate-limited; composite crash fixed when extended indices are absent | `copernicus_client.py`, `compositing.py`, `security.py` |
 | Deployment docs | Cloud Run guide using Secret Manager; the pre-existing Dockerfile already excludes weights; no credentials baked in | `DEPLOY.md`, `Dockerfile` (pre-existing), `render.yaml` |
 | User documentation | Rewritten README, non-technical `USER_GUIDE.md`, expanded `LIMITATIONS.md`, `CLAIMS_AUDIT_ADDENDUM.md`, completed `DEFINITION_OF_DONE.md`, `PROGRESS.md` evidence | `README.md`, `docs/` |
-| Screenshots | 12 images: wizard, warnings, themes, tablet, mobile, class table | `docs/screenshots/01…12` |
+| Screenshots | 15 images: wizard, warnings, themes, tablet, mobile, class table, history dashboard at three widths | `docs/screenshots/01…15` |
 
 The detection core (`spectral_pipeline.py`, `change_reasoner.py`,
 `postprocess.py`, `scene_selection.py`) and the model files were **not**
@@ -39,7 +40,7 @@ All branches are linear and fast-forwardable; no merge commits exist.
 | `main` | `a02b27a` | `origin/main` at the same commit |
 | `ui-redesign` | `fbea861` | `origin/ui-redesign` at the same commit |
 | `analysis-profiles` | `44ac7e0` | `origin/analysis-profiles` at the same commit |
-| `final-polish` | `d5e835c` + `dffaac2` + this report's commit | **local only** |
+| `final-polish` | `d5e835c` + `dffaac2` + `c0d6627` + `2a8c344` + `8870e59` + this docs commit | **local only** |
 
 ### Commits by branch (oldest → newest)
 
@@ -75,7 +76,10 @@ a19907b Add stored-analysis PDF endpoint and rate-limit history routes
 96c090a Align reference raster to the AOI grid and clean new-file lint
 d5e835c Omit missing AOI fields from reports instead of question marks
 dffaac2 Sync docs with final suite time and lint scope
-(this commit) Add final release report
+c0d6627 Add final release report
+2a8c344 Add saved-analyses dashboard and compact mobile tab labels
+8870e59 Test history dashboard aggregates and capture responsive screenshots
+(this commit) Document the history dashboard and final counts
 ```
 
 Use `git rev-parse --short final-polish` after checkout for the exact tip.
@@ -91,9 +95,9 @@ Use `git rev-parse --short final-polish` after checkout for the exact tip.
 | `main` (baseline) | **137 passed, 3 skipped**, 1 warning | — | `pytest -q` before any changes |
 | `ui-redesign` | **140 passed, 3 skipped**, 1 warning | 71.72 s | temporary worktree with the project venv linked |
 | `analysis-profiles` | **179 passed, 3 skipped**, 1 warning | 72.07 s | temporary worktree with the project venv linked |
-| `final-polish` | **193 passed, 3 skipped**, 1 warning | **42.00 s** (previous run 45.47 s) | `pytest -q` in this checkout |
+| `final-polish` | **194 passed, 3 skipped**, 1 warning | **61.04 s** (pre-dashboard run 42.00 s) | `pytest -q` in this checkout |
 
-That is **56 more passing tests** than the baseline. No test was deleted or
+That is **57 more passing tests** than the baseline. No test was deleted or
 skipped to make the suite pass.
 
 ### The three skips (environment gaps, not failures)
@@ -113,7 +117,7 @@ skipped to make the suite pass.
 
 | File | Tests | Covers |
 |---|---|---|
-| `tests/test_ui.py` | 3 | wizard flow and goal sync, theme toggle and friendly network error, results dashboard and mobile layout (Playwright + system Chrome, port 8029) |
+| `tests/test_ui.py` | 4 | wizard flow and goal sync, theme toggle and friendly network error, results dashboard and mobile layout, history dashboard and empty state (Playwright + system Chrome, port 8029) |
 | `tests/test_profiles_phase2.py` | 27 | profile rules, class table, explanations, warnings, water labels |
 | `tests/test_reports.py` | 6 | every PDF section, plain summary, missing inputs, number parity |
 | `tests/test_live_api.py` | 24 | stored-analysis PDF endpoint, history rate limits, live-flow fakes |
@@ -156,6 +160,8 @@ Additive:
   (`ndvi_gain = 0.15`, additive; the pre-existing agriculture thresholds are
   explicitly marked unchanged in `threshold_provenance`).
 - Scene retries and an in-memory scene cache (no API shape change).
+- A history dashboard computed in the browser from the existing `/history`
+  fields; no new endpoint, database column or detection path.
 
 Behavioural changes to note:
 
@@ -166,6 +172,10 @@ Behavioural changes to note:
 - When Copernicus omits the extended indices (NBR/NDMI/BSI), the window
   composite now skips them and returns `ext = None` instead of crashing. This
   changes behaviour only in a case that previously raised an exception.
+- On the History tab the marketing intro is hidden so the dashboard is the
+  focus; the honesty note stays visible. At widths up to 480 px the tab labels
+  shorten to Compare / Upload / History, and the "Experimental" badge is hidden
+  from view (the accessible name still says "experimental").
 
 Not changed:
 
@@ -224,7 +234,7 @@ python3 -m venv venv
 
 # Full test suite (no network, fakes only):
 ./venv/bin/python -m pytest -q
-# -> 193 passed, 3 skipped, 1 warning in about 45 s
+# -> 194 passed, 3 skipped, 1 warning in about 60 s
 
 # Run the app:
 cp .env.example .env    # add the two Copernicus values, or use upload mode
@@ -241,9 +251,11 @@ README says "under 5 minutes once dependencies are installed".
 
 ### Verified in this checkout
 
-- Full suite: 193 passed, 3 skipped, 1 warning, 42.00 s.
+- Full suite: 194 passed, 3 skipped, 1 warning, 61.04 s.
 - Browser tests against mocked Copernicus routes (wizard, themes, dashboard,
-  mobile layout) and the 12 screenshots.
+  mobile layout, history analytics) and the 15 screenshots.
+- History dashboard: aggregate values, range buckets, empty state, 375 px
+  layout, and no console errors at 1440/768/375 px (mocked history rows).
 - PDF creation, sections, plain summary, provenance, and the stored-analysis
   endpoint (text assertions plus a first-page visual check).
 - Retry, cache-bound, health, rate-limit and composite-crash regression tests.
@@ -287,7 +299,7 @@ git status --short --branch
 #  them to .gitignore, but do not commit them blindly)
 
 ./venv/bin/python -m pytest -q
-# 193 passed, 3 skipped, 1 warning in about 45 s
+# 194 passed, 3 skipped, 1 warning in about 60 s
 
 git diff --name-only main...final-polish -- \
   docs/paper benchmarks/results weights best_model.pt model.onnx
@@ -341,7 +353,7 @@ caveats next to each item are part of the record.
 | 1 — UI redesign | Complete | `ui-redesign` tip `fbea861`, 140 passed / 3 skipped, screenshots 01–10 |
 | 2 — Analysis profiles | Complete | `analysis-profiles` tip `44ac7e0`, 179 passed / 3 skipped, screenshots 11–12 |
 | 3 — Reports and exports | Complete | `reports.py`, `tests/test_reports.py`, `/history/{id}/report` |
-| 4 — Robustness | Complete | retries, cache, `/health`, rate limits, composite fix, 193-test suite |
+| 4 — Robustness | Complete | retries, cache, `/health`, rate limits, composite fix, 194-test suite |
 | 5 — Docs and honesty | Complete | README, USER_GUIDE, LIMITATIONS, CLAIMS_AUDIT_ADDENDUM, PROGRESS, this report |
 
 Global rules: no push of `final-polish`; protected paths untouched; no

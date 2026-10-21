@@ -3,7 +3,7 @@
 Date: 2026-10-21 · Based on [PROJECT_AUDIT.md](PROJECT_AUDIT.md)
 
 Completion status: **Phases 0–5 complete on `final-polish`**, with the caveats
-written next to each item below. Final suite: **193 passed, 3 skipped, 1
+written next to each item below. Final suite: **194 passed, 3 skipped, 1
 warning**. Nothing was pushed; the merge order and the push command are in
 [FINAL_REPORT.md](FINAL_REPORT.md).
 
@@ -48,7 +48,7 @@ checkout, not estimates.
 - [x] Credentials from environment variables only; never printed or logged
       (`security.RedactingFilter`; credentials never touch the browser)
 - [x] Existing tests keep passing; every new feature has tests; real counts
-      are reported (final 193 passed / 3 skipped; per-branch counts below)
+      are reported (final 194 passed / 3 skipped; per-branch counts below)
 - [x] If something cannot be done honestly, it is said so in the final report
       (Docker build, Cloud Run deploy, real WorldCover reference run, labelled
       evaluation of the new profiles)
@@ -274,6 +274,40 @@ Branch commits: `f1720b5` (retries + scene cache), `6957eba` (health fields),
       (passed/skipped/failed and why), per-branch commits, how to run locally
       in under 5 minutes, everything still unverified, and the exact merge
       order for the user (evidence: `docs/FINAL_REPORT.md`)
+
+## Post-report dashboard addition (2026-10-21)
+
+The dashboard work was finished after the first release report, without
+changing the API, database schema or detection path.
+
+- [x] History dashboard: saved-analysis count, live/upload split, simple mean
+      and largest flagged share, per-analysis bars and range distribution,
+      with an empty state (evidence: `renderHistoryDashboard` in
+      `static/app.js`; `#history-dashboard` in `static/index.html`;
+      screenshots 13–15)
+- [x] Dashboard values come only from the existing `/history` fields; no new
+      endpoint and no change to stored results. The UI states that the mean is
+      not area-weighted and that the dashboard is not a measure of detection
+      performance (evidence: dashboard note in the UI; `LIMITATIONS.md`)
+- [x] Mobile navigation stays usable: at ≤480 px the tabs read Compare /
+      Upload / History and all three fit at 375 px; the marketing intro is
+      hidden on the History view while the honesty note remains visible
+      (evidence: `test_history_dashboard_aggregates_rows_and_hides_when_empty`
+      checks the tab bounds and the intro visibility)
+- [x] New browser test with mocked history rows checks aggregates, range
+      buckets, the empty state and 375 px overflow (evidence:
+      `test_history_dashboard_aggregates_rows_and_hides_when_empty`; 4 browser
+      tests in `tests/test_ui.py`)
+- [x] Screenshots 13/14/15 at 1440 dark, 768 light and 375 light; 0 px
+      horizontal overflow and no console errors at each width (evidence:
+      `docs/screenshots/13-history-dashboard-1440.png`,
+      `14-history-dashboard-768.png`, `15-history-dashboard-375.png`)
+- [x] Full suite after the addition: **194 passed, 3 skipped**, 1 warning
+      (evidence: `pytest -q`, 61.04 s; the 3 skips are unchanged environment
+      gaps)
+- [x] The dashboard screenshots use example rows from the test fixture, not
+      real saved analyses; this is stated in the README (evidence: README
+      screenshot disclosure)
 
 ## Final verification (before telling the user to merge)
 
