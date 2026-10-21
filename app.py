@@ -231,6 +231,8 @@ async def health():
         "status": "ok",
         "model_present": MODEL_ONNX_PATH.is_file(),
         "model_loaded": session is not None,
+        "cnn_available": MODEL_ONNX_PATH.is_file(),
+        "spectral_available": True,
         "commit": get_commit_hash(),
     }
 
