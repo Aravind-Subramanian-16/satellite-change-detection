@@ -1,380 +1,339 @@
 % Compile from docs/paper with pdflatex (IEEEtran required).
-% All numbers come from benchmarks/results/oscd_results_v2.json.
-% Citation slots are deliberate placeholders; see TODO_CITATIONS.md.
+% Every number is computed from degradation_results.csv or
+% benchmarks/results/oscd_results_v2.json. Citation slots are deliberate:
+% no bibliographic data is asserted in this version.
 \documentclass[conference]{IEEEtran}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{longtable}
 \usepackage{amsmath}
-\usepackage{url}
 \usepackage[hidelinks]{hyperref}
 
-\title{Transparent Sentinel-2 Change Detection as Decision Support:\\
-A Reproducible OSCD Benchmark of Spectral Rules and a Learned Baseline}
+\title{Resolution-Induced Performance Collapse of a CNN Change Detector:\\
+Simulated and Real Sentinel-2 Evidence}
 
-\author{\IEEEauthorblockN{Author and affiliation to be completed}
-\IEEEauthorblockA{Anonymous review version --- do not submit as-is}}
+\author{\IEEEauthorblockN{Aravind}
+\IEEEauthorblockA{Department of Computer Science and Engineering\\
+Presidency University\\
+Bengaluru, India}}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Operational change detection is often presented as a model-selection problem,
-while deployed tools also need inspectable rules, bounded claims and reproducible
-failure modes. We report a small, fully specified benchmark of a Sentinel-2
-decision-support tool on the official OSCD urban-change test split. The system
-combines NDVI/NDBI difference rules, cloud/shadow masking, a minimum mapping
-unit and optional radiometric normalisation; a CNN baseline trained on aerial
-imagery is evaluated under the same protocol. Thresholds and CNN preprocessing
-were selected on the 14 training cities only. On the ten test cities, a
-percentile spectral rule reached pooled F1 0.1176 (precision 0.2419, recall
-0.0777) against a true change fraction of 5.17\%, while a hardcoded rule reached
-F1 0.0782. Otsu thresholding predicted 67.35\% of pixels as changed and is
-therefore reported by overall accuracy (0.3439), not by F1 alone. The CNN
-produced near-empty predictions (pooled F1 0.0007 for the train-selected
-variant), which we report as negative transfer rather than tune away. Per-city
-F1 ranges from 0.0005 to 0.2481 for the percentile rule, so the aggregate hides
-substantial variation. We describe a preregistered, validation-only protocol
-for future improvements and explicitly leave its test score uncomputed. The
-paper contributes an auditable negative result and an implementation pattern
-for systems that must state what they do not validate.
+Deep change detectors are often trained on high-resolution aerial imagery such
+as LEVIR-CD (0.5\,m), while Sentinel-2 provides 10\,m and 20\,m bands. This
+paper reports a single-architecture case study of that gap. One MobileNetV2-based
+Siamese U-Net is trained once on LEVIR-CD and frozen. At native resolution it
+reaches pooled F1 87.06\%, IoU 77.08\%, precision 88.82\% and recall 85.36\% on
+2,048 test pairs. We blur and downsample the same pairs to 1, 2, 4, 8 and 10\,m,
+upsample them to $256\times256$, and re-evaluate without retraining. F1 is
+70.81\% at 1\,m and 4.41\% at 2\,m; at 8--10\,m it is 2.61\%, recall is 1.32\%,
+precision is about 99.5\%, and only 0.068\% of pixels are predicted changed.
+Among 935 changed test images, 924 (98.8\%) receive no predicted change at
+10\,m. The simulation isolates blur and resampling and does not reproduce
+Sentinel-2 spectral, radiometric or atmospheric differences. We also evaluate
+the frozen CNN zero-shot on the ten official OSCD test cities: pooled F1 is
+0.0007 with joint-percentile preprocessing and 0.0000 with reflectance.
+Train-selected spectral rules reach pooled F1 0.0782 (hardcoded NDVI/NDBI) and
+0.1176 (percentile); Otsu predicts 67.35\% of pixels changed and is summarized
+by overall accuracy 0.3439. These results do not establish spectral indices as
+a validated alternative. The test cities had been scored more than once before
+the reported run, so the evaluation is not an independent test of unseen
+cities. Only one architecture and one training run are tested.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Sentinel-2, change detection, OSCD, spectral indices, reproducibility,
-decision support, negative transfer.
+change detection, remote sensing, resolution mismatch, domain shift,
+convolutional neural networks, Sentinel-2, spectral indices, NDVI, NDBI, OSCD
 \end{IEEEkeywords}
 
 \section{Introduction}
-Satellite change detection is used to prioritise site visits, screen land-cover
-transitions and communicate observations. In those settings a single accuracy
-number is not enough: an operator needs to know which pixels were excluded, how
-thresholds were chosen, which scenes were used, what the tool does not detect,
-and whether a result was ever tested on independent labels. Deep models can
-improve benchmark scores, but they can also fail silently when the deployment
-sensor or resolution differs from training.
+Automated change detection supports urban planning, disaster response and
+land-cover monitoring. Much recent progress uses deep networks trained and
+evaluated on high-resolution benchmarks such as LEVIR-CD, which provides
+0.5\,m aerial imagery with pixel-level labels [CITE: LEVIR-CD dataset]. Such
+models can report high scores at their native resolution [CITE: deep learning
+change detection surveys], but those scores do not show that the same model
+transfers to a different sensor, resolution or label definition.
 
-This paper documents a deployed, browser-based Sentinel-2 analysis tool and a
-reproducible evaluation of its spectral rules against the official OSCD test
-split. The evaluation is deliberately conservative. Thresholds are selected on
-training cities; cloud and shadow masks are reported; labels are urban change
-only; and the learned baseline's poor transfer is reported as measured. We do
-not claim a new method or a top benchmark score. The contributions are an
-end-to-end auditable implementation, a train-only benchmark with disclosed
-scoring history, and a preregistered validation protocol for changes that have
-not been scored on the test split.
+Sentinel-2 offers free, frequently revisited multispectral imagery at 10\,m and
+20\,m [CITE: Sentinel-2 mission and L2A products]. A 10\,m pixel is twenty times
+coarser linearly than a 0.5\,m aerial pixel. The difference matters for small
+objects, mixed pixels and any decision that assumes native spatial detail.
 
-The remainder of the paper reviews related work (Section~II), describes the
-data and task (Section~III), the methods (Section~IV), the protocol including
-its two prior test-scoring events (Section~V), results (Section~VI), the
-validation-only ablation that was not run in this checkout (Section~VII), and
-the limits of the claims (Sections~VIII--X).
+This paper reports an empirical case study, not a new detector. We take one
+trained CNN, freeze it, and evaluate it in two ways. We apply controlled
+blur and resampling to the LEVIR-CD test pairs to vary simulated resolution
+while holding scene content fixed. We then evaluate the same frozen
+checkpoint zero-shot on the official OSCD Sentinel-2 urban-change split and
+compare it with train-selected spectral rules. The spectral rules are included
+as inspectable reference points, not as a validated replacement for learned
+detection. We report city-bootstrap intervals, trivial baselines and the prior
+use of the test split so that the strength of each statement is visible.
+
+The contributions are:
+\begin{itemize}
+  \item a controlled degradation study of one frozen CNN over 2,048 LEVIR-CD
+  test pairs at six simulated resolutions, with pooled confusion counts and a
+  per-image characterization at 10\,m showing near-empty predictions rather than
+  a rise in false positives;
+  \item a zero-shot OSCD evaluation of the same CNN and train-selected
+  NDVI/NDBI rules, with city-bootstrap intervals and trivial baselines; and
+  \item an explicit disclosure that the OSCD test cities had been scored before
+  the reported run, so the result is descriptive rather than an independent
+  confirmation.
+\end{itemize}
+We do not claim a new architecture, a benchmark-leading score or a validated
+operational system.
 
 \section{Related Work}
-\label{sec:related}
-Work on satellite change detection spans benchmark datasets and supervised
-models [CITE: OSCD dataset and baseline models], spectral-index and
-threshold-based detection [CITE: spectral indices for change detection],
-[CITE: Otsu thresholding], and deep architectures for bitemporal imagery
-[CITE: deep learning change detection surveys]. OSCD specifically provides
-Sentinel-2 urban-change pairs and a fixed train/test city split
-[CITE: OSCD dataset and protocol]; reported scores in that literature are not
-directly comparable to the simple rules evaluated here.
+\textbf{CNN change detection.} Fully convolutional Siamese networks established
+a standard architecture family for bitemporal change detection [CITE: fully
+convolutional Siamese networks]. Later work added spatial-temporal attention and
+transformer fusion [CITE: STANet], [CITE: BIT]. These studies evaluate at native
+resolution, so their scores are not directly comparable to the cross-resolution
+evaluation reported here.
 
-A second line concerns transfer and evaluation. CNNs trained on one sensor,
-resolution or label ontology can lose accuracy on another
-[CITE: cross-sensor and domain-shift change detection], and repeated use of a
-fixed test split can inflate apparent progress
-[CITE: test-set reuse and benchmark overfitting]. Preregistration, spatial
-cross-validation and provenance are established practices in remote sensing
-and beyond [CITE: preregistration], [CITE: spatial cross-validation],
-[CITE: reproducibility and provenance in remote sensing]. The implementation
-also draws on interactive Earth-observation tools and decision-support
-interfaces [CITE: open change-detection tools and decision support].
+\textbf{Transfer and resolution shift.} Domain shift between training and
+deployment imagery is an acknowledged challenge in remote sensing [CITE:
+cross-sensor and domain-shift change detection]. Sensor, geography, season,
+atmosphere and resolution can differ. This paper isolates a
+simulated blur-and-resampling factor in one experiment and reports a real
+Sentinel-2 evaluation in another; it does not identify which factor causes the
+real-data result.
 
-The emphasis of this paper is not a new detector. It is a conservative,
-auditable evaluation of simple rules and one mismatched CNN, plus an
-implementation that exposes validation status and provenance alongside each
-result. The combination may not be unique; \texttt{NOVELTY\_CHECKLIST.md}
-records a shallow scan and prohibits a priority claim. The contribution is the
-evidence and the reporting discipline, both of which are limited by the threats
-in Section~\ref{sec:limitations}.
+\textbf{Spectral indices and thresholding.} NDVI [CITE: NDVI definition] and
+NDBI [CITE: NDBI definition] are simple per-pixel indices that require no
+training labels. At 10\,m, mixed pixels dilute both indices, so a threshold on
+an index difference is not resolution-independent. Otsu's method selects a
+threshold from an intensity histogram without labels [CITE: Otsu thresholding]
+and is sensitive to class balance.
 
-\section{Data and Task}
-\label{sec:data}
-\subsection{OSCD}
-We use the official OSCD urban-change benchmark layout with 14 training cities
-and 10 test cities [CITE: OSCD dataset and protocol]. Each city provides a
-before/after Sentinel-2 pair and a binary change label. Labels cover urban
-change; they do not provide a general land-cover or forest-loss reference. In
-the v2 test rows, the pooled true change fraction is 5.17\% across 3,077,936
-pixels, so overall accuracy is dominated by the unchanged class.
+\textbf{Benchmarks and evaluation hygiene.} OSCD provides Sentinel-2
+urban-change pairs with a fixed city split [CITE: OSCD dataset and protocol].
+Repeated use of a fixed test split can inflate apparent progress [CITE:
+test-set reuse and benchmark overfitting]. We therefore report the prior
+scoring history of the OSCD test cities and do not present the reported run as a
+fresh test. The contribution is evidence and reporting discipline, not a
+priority claim.
 
-The benchmark layout used here does not include Sentinel-2 Scene
-Classification (SCL) layers. Cloud and shadow exclusion is therefore applied by
-the live tool but is not evaluated by the v2 benchmark. Any statement about
-cloud-mask quality would be unsupported by these numbers.
+\section{System Overview}
+The evaluated tool is a browser-based decision-support application over a
+FastAPI service. Its upload path runs a CNN on a before/after pair. Its live
+path resolves a place name or bounding box and two dates, queries the
+Copernicus Data Space catalogue for Sentinel-2 L2A scenes, ranks candidate
+scenes, retrieves the selected acquisitions, applies cloud/shadow masking from
+the Scene Classification Layer, and computes NDVI and NDBI differences. The
+offline benchmark reuses the same index and threshold logic on reflectance
+bands. The interface presents candidate regions with provenance and withholds
+accuracy figures for unvalidated profiles. This section describes
+implementation facts only; it is not an end-to-end validation of the deployed
+service.
 
-\subsection{Images and preprocessing}
-The spectral path decodes an RGB preview and an encoded NDVI/NDBI/SCL image
-from the live service. The offline benchmark computes NDVI and NDBI from
-reflectance bands (B04/B08 and B11/B08) and applies the same threshold logic.
-%% The benchmark pipeline does not use SCL; the live path does.
-For the CNN path, before/after RGB arrays are normalised with ImageNet
-statistics and tiled for inference. Two preprocessing variants were evaluated:
-\emph{joint percentile} (selected on training cities) and \emph{reflectance}
-(the other variant). The provided checkpoint is described as trained on
-0.5\,m aerial LEVIR-CD pairs [CITE: LEVIR-CD dataset], not on OSCD Sentinel-2
-imagery; the checkpoint is not included in this checkout.
+\section{Controlled Resolution Degradation}
+\subsection{Protocol}
+The checkpoint is a MobileNetV2-based Siamese U-Net with a 3D-convolution
+fusion module. It was trained once on $256\times256$ LEVIR-CD patches with a
+combined Dice and binary cross-entropy loss, AdamW (learning rate
+$5\times10^{-4}$, weight decay $10^{-4}$), batch size 4 and cosine annealing.
+Training was configured for up to 100 epochs with early stopping (patience 10)
+and stopped after 27 epochs; the best validation IoU was 0.7205. The checkpoint
+was frozen for all experiments below.
 
-\section{Methods}
-\label{sec:methods}
-\subsection{Spectral indices and rules}
-For a Sentinel-2 pixel with red ($R$), near-infrared ($N$) and short-wave
-infrared ($S$) reflectance,
-\begin{align}
-\mathrm{NDVI} &= \frac{N-R}{N+R}, \\
-\mathrm{NDBI} &= \frac{S-N}{S+N}.
-\end{align}
-The general rule flags a pixel when NDVI decreases by more than a threshold or
-NDBI increases by more than a threshold. The hardcoded configuration used
-$\Delta\mathrm{NDVI} < -0.30$ or $\Delta\mathrm{NDBI} > +0.30$, selected from a
-training-city grid; both selected values sit at the edge of the search grid.
-The percentile configuration thresholds the positive-change evidence at a
-training-selected percentile (99.0). Otsu's method selects a threshold from the
-change-evidence histogram without labels [CITE: Otsu thresholding].
+We used the 2,048 LEVIR-CD test pairs. For degradation factor $f>1$, each image
+was blurred with a PIL Gaussian filter of radius $f/2$ pixels, downsampled to
+$(256/f)\times(256/f)$ with LANCZOS resampling, and upsampled back to
+$256\times256$ with LANCZOS. At 10\,m this is a $12\times12$ intermediate for a
+$256\times256$ input. Images were normalized with ImageNet statistics and passed
+to the frozen CNN with a 0.5 probability threshold. TP, FP and FN were counted
+per image, and Table~\ref{tab:degradation} pools the counts over all 2,048 pairs
+at each level. The procedure holds scene content fixed and varies blur and
+sampling; it does not reproduce Sentinel-2 spectral bands, radiometric
+calibration, atmospheric correction, mixed-pixel composition or sensor noise.
 
-Cloud/shadow masking (SCL classes 3, 8, 9 and 10 in the live path) excludes
-pixels from valid statistics. A minimum mapping unit (MMU) removes connected
-components below the configured area in the interactive profiles. The v2
-benchmark uses no MMU, compositing, PIF normalisation or morphological cleanup;
-those options are off by default and are not validated here.
-
-\subsection{CNN baseline}
-The CNN baseline is the existing two-input pipeline: a shared encoder processes
-the before/after RGB tiles and a sigmoid output produces a change probability.
-It is evaluated without retraining on OSCD. The joint-percentile preprocessing
-was selected on training cities; the reflectance variant is reported as the
-other configuration. No test labels were used to choose either variant.
-
-\subsection{Metrics}
-For each city we compute true positives (TP), false positives (FP), false
-negatives (FN) and true negatives (TN). Precision is $TP/(TP+FP)$, recall is
-$TP/(TP+FN)$, F1 is the harmonic mean of precision and recall, intersection
-over union is $TP/(TP+FP+FN)$, and overall accuracy is
-$(TP+TN)/(TP+FP+FN+TN)$. Pooled values are computed from summed confusion
-counts, not by averaging city scores. Percentages are pixel shares on the
-benchmark grid.
-
-Otsu predicts 67.35\% of pooled pixels as changed. Its F1 is therefore not a
-useful standalone summary; we report its overall accuracy as the headline
-score and show F1 for completeness. This choice is stated in every table and
-figure caption where Otsu appears.
-
-\section{Experimental Protocol and Scoring History}
-\label{sec:protocol}
-All threshold and preprocessing choices were made on the 14 training cities.
-The ten official test cities were then scored. Two test-scoring events
-preceded this paper:
-\begin{enumerate}
-  \item An earlier preliminary run with a smaller threshold grid scored the
-  official test split. Its pooled F1 values were percentile 0.167, hardcoded
-  0.104, Otsu 0.095 and CNN 0.0. That run is disclosed here because it is not
-  an independent second test.
-  \item The v2 run, whose values are the source of record for this paper,
-  selected thresholds on training cities and produced the results in
-  Section~\ref{sec:results}. The v2 files are tracked at
-  \texttt{benchmarks/results/oscd\_results\_v2.json} and \texttt{.md}.
-\end{enumerate}
-No test labels were used to fit thresholds. No post-v2 test tuning is reported.
-A third, one-shot scoring event (v3) was preregistered before any v3 result
-existed. At the time of writing, no v3 result file exists in the repository, so
-this paper does not report one.
-
-The validation-only improvement search uses 12 fixed systems, leave-one-city-out
-folds over the 14 training cities, a hard trial budget and a log that records
-failures. It refuses the official test cities. Its purpose is to make component
-decisions without touching the test split; it cannot establish that a component
-will improve test performance. The search log was not produced in this
-checkout.
-
-\section{Results}
-\label{sec:results}
-Table~\ref{tab:pooled} reports pooled v2 results. The percentile spectral rule
-has the highest F1 among the F1-scored methods (0.1176), with precision 0.2419
-and recall 0.0777. The hardcoded rule reaches F1 0.0782 and predicts only
-2.24\% of pixels as changed against a true 5.17\%. Both spectral variants
-under-predict change in aggregate. Otsu predicts 67.35\% and obtains overall
-accuracy 0.3439; its high recall (0.6684) comes with precision 0.0513.
-
-The CNN variants are close to empty: the joint-percentile variant predicts
-0.01\% of pixels and reaches F1 0.0007; the reflectance variant predicts 0.00\%
-and reaches F1 0.0000. Their overall accuracy (0.9483) is slightly above the
-spectral methods' accuracy, which is expected when almost no pixels are
-predicted as changed on a 5.17\% positive class. We do not present this as a
-success.
-
-\input{figures/generated_results_table}
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.92\textwidth]{figures/fig_per_city_f1.png}
-\caption{Per-city F1 on the official OSCD test split (v2) for the four
-F1-scored methods. Otsu is omitted here because its reported score is overall
-accuracy; see Table~\ref{tab:pooled}. City-level variation is large: the
-percentile rule ranges from 0.0005 to 0.2481 across the ten cities.}
-\label{fig:per-city}
-\end{figure*}
+\input{figures/generated_degradation_table}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_precision_recall.png}
-\caption{Per-city precision--recall points (small dots) and pooled confusion
-counts (stars) for the five configurations. The Otsu star sits at high recall
-and low precision; the CNN stars sit at near-zero recall.}
-\label{fig:pr}
+\includegraphics[width=0.92\columnwidth]{figures/fig_f1_vs_resolution.png}
+\caption{F1, precision and recall versus simulated resolution on the 2,048
+LEVIR-CD test pairs. F1 and recall collapse beyond 1\,m; precision remains high
+at coarse levels, where very few pixels are predicted changed.}
+\label{fig:resolution}
 \end{figure}
+
+\subsection{Results}
+Table~\ref{tab:degradation} and Fig.~\ref{fig:resolution} report the pooled
+results. F1 is 87.06\% at 0.5\,m, falls to 70.81\% at 1\,m (a 16.25-point
+absolute drop), and collapses to 4.41\% at 2\,m. It is 2.84\% at 4\,m and
+2.61\% at 8--10\,m. Recall falls from 85.36\% at 0.5\,m to 57.01\% at 1\,m and
+2.26\% at 2\,m, then 1.32\% at 8--10\,m. Precision is 88.82\%, 93.43\%,
+90.78\%, 97.69\%, 99.59\% and 99.47\% across the six levels. The decline in F1
+is therefore recall-dominated.
+
+The high precision at coarse levels should not be read as useful detection. At
+10\,m only 91,006 of 134,217,728 pixels are predicted changed (0.068\%), against
+6,837,404 changed ground-truth pixels. Precision is computed from 90,527 true
+positives and 479 false positives, so it describes how little the model predicts
+rather than how well it localizes change.
+
+\subsection{Prediction Behavior at 10\,m}
+Of the 935 test images that contain ground-truth change, 924 (98.82\%) receive
+no predicted change pixels at 10\,m. The remaining 11 divide into 4 with IoU
+below 0.1, 5 between 0.1 and 0.5, and 2 at or above 0.5. These counts are
+descriptive, not mechanistic; they do not separate resolution loss from the
+other differences in the simulation.
+
+\section{Real Sentinel-2 Evaluation on OSCD}
+\subsection{Data and Protocol}
+OSCD provides fourteen training cities and ten official test cities with
+pixel-level urban-change labels [CITE: OSCD dataset and protocol]. We use five
+bands aligned to the label grid: B02, B03, B04, B08 and B11. The pooled test set
+contains 3,077,936 pixels, of which 5.17\% are labelled change. The benchmark
+layout used here does not include the Sentinel-2 Scene Classification Layer, so
+cloud and shadow exclusion is not evaluated.
+
+Three spectral configurations were evaluated. The hardcoded rule flags a pixel
+when NDVI drops by at least 0.30 or NDBI rises by at least 0.30. The percentile
+rule thresholds the positive-change evidence at the 99.0th percentile. Otsu
+thresholds the same evidence without labels [CITE: Otsu thresholding]. The
+hardcoded and percentile settings were selected on the fourteen training cities
+over fixed grids; the selected hardcoded values lie at the edges of the search
+grid, while 99.0 is interior to the percentile grid. No test labels were used to
+fit the v2 thresholds.
+
+The CNN is evaluated zero-shot with two preprocessing variants. Its input is an
+RGB stack (B04, B03, B02). Reflectance scaling maps raw values to 0--255 by
+dividing by 10,000; joint-percentile scaling uses the 2nd and 98th percentiles of
+both dates combined. Scenes are processed in $256\times256$ tiles with 32-pixel
+overlap and averaged probabilities. Joint-percentile was selected on training
+cities; reflectance is the alternative.
+
+\textbf{Scoring history.} The ten official test cities had been scored before
+the reported v2 run. An earlier preliminary run with a smaller threshold grid
+produced pooled F1 values of 0.167 (percentile), 0.104 (hardcoded), 0.095
+(Otsu) and 0.0 (CNN). The total number of scoring events is not recorded. The v2
+run re-evaluated those cities after the configuration was fixed on training
+cities. It is therefore not an independent test of unseen cities, and we do not
+present it as one.
+
+\subsection{Results}
+Table~\ref{tab:oscd} reports pooled results. The percentile rule has the highest
+pooled F1 among the spectral configurations (0.1176, 95\% city-bootstrap CI
+0.0540--0.1802), with precision 0.2419 and recall 0.0777. The hardcoded rule
+reaches F1 0.0782 (CI 0.0168--0.1846) and predicts 2.24\% of pixels as changed
+against a true 5.17\%. The paired difference in F1 between percentile and
+hardcoded is $+0.0394$, with a bootstrap interval of $-0.0176$ to $+0.0778$;
+the interval includes zero, so the ranking is not resolved at the 5\% level.
+Both spectral rules under-predict change in aggregate. A random predictor at
+5.17\% prevalence has F1 0.0517; only the percentile interval lies entirely
+above it, narrowly.
+Otsu predicts 67.35\% of pixels changed and obtains overall accuracy 0.3439,
+with precision 0.0513 and recall 0.6684. Its F1 is 0.0953 (CI 0.0495--0.1245),
+but its predicted fraction is so far above the true prevalence that F1 is not a
+useful standalone summary; overall accuracy is reported as its headline score.
+
+The CNN variants are close to empty. The joint-percentile variant predicts 0.01\%
+of pixels and reaches F1 0.0007 (CI 0.0000--0.0017); the reflectance variant
+predicts 0.00\% and reaches F1 0.0000. Their overall accuracy is 0.9483, equal to
+the all-no-change accuracy on this test set. This is expected for a near-empty
+predictor on a 5.17\% positive class and is not detection performance.
+
+\input{figures/generated_oscd_table}
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/fig_predicted_vs_true.png}
-\caption{Predicted versus true change fractions. Left: all methods with a
-symmetric-logarithmic vertical axis; right: the low range with Otsu excluded.
-The dashed line is predicted $=$ true. The spectral rules sit below the line,
-Otsu sits far above it, and the CNN variants sit on the zero axis.}
-\label{fig:fractions}
+\includegraphics[width=0.94\textwidth]{figures/fig_oscd_per_city_and_fractions.png}
+\caption{OSCD v2 test results. (a) Per-city F1 with 95\% pixel-bootstrap
+intervals; the short horizontal bars mark the random-at-prevalence expectation.
+F1 is shown for Otsu for completeness, although its headline score is overall
+accuracy. (b) Predicted versus true change fraction; the vertical axis is
+symmetric-logarithmic and the dashed line is predicted $=$ true. The spectral
+rules sit mostly below the line, Otsu sits far above it, and the CNN variants
+sit near zero.}
+\label{fig:oscd}
 \end{figure*}
 
-Figure~\ref{fig:per-city} shows that the aggregate F1 masks large city
-differences. The percentile rule ranges from 0.0005 (saclay\_w) to 0.2481
-(chongqing); the hardcoded rule ranges from 0.0032 (dubai) to 0.3102
-(chongqing). Figure~\ref{fig:fractions} makes the calibration-style failure
-visible: the rules systematically under-predict change, while Otsu
-over-predicts by an order of magnitude. Figure~\ref{fig:pr} shows that no
-configuration occupies a high-precision, high-recall region on this test set.
+\subsection{City-Level Variation}
+Fig.~\ref{fig:oscd} shows that the pooled numbers hide large city differences.
+Percentile F1 ranges from 0.0005 (saclay\_w) to 0.2481 (chongqing); hardcoded F1
+ranges from 0.0032 (dubai) to 0.3102 (chongqing). The joint-percentile CNN
+produces no predicted change in eight of ten cities and reaches at most 0.0024
+(lasvegas); reflectance produces none. These
+ranges are descriptive. The per-city intervals in Fig.~\ref{fig:oscd}(a)
+resample pixels independently, ignoring spatial correlation; the pooled
+intervals resample the ten cities. Neither includes model-training or
+threshold-selection uncertainty.
 
-We did not compute confidence intervals or significance tests for these
-values. With ten cities and one label source, the numbers should be read as
-descriptive benchmark results, not as population estimates.
-
-\section{Ablations and Validation-Only Improvements}
-\label{sec:ablations}
-The repository includes optional PIF gain/offset matching, temporal median
-compositing, morphological cleanup, an MMU and a fixed leave-one-city-out
-search. These are covered by synthetic tests and are off by default. The v2
-benchmark did not use them, so this paper cannot attribute any test difference
-to them.
-
-The 12-system validation search and its component ablations were not run in
-this checkout because the OSCD data and learned artifacts are absent. The
-generated ablation table therefore contains a single explicit statement that
-the ablation was not run, not an estimated value. A planned v3 protocol freezes
-four systems and a one-shot test-scoring rule; it remains uncomputed. Until
-those runs exist, no validation or test improvement is claimed.
-
-The optional per-pixel histogram-gradient-boosting classifier is likewise
-experimental. It is trained only on OSCD training cities, is disabled by
-default, and has no test-city score in this checkout. No accuracy figure is
-displayed for it in the interface.
+The simulation isolates blur and resampling; the OSCD evaluation uses real data
+but confounds resolution with spectral, radiometric, atmospheric and geographic
+differences. No cloud or shadow mask is available in this OSCD layout, so cloud
+effects are also uncontrolled.
 
 \section{Discussion}
-\label{sec:discussion}
-The main result is a negative one: a CNN trained on 0.5\,m aerial imagery does
-not transfer to 10\,m Sentinel-2 urban change in this benchmark. Near-zero
-predicted fractions can yield respectable overall accuracy while being useless
-for finding change. Reporting F1, predicted fraction and recall together makes
-that failure hard to hide. A domain gap between the training imagery and the
-target sensor is a plausible explanation, not a causal finding; the experiment
-does not isolate resolution, season, label definition or preprocessing.
+The sharp transition between 1\,m and 2\,m is consistent with the loss of spatial
+information on which this architecture depends, but the experiment does not
+identify which features cause it. The practical implication is narrower and
+better supported: a model validated only at its native resolution can fail on
+coarser imagery, and a native-resolution benchmark score does not reveal that
+risk.
 
-The spectral rules are transparent but weak. Percentile thresholding improves
-pooled F1 over the hardcoded rule, yet both under-predict change and vary
-widely by city. The hardcoded thresholds selected at the edge of the search
-grid suggest that the grid, not just the data, limits the result. Otsu is not a
-drop-in fix: its high recall is bought with very low precision on this class
-balance.
+The coarse-resolution precision values illustrate a reporting problem. A
+near-empty predictor can obtain high precision and high overall accuracy while
+missing almost all change. Reporting F1 alone can also mislead when the
+predicted fraction is extreme, as with Otsu. Precision, recall, predicted
+fraction and true prevalence need to be read together, and overall accuracy is
+uninformative when the positive class is small.
 
-For decision support, the practical consequence is that the tool should emit
-candidates, masked-area statistics and provenance, not autonomous change
-polygons. The interface follows that rule: unvalidated profiles show no
-accuracy numbers, the evidence heatmap is labelled as rule magnitude rather
-than probability, and every result records scenes, dates, thresholds and
-commit.
-
-\subsection{Future Work}
-\label{sec:future}
-Four evaluations would change the paper from a descriptive benchmark into
-useful evidence. A human-in-the-loop study should record whether operators
-accept or reject candidate regions, and report precision at a fixed review
-budget rather than pixel F1 alone. Agriculture and deforestation profiles need
-season-matched labelled polygons; neither profile currently has an accuracy
-claim. Road monitoring requires imagery that resolves sub-10\,m features; the
-present data cannot support it. Finally, the preregistered v3 protocol should
-be run once, with its log and hashes frozen before test access, and reported
-whether it improves on the percentile reference or not.
-
-The optional learned classifier, fusion, calibration and auto-improvement
-search are implemented but unvalidated. Completing them requires the
-training-only log and an independent evaluation; adding them to the default
-pipeline before that would create claims the evidence does not support. A
-larger, multi-sensor, multi-season evaluation with city-level intervals is the
-appropriate next step; another score on the same ten cities is not.
-\texttt{docs/paper/FUTURE\_WORK.md} records the concrete tasks and their
-dependencies.
+For decision support, the consequence is that the tool should emit candidate
+regions, masked-area statistics and provenance, not autonomous change polygons.
+The spectral rules are transparent but weak: the percentile rule improves
+pooled F1 over the hardcoded rule, yet both under-predict change and vary widely
+by city. Their results do not establish NDVI/NDBI differencing as a validated
+low-resolution fallback. Otsu is not a drop-in fix; its high recall is bought
+with very low precision on this class balance.
 
 \section{Limitations}
-\label{sec:limitations}
-The evaluation covers ten cities and urban-change labels only. It does not
-validate agriculture, deforestation, water or roads. SCL-based cloud/shadow
-masking is not evaluated because the benchmark layout lacks SCL. The CNN
-comparison uses one trained checkpoint and two preprocessing variants, without
-retraining or architecture search. No confidence intervals are reported.
-Threshold selection was limited to a small grid, and two test-scoring events
-preceded this paper; the earlier preliminary values are disclosed rather than
-presented as independent confirmation. The learned classifier, fusion,
-compositing and PIF components are implemented but not validated on labels.
-Operational, privacy and licensing limits are documented in the repository's
-\texttt{docs/LIMITATIONS.md}; notably, the deployed app has no authentication
-and stores previews and locations in local history.
+The degradation experiment applies blur and resampling to LEVIR-CD rather than
+acquiring real imagery at each resolution. It omits Sentinel-2 band differences,
+radiometric calibration, atmospheric correction, mixed pixels and sensor noise.
+OSCD supplies real 10\,m data, but the layout used here has ten test cities, no
+SCL layer and urban labels only. Only one architecture and one training run were
+tested; there was no retraining, fine-tuning, seed variation or architecture
+comparison. The hardcoded thresholds sat at grid edges, so the grid as well as
+the data limits that result. No decision-threshold tuning was tested. The
+official test cities had been scored before the reported run, and the total
+number of scoring events is not recorded. No confidence intervals are reported
+for overall accuracy, and the per-city intervals use an independent-pixel
+approximation. The reported benchmark evaluates the offline pipeline and the
+frozen checkpoint, not the deployed application's scene selection or user
+interface.
 
-\section{Reproducibility and Ethics}
-\label{sec:reproducibility}
-The source of record is the tracked v2 JSON, whose SHA-256 is recorded in the
-figure manifest. The benchmark code, tests, figure generator and manuscript are
-in the repository; OSCD imagery, labels and model weights are not
-redistributed. The benchmark is deterministic given the saved data and
-configuration; threshold selection reads training cities only. The code commit
-used for the v2 analysis and this manuscript's numbers is Phase~E commit
-\texttt{a6dad9e}; later Phase~F changes are documentation, figures and tests.
-The figure generator verifies that all ten
-cities contain all five configurations before plotting, so a missing method
-fails loudly rather than producing a partial chart.
-
-OSCD labels are used under their dataset terms; a licence review is required
-before redistribution or commercial use. OpenStreetMap context is used under
-the ODbL. The tool is intended for decision support and civil land-observation
-workflows; it is not a targeting or enforcement system, and every exported
-region requires human verification.
+All benchmark scores and per-image counts in this paper come from two saved
+files: the per-image degradation CSV (SHA-256 \texttt{4c301920...}) and the OSCD
+per-city JSON (SHA-256 \texttt{37ffe2bb...}). The figure and table generator
+reads those files only and records their hashes in a manifest; the benchmark
+does not re-score any test city for this paper.
 
 \section{Conclusion}
-We presented an auditable benchmark of a Sentinel-2 change-detection tool on
-the official OSCD test split. A training-selected percentile rule achieved
-pooled F1 0.1176 and a hardcoded rule 0.0782; Otsu's headline overall accuracy
-was 0.3439 at a 67.35\% predicted-change rate; the learned CNN transferred
-poorly (F1 0.0007 or lower). The paper reports these outcomes without
-post-test tuning, describes a validation-only improvement protocol, and leaves
-its one-shot test score uncomputed. The next step is independent labels for
-non-urban profiles and a properly powered, multi-sensor evaluation, not another
-number on the same ten cities.
+We reported a single-architecture case study in which a CNN with 87.06\% F1 at
+native 0.5\,m resolution falls to 70.81\% at 1\,m and 4.41\% at 2\,m under
+blur-and-resampling, and to 2.61\% at 8--10\,m with near-empty predictions. The
+simulation shows that resolution-related information loss alone is sufficient to
+collapse this detector; it does not reproduce all differences of real
+Sentinel-2 data. A zero-shot OSCD evaluation of the same frozen CNN yields
+pooled F1 0.0007 or lower. Train-selected NDVI/NDBI rules also perform poorly
+(pooled F1 0.0782--0.1176), so the results do not establish spectral indices as
+a validated alternative. The test cities had been scored before the reported
+run. Resolution mismatch should be evaluated explicitly, and claims about
+low-resolution fallbacks require real-data validation on independent cities.
 
-\appendix
-\section{Per-City Results}
-\clearpage
-\onecolumn
-\input{figures/generated_per_city_table}
-\twocolumn
-
-\section{Validation Ablation Table (Not Run)}
-\input{figures/generated_ablation_table}
+\section*{References}
+\noindent This version contains deliberate citation slots of the form
+\texttt{[CITE: topic]}. No bibliographic field, DOI, volume or page is asserted
+here. Before submission, each slot must be replaced with a verified source and
+the sentence around it checked against that source. The working list and
+verification rules are in \texttt{docs/paper/TODO\_CITATIONS.md}; the list is
+not a bibliography and must not be submitted as one.
 
 \end{document}
