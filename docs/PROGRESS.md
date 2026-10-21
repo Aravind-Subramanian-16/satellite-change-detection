@@ -579,8 +579,32 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     No test-city scoring, training, fine-tuning or v3 run was performed.
   - Commits `2622ec8` (deck, notes, handout, generators) and `29665ef`
     (claims audit, Q&A, demo script).
-- [ ] Step 6. Re-verify the app and Phase A evidence; screenshots, console
+- [x] Step 6. Re-verify the app and Phase A evidence; screenshots, console
   errors, Docker; mark anything not run unverified.
+  - Evidence: local server `./venv/bin/python -m uvicorn app:app --host
+    127.0.0.1 --port 8010`; `GET /health` -> **200** `{"status":"ok",
+    "model_present":false,"model_loaded":false,"commit":"b141712..."}`;
+    `GET /model-status` -> **200** `present:false`, expected 33,268,410 bytes;
+    `POST /predict` with two synthetic 64x64 PNGs -> **503** `model_unavailable`;
+    `GET /history` -> **200** with the earlier synthetic entry.
+  - Chrome (Playwright, headless, system Chrome) loaded the landing page:
+    **5** profiles; general and agriculture both display "unvalidated,
+    qualitative only" and **no "F1"** in the profile text; History renders the
+    synthetic row; opening it shows "Unvalidated profile - no accuracy number
+    is shown". No page JavaScript errors. The six console `ERR_FAILED` messages
+    are OSM tile requests deliberately aborted to keep verification offline;
+    `cdnjs.cloudflare.com` was the only external host allowed.
+    Screenshots: `docs/screenshots/step6_landing.png`,
+    `step6_agriculture.png`, `step6_result.png`.
+  - Exports from the saved synthetic result: PDF **1 page / 3,436 bytes**
+    (text begins "Decision support only - not ground truth"), CSV 115 bytes,
+    GeoJSON 415 bytes. This is export wiring, **not** a new analysis.
+  - `model.onnx` and `best_model.pt` are **absent**; no Google Drive mount is
+    present, so no size or SHA-256 can be reported. `/health` and
+    `/model-status` agree that the model is absent. Docker is **not installed**
+    (`docker --version` -> command not found); image build remains unverified.
+  - Tests: `./venv/bin/python -m pytest -q` -> **128 passed, 3 skipped,
+    1 warning in 25.11s** (same three environment skips as Step 5).
 - [ ] Step 7. One-click `notebooks/run_all_colab.ipynb`; results pending a
   real Colab run and a `COLAB_RUN_SUMMARY.md` pulled from the remote.
 - [ ] End. Final `python -m pytest -q`, `docs/paper/SUBMISSION_NOTES.md`,
