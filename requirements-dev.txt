@@ -7,3 +7,5 @@ onnx
 playwright>=1.44,<2
 tqdm>=4.66,<5
 matplotlib>=3.7,<4
+# Talk generation; not needed to run the app or benchmark.
+python-pptx>=1.0,<2
