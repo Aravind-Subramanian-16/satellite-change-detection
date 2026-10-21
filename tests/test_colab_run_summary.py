@@ -127,6 +127,28 @@ def test_write_summary_reports_failed_model_load_without_losing_scope(tmp_path):
     assert "No official OSCD test city was scored" in summary
 
 
+def test_summary_rewrites_legacy_garbled_test_city_caveat(tmp_path):
+    loco, model, pytest_summary = _write_inputs(tmp_path)
+    payload = _loco_report()
+    payload["caveats"].append(
+        "Scores use the same ten official test cities nowhere in this script; "
+        "no test label is read."
+    )
+    loco.write_text(json.dumps(payload))
+
+    summary = render_colab_summary(
+        loco_path=loco,
+        model_check_path=model,
+        pytest_summary_path=pytest_summary,
+        commit=COMMIT,
+        pytest_exit_code=0,
+        generated_date="2026-10-21",
+    )
+
+    assert "- No test city is used in this script." in summary
+    assert "Scores use the same ten official test cities nowhere" not in summary
+
+
 def test_summary_rejects_test_city_leakage(tmp_path):
     loco, model, pytest_summary = _write_inputs(tmp_path)
     payload = _loco_report()

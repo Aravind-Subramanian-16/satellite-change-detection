@@ -18,8 +18,11 @@ can be re-executed here: the imagery and the checkpoint are absent.
 | Figure/table generator | `scripts/make_paper_figures.py` | Present; tested |
 | Degradation runner | `evaluate_degradation.py` | Present; cannot run without data/weights |
 | OSCD evidence script | `benchmarks/oscd_evidence.py` | Present; reads saved JSON only |
-| Train-only LOCO script | `benchmarks/oscd_loco_thresholds.py` | Present; real result pending Colab |
-| Colab hand-off | `notebooks/run_all_colab.ipynb`, `benchmarks/colab_run_summary.py` | Present; not run |
+| Train-only LOCO script | `benchmarks/oscd_loco_thresholds.py` | Present; result from the Colab run (training cities only) |
+| LOCO result | `benchmarks/results/oscd_loco_thresholds.json` | Present; 14 training cities; no test label read |
+| Model check | `benchmarks/results/colab_model_check.json` | Present; Drive `model.onnx` size/SHA-256 and onnxruntime load |
+| Colab hand-off | `notebooks/run_all_colab.ipynb`, `benchmarks/colab_run_summary.py` | Run on Colab 2026-10-21 at `e8b6678` |
+| Colab summary | `benchmarks/results/COLAB_RUN_SUMMARY.md` | Present; generated from the saved LOCO and model-check JSON |
 | Web application | `app.py`, `static/`, `live_pipeline.py` | Runs locally; not validated end to end |
 
 Not included: LEVIR-CD imagery and labels, OSCD imagery and labels, the CNN
@@ -81,7 +84,7 @@ Run the tests:
 Expected on this checkout:
 
 ```text
-128 passed, 3 skipped, 1 warning in 10.35s
+137 passed, 3 skipped, 1 warning
 ```
 
 Runtime varies. The skips are the Pipeline A regression (needs weights and a
@@ -97,13 +100,17 @@ dataset test. A Starlette test-client deprecation warning is emitted.
 | `benchmarks/results/oscd_results_v2.md` | `b3033c59064a1c5f9b2c9efccc8ecfed595c186ba9aed6369dc15a29753ec738` |
 | `benchmarks/results/oscd_evidence.json` | `3d7f19bab34e9a524bd75036fcfcafaa4a44f453f145cc4611e9762643d81d71` |
 | `benchmarks/results/oscd_evidence.md` | `693e2f77b3fa93cd82d982a3ac5c88a4fa6759386aa00aff7379fc30fe0ebcdf` |
-| `docs/paper/figures/figure_manifest.json` | `b26a0c3e3531fa4b0b8b3cd665c3a37e77b6b9b5d14f0d857701c8995e660c7e` |
-| `docs/paper/paper.tex` | `095fd4d3416ae9c31f570f3ac55de2a3748c5d861863dcf5b5174dafd10582d1` |
+| `benchmarks/results/oscd_loco_thresholds.json` | `32d1dbf57d83a1c68c76de0d64856795c082498788428c8206fd7cf2a4a2e29d` |
+| `benchmarks/results/colab_model_check.json` | `ec452724a09c915a6577b535146bd78fe5f09dd9ce13421d8359057709c3902a` |
+| `benchmarks/results/COLAB_RUN_SUMMARY.md` | `77177c595f2a80aa71c3e9d5ff2dc9b31bf7b976a5a909e1a58152507dffeca6` |
+| `docs/paper/figures/figure_manifest.json` | `b0a1e80547dcfc0b171008d266a456e250f0e3db3c226e5cb1a41f1140055680` |
+| `docs/paper/paper.tex` | `d6ab6330ea94c9cc2a6b4b185bddf1ce98e8e7fa52a7051ef6751f08c589a767` |
 
 The manifest and manuscript hashes are snapshots; they change when those files
-are regenerated or edited. The two source-of-record files must not change for
-the paper's numbers to remain valid. The manifest records the source hashes used
-at generation time.
+are regenerated or edited. The test-set source-of-record files are the
+degradation CSV and the v2 JSON; the LOCO JSON is a separate training-only
+source. These files must not change for the paper's numbers to remain valid. The
+manifest records the test-set source hashes used at generation time.
 
 ## 5. Seeds and run configuration
 
@@ -111,6 +118,11 @@ at generation time.
   (`benchmarks/oscd_evidence.py`, `scripts/make_paper_figures.py`).
 - Threshold selection: deterministic fixed grids on the 14 training cities; no
   random seed is used by the grid search.
+- Leave-one-city-out robustness: one fold per training city (14 folds), the same
+  deterministic grids, no random seed; official test cities are rejected before
+  any raster is read.
+- Model check: size, SHA-256 and onnxruntime load on the Colab CPU runtime; no
+  inference is run.
 - CNN training: one run, configured for up to 100 epochs with early stopping;
   stopped after 27 epochs, best validation IoU 0.7205. **The training seed is not
   recorded in the paper or the training log**, and no seed variation was run.
@@ -122,8 +134,9 @@ at generation time.
 - **Do not run `benchmarks/oscd_eval.py` on the test cities.** Doing so would add
   another test-scoring event and contradict the paper's disclosure and scope.
 - **Do not run `benchmarks/oscd_loco_thresholds.py` against test cities.** It is
-  a train-only procedure and rejects official test cities; its real result is
-  pending a Colab run and is not part of the paper.
+  a train-only procedure and rejects official test cities. Its saved result is
+  the training-only robustness check reported in the paper; it is not a test
+  score and must not be rerun on the test split.
 - **Do not retrain, fine-tune or modify `best_model.pt` or `model.onnx`.**
 - **Do not generate a synthetic result file** to fill a missing number. The
   figure generator is tested against fake JSON only in the test suite.
@@ -140,33 +153,39 @@ The paper artifacts are in commits:
 The v2 scorer code is recorded as Phase E commit `a6dad9e`; later commits add
 documentation, figures, tests and new analysis scripts, but they do not change
 the v2 result files. Verify this with `git log -- benchmarks/` before claiming
-the v2 numbers correspond to a different commit. The local branch may be ahead of `origin/main`; the push
-attempt for these commits failed with HTTP 400, so the remote may not contain
-them. Do not force push or rewrite history.
+the v2 numbers correspond to a different commit. The push blocker was resolved
+on 2026-10-21 by switching the client to HTTP/1.1; the remote `main` then
+contained all prior commits through `e8b6678`. The Step 7b documentation commit
+is local until the owner pushes it. Do not force push or rewrite history.
 
 ## 8. Colab
 
-Existing notebooks:
+The one-click `notebooks/run_all_colab.ipynb` was run on a fresh Colab runtime
+on 2026-10-21 at commit `e8b6678`. It mounted Drive, unzipped only the
+images/training-labels archive, pulled the repository, copied the Drive weights,
+installed benchmark dependencies, ran pytest, ran the train-only LOCO script,
+checked the Drive `model.onnx` size/SHA-256 and onnxruntime load, and wrote
+`benchmarks/results/COLAB_RUN_SUMMARY.md`. It did not unzip `test_labels.zip`,
+score a test city, train, fine-tune or run v3.
+
+Saved outputs:
+
+| File | Result |
+|---|---|
+| `benchmarks/results/COLAB_RUN_SUMMARY.md` | Colab pytest `144 passed, 1 skipped, 7 warnings in 15.79s` (exit 0); scope statements; SHA-256 `77177c59...` |
+| `benchmarks/results/oscd_loco_thresholds.json` | 14 training cities; hardcoded pooled held-out F1 0.0976, percentile 0.1469; hardcoded grid-edge in 14/14 folds, percentile 0/14; no test city in `train.txt`; no test-label path accepted; SHA-256 `32d1dbf5...` |
+| `benchmarks/results/colab_model_check.json` | 33,268,410 bytes; SHA-256 `41c2ab64...`; onnxruntime load `true`; inputs `input_a`, `input_b`; SHA-256 `ec452724...` |
+
+The Colab pytest count differs from the local count because the Colab runtime
+has `rasterio`, `torch` and the dataset sample, so fewer tests skip. The
+training-only LOCO values are descriptive robustness numbers, not test scores.
+
+The other two notebooks remain unrun:
 
 - `notebooks/oscd_pixel_classifier.ipynb` — learned pixel classifier; not run,
   no pasted output.
 - `notebooks/oscd_auto_improve.ipynb` — validation-only search; not run, no
   pasted output.
-
-The one-click `notebooks/run_all_colab.ipynb` is the Step 7 deliverable. It
-mounts Drive, unzips only the images/training-labels archive, clones or pulls
-the repository, copies the Drive weights, installs benchmark dependencies
-without exact onnx/numpy pins, runs pytest, runs the train-only LOCO script,
-checks the Drive `model.onnx` size/SHA-256 and onnxruntime load, and writes
-`benchmarks/results/COLAB_RUN_SUMMARY.md` from the saved JSON and pytest line.
-It does not unzip `test_labels.zip`, score a test city, train, fine-tune or run
-v3. Colab runs must not score the official test cities for the learned
-classifier or the validation search.
-
-The notebook has **not been run**, so no LOCO or summary result exists. Its
-setup cell also requires `REPO_URL` to contain this commit; if the local branch
-has not been pushed, it stops with a clear message instead of running stale
-code. Resolve the push blocker before using it.
 
 `GITHUB_TOKEN` handling for a Colab push: read it from Colab Secrets into
 memory, never print it, never write it to disk or the notebook output, and never
@@ -190,33 +209,34 @@ secrets into chat.
 - The repository does not redistribute OSCD imagery, LEVIR-CD imagery or the
   model checkpoint.
 
-## 10. Unverified items
+## 10. Status of remaining items
 
 | Item | Status | What is needed |
 |---|---|---|
 | PDF build and four-page limit | Unverified | Compile on Overleaf with IEEEtran; check page count excluding references |
 | Bibliography | Not present | Replace 15 `[CITE: ...]` slots with verified records |
 | v2 benchmark re-execution | Not possible here | OSCD imagery/labels and the checkpoint |
-| CNN inference re-execution | Not possible here | `best_model.pt` / valid `model.onnx` |
-| Train-only LOCO result | Pending | Colab run; do not guess values |
-| One-click Colab notebook | Present, not run | Run on Colab after the current branch is pushed; summary pending |
-| Colab run summary | Pending | `benchmarks/results/COLAB_RUN_SUMMARY.md` will be created by the notebook |
+| CNN inference re-execution | Not possible here | `best_model.pt` / valid local `model.onnx` |
+| Train-only LOCO result | Present, training-only | 14 training folds; no test label read; do not treat as a test score |
+| One-click Colab notebook | Run 2026-10-21 at `e8b6678` | No test city scored; do not rerun against test labels |
+| Colab run summary | Present | Generated from the saved LOCO and model-check JSON |
+| Model size/SHA-256/load | Verified on Colab | Local real inference still unverified |
+| Learned classifier and auto-improve notebooks | Not run | Optional paused experiments; no results |
 | Docker image | Unverified | Docker unavailable locally |
-| GitHub Actions | Unverified | Push blocked by HTTP 400 |
+| GitHub Actions | Unverified | Confirm the workflow run on GitHub after the successful push |
 | OSCD licence | Unverified externally | Official licence page and legal review |
 | Author email / final metadata | Unverified | Owner confirmation |
 | Code licence | Not chosen | Owner decision |
 
 ## 11. Owner actions
 
-1. Resolve the push blocker and push `main` without force; the Colab notebook
-   clones the remote and stops if the Step 7 files are absent.
-2. Supply the verified model checkpoint and confirm input names `input_a`,
-   `input_b`; do not replace it with the invalid local ONNX file.
-3. Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime after the push;
-   the summary is written to `benchmarks/results/COLAB_RUN_SUMMARY.md` and the
-   notebook prints `Push skipped: copy the block above` if the secret or push
-   is unavailable.
+1. Push the Step 7b commit without force; do not rerun the Colab notebook on the
+   test split.
+2. Place the verified 33,268,410-byte checkpoint (SHA-256 `41c2ab64...`,
+   inputs `input_a` / `input_b`) in the local checkout and run a real `/predict`
+   pair; the Drive file is verified, but local inference is not.
+3. Do not rerun `notebooks/run_all_colab.ipynb` against test labels. It is a
+   training-only hand-off; its saved output is already recorded.
 4. Make OSCD imagery and labels available in the expected layout if a rerun is
    required; do not score the test cities again for this paper.
 5. Compile `docs/paper/paper.tex` on Overleaf; check the four-page limit

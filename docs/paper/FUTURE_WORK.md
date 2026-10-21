@@ -146,8 +146,8 @@ another scoring event and invalidates the one-shot claim.
 - Add structured audit logs with access control, not just request IDs.
 - Build and test the Docker image; verify non-root execution, health checks and
   PDF export in the container.
-- Run the GitHub Actions workflow on a real push; the current remote push has
-  failed with HTTP 400 and CI is unverified.
+- Confirm the GitHub Actions workflow result on a real push; the HTTP/1.1 push
+  succeeded through `e8b6678`, but CI has not been checked from this checkout.
 - Consider a queue/worker for long analyses instead of in-process work.
 
 **Do not:** publish the demo URL without authentication, monitoring and a

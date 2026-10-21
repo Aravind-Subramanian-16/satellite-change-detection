@@ -12,6 +12,9 @@ Sources of record:
 | `degradation_results.csv` | per-image TP/FP/FN at six factors (2,048 images) | `4c301920d03d09dbc416d82fa76b93e76e1fab9b74bc2db5155da9735965fa88` |
 | `benchmarks/results/oscd_results_v2.json` | saved per-city v2 test confusion counts (50 rows) | `37ffe2bbd01a43c07f04740847843f0176ea1118c17283456c34d2ff2a2bef8f` |
 | `benchmarks/results/oscd_evidence.json` | baselines, bootstrap intervals and paired differences computed from the v2 JSON | generated, not an independent score |
+| `benchmarks/results/oscd_loco_thresholds.json` | train-only leave-one-city-out robustness (14 training cities, no test label) | `32d1dbf57d83a1c68c76de0d64856795c082498788428c8206fd7cf2a4a2e29d` |
+| `benchmarks/results/colab_model_check.json` | Drive `model.onnx` size, SHA-256, onnxruntime load and input names | `ec452724a09c915a6577b535146bd78fe5f09dd9ce13421d8359057709c3902a` |
+| `benchmarks/results/COLAB_RUN_SUMMARY.md` | rendered summary of the two saved files and the Colab pytest line | `77177c595f2a80aa71c3e9d5ff2dc9b31bf7b976a5a909e1a58152507dffeca6` |
 | `evaluate_degradation.py` | degradation and inference implementation | tracked code |
 | `training_log.txt`, `train.py`, `README.md` | training-run record and configuration | tracked files |
 | `PAPER_NOTES.md` | v2 selection and scoring-history notes | tracked file |
@@ -69,9 +72,10 @@ Status meanings:
 | O16 | City-level variation is descriptive; the simulation isolates blur/resampling, while OSCD confounds resolution with spectral, radiometric, atmospheric and geographic differences; cloud effects are uncontrolled (Sec. V-C, Discussion) | Study design; no factor-isolation experiment on OSCD | Supported as a limitation | Never attribute the OSCD CNN failure to resolution alone. |
 | O17 | Only one architecture and one training run were tested; there was no retraining, fine-tuning, seed variation or architecture comparison (Sec. VII, Abstract) | One checkpoint; training log; no other runs recorded | Supported as scope | Keep; do not generalise to “CNNs”. |
 | O18 | No confidence intervals are reported for overall accuracy (Sec. VII) | `oscd_evidence.json` stores OA without intervals | Supported | Keep; do not add intervals without recomputation. |
-| O19 | All benchmark scores and per-image counts come from the two saved files named in Sec. VII; the figure/table generator reads those files only and records hashes | `scripts/make_paper_figures.py`; `figure_manifest.json`; SHA-256 values above | Supported | Keep. Regenerating figures must not read imagery or re-score a city. |
+| O19 | All test-set scores and per-image counts come from the two saved files named in Sec. VII; the training-only robustness values come from a third file; the figure/table generator reads the two test-set files only and records their hashes | `scripts/make_paper_figures.py`; `figure_manifest.json`; SHA-256 values above | Supported | Keep. Regenerating figures must not read imagery or re-score a city. |
 | O20 | The benchmark evaluates the offline pipeline and frozen checkpoint, not the deployed application's scene selection or user interface (Sec. VII) | `benchmarks/oscd_eval.py` versus `app.py`/`live_pipeline.py` | Supported by code structure | Keep; the system overview is implementation description, not end-to-end validation. |
 | O21 | The upload path runs a CNN; the live path queries the Copernicus catalogue, ranks scenes, applies SCL masking and computes NDVI/NDBI differences; the interface withholds accuracy for unvalidated profiles (Sec. III) | `app.py`, `live_pipeline.py`, `scene_selection.py`, `static/app.js`, `profiles/validation_status.json`; tests | Supported as implementation facts | Keep the sentence that this section is not an end-to-end validation. |
+| O22 | Train-only leave-one-city-out check: pooled held-out F1 0.0976 hardcoded (IoU 0.0513, precision 0.0838, recall 0.1168) and 0.1469 percentile (IoU 0.0793, precision 0.1544, recall 0.1401); hardcoded selection at a search-grid edge in all 14 folds, percentile in none (Sec. V-B, VII) | `benchmarks/results/oscd_loco_thresholds.json`; `benchmarks/results/COLAB_RUN_SUMMARY.md` | Supported as a saved training-only run | This is not a test-set score and adds no test-scoring event. Do not compare it directly with the v2 test F1 as though it were test performance. The hardcoded scores are limited by the search grid. |
 
 ## General claims
 
@@ -80,6 +84,7 @@ Status meanings:
 | G1 | Related-work statements about LEVIR-CD, Sentinel-2, Siamese networks, STANet, BIT, NDVI, NDBI, Otsu, OSCD, domain shift and test-set reuse | 15 `[CITE: ...]` occurrences (14 body slots plus one explanatory example); no bibliography exists | Unverified | Replace every body slot with a verified source and check the surrounding sentence. Do not submit with placeholders. |
 | G2 | The paper makes no priority or originality claim (Abstract, Introduction, Conclusion) | Static check finds no prohibited priority or originality wording | Supported as wording | Keep the hedged framing; complete an external prior-work search before any stronger statement. |
 | G3 | Author block: Aravind, Department of Computer Science and Engineering, Presidency University, Bengaluru | Supplied by the owner and present in the revised DOCX | Partially supported | Confirm the spelling, affiliation and whether an email is required before submission. |
+| G4 | Drive `model.onnx` is 33,268,410 bytes, SHA-256 `41c2ab64...`, loads in onnxruntime and exposes inputs `input_a`, `input_b` | `benchmarks/results/colab_model_check.json` | Supported as a Colab artifact check | This verifies the file, not app-level inference. The model is still absent from this checkout, so the deployed app path remains unverified. |
 
 ## Claims explicitly not made
 
@@ -116,6 +121,16 @@ Status meanings:
 - `oscd_evidence.json` recomputes pooled metrics from the JSON confusion counts
   and reports city-bootstrap intervals (seed 0, 10,000 resamples); it does not
   read imagery or test labels.
+- `oscd_loco_thresholds.json` reports 14 training-city folds, no official test
+  city in `train.txt`, no accepted test-label path, and `result_status:
+  computed_on_training_cities_only`; the two families pool to F1 0.0976 and
+  0.1469, and the hardcoded family records a grid-edge warning in 14/14 folds
+  while the percentile family records none.
+- `colab_model_check.json` records size 33,268,410 bytes, expected size equal,
+  onnxruntime load `true`, inputs `input_a`/`input_b`, and the full SHA-256
+  `41c2ab6466408a6d23339a3c424307f6aa7b7f9063fe702d161b6f4685152bf9`.
+- The `COLAB_RUN_SUMMARY.md` hash above matches the regenerated summary, and the
+  summary's recorded source hashes match the two JSON files.
 - `docs/paper/figures/figure_manifest.json` records the v2 JSON hash and the
   degradation CSV hash used for the current figures.
 - Static LaTeX check (with `\input` expanded): 77 opening and 77 closing braces,

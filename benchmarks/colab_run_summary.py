@@ -11,6 +11,12 @@ import re
 from datetime import date
 from pathlib import Path
 
+_GARBLED_TEST_CAVEAT = (
+    "Scores use the same ten official test cities nowhere in this script; "
+    "no test label is read."
+)
+_CLEAN_TEST_CAVEAT = "No test city is used in this script."
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -95,7 +101,10 @@ def render_colab_summary(
     caveats = loco.get("caveats", [])
     if caveats:
         lines.append("Caveats:")
-        lines.extend(f"- {caveat}" for caveat in caveats)
+        lines.extend(
+            f"- {_CLEAN_TEST_CAVEAT if caveat == _GARBLED_TEST_CAVEAT else caveat}"
+            for caveat in caveats
+        )
         lines.append("")
 
     lines.extend(

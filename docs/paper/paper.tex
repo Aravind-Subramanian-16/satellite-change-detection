@@ -239,6 +239,17 @@ predicts 0.00\% and reaches F1 0.0000. Their overall accuracy is 0.9483, equal t
 the all-no-change accuracy on this test set. This is expected for a near-empty
 predictor on a 5.17\% positive class and is not detection performance.
 
+\textbf{Training-city robustness.} We also checked threshold stability without
+touching the test split. For each of the 14 training cities, the hardcoded and
+percentile configurations were selected on the other 13 training cities and
+applied to the held-out training city. Pooled held-out F1 was 0.0976 for the
+hardcoded rule (IoU 0.0513, precision 0.0838, recall 0.1168) and 0.1469 for the
+percentile rule (IoU 0.0793, precision 0.1544, recall 0.1401). The hardcoded
+selection sat on a search-grid edge in all 14 folds; the percentile selection
+did not. The hardcoded scores are therefore limited by the grid. This is a
+training-split robustness check, not a test-set score, and it adds no
+test-scoring event.
+
 \input{figures/generated_oscd_table}
 
 \begin{figure*}[t]
@@ -300,8 +311,9 @@ radiometric calibration, atmospheric correction, mixed pixels and sensor noise.
 OSCD supplies real 10\,m data, but the layout used here has ten test cities, no
 SCL layer and urban labels only. Only one architecture and one training run were
 tested; there was no retraining, fine-tuning, seed variation or architecture
-comparison. The hardcoded thresholds sat at grid edges, so the grid as well as
-the data limits that result. No decision-threshold tuning was tested. The
+comparison. The hardcoded thresholds sat on a search-grid edge in all 14
+training folds (Sec.~V-B), so the hardcoded scores are limited by the grid as
+well as by the data. No decision-threshold tuning was tested. The
 official test cities had been scored before the reported run, and the total
 number of scoring events is not recorded. No confidence intervals are reported
 for overall accuracy, and the per-city intervals use an independent-pixel
@@ -309,11 +321,13 @@ approximation. The reported benchmark evaluates the offline pipeline and the
 frozen checkpoint, not the deployed application's scene selection or user
 interface.
 
-All benchmark scores and per-image counts in this paper come from two saved
+All test-set scores and per-image counts in this paper come from two saved
 files: the per-image degradation CSV (SHA-256 \texttt{4c301920...}) and the OSCD
-per-city JSON (SHA-256 \texttt{37ffe2bb...}). The figure and table generator
-reads those files only and records their hashes in a manifest; the benchmark
-does not re-score any test city for this paper.
+per-city JSON (SHA-256 \texttt{37ffe2bb...}). The training-only robustness
+values come from a third saved file, the leave-one-city-out JSON (SHA-256
+\texttt{32d1dbf5...}), produced without reading a test label. The figure and
+table generator reads the two test-set files only and records their hashes in a
+manifest; the benchmark does not re-score any test city for this paper.
 
 \section{Conclusion}
 We reported a single-architecture case study in which a CNN with 87.06\% F1 at

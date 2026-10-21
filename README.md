@@ -227,6 +227,10 @@ An earlier preliminary run with a smaller search grid also scored the test split
 
 Limitations: city-level results vary widely (for example, percentile F1 ranges from `0.0005` in saclay_w to `0.2481` in chongqing). Hardcoded and percentile thresholds under-predict pooled change (`2.24%` and `1.66%`, respectively, versus `5.17%` true). Otsu labels `67.35%` of pooled pixels as changed, so its pooled OA (`0.3439`) is reported instead of its recall. OSCD provides no SCL layer here, so SCL/cloud exclusion is not measured. A domain gap between LEVIR-CD training imagery and OSCD Sentinel-2 imagery/resolution is a hypothesis that may help explain the CNN result, not an established cause. The measured selected CNN F1 is about `0.0007`; the saved results show its near-empty predictions.
 
+### Training-city threshold robustness
+
+The thresholds were also checked without touching the test split. For each of the 14 training cities, the hardcoded and percentile configurations were selected on the other 13 training cities and applied to the held-out training city. Pooled held-out F1 was `0.0976` for the hardcoded rule (IoU `0.0513`, precision `0.0838`, recall `0.1168`) and `0.1469` for the percentile rule (IoU `0.0793`, precision `0.1544`, recall `0.1401`). The hardcoded selection sat on a search-grid edge in all 14 folds; the percentile selection did not. The hardcoded scores are therefore limited by the grid. This is a training-split robustness check, not a test score, and it adds no test-scoring event. Source: [`benchmarks/results/oscd_loco_thresholds.json`](benchmarks/results/oscd_loco_thresholds.json) (SHA-256 `32d1dbf5...`).
+
 **TODO:** Add published OSCD baselines with citations and comparable evaluation protocols; no baseline numbers are invented here. The v2 LaTeX versions of both tables are in [`PAPER_NOTES.md`](PAPER_NOTES.md).
 
 ## Optional learned pixel classifier (experimental)

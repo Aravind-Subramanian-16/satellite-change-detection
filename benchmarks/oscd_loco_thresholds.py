@@ -264,7 +264,7 @@ def build_report(
         "families": analysis,
         "caveats": [
             "This is a training-split robustness check, not a test-set result.",
-            "Scores use the same ten official test cities nowhere in this script; no test label is read.",
+            "No test city is used in this script.",
             "The held-out city is still a training city; its labels inform no selection in that fold.",
             "Full-train pooled F1 is in-sample and optimistic; it is reported only to show which configuration the grid selects.",
             "Otsu is excluded because it has no train-selected threshold to leave out.",

@@ -10,8 +10,12 @@ decision or external verification required.
 
 ## A. Scientific claims and evidence
 
-- [x] Every reported number comes from `benchmarks/results/oscd_results_v2.json`
-  or the generated tables; no estimated or invented value was added.
+- [x] Every reported test-set number comes from `benchmarks/results/oscd_results_v2.json`,
+  `degradation_results.csv` or the generated tables; the training-only
+  leave-one-city-out values come from `oscd_loco_thresholds.json`; no estimated
+  or invented value was added.
+- [x] The training-only LOCO check is labelled as a robustness check, not a test
+  score, and adds no test-scoring event.
 - [x] Pooled values were recomputed from confusion counts and match the v2
   Markdown.
 - [x] Per-city F1 range (0.0005–0.2481 for percentile) is accurate.
@@ -190,8 +194,8 @@ decision or external verification required.
 ## J. Final technical checks
 
 - [x] `./venv/bin/python -m pytest -q` passes with the recorded counts.
-  Evidence (2026-10-21): **136 passed, 3 skipped, 1 warning in 16.10s**; skips
-  are `rasterio` absent, `torch` absent and the missing dataset sample. The
+  Evidence (2026-10-21): **137 passed, 3 skipped, 1 warning** (runtime varies);
+  skips are `rasterio` absent, `torch` absent and the missing dataset sample. The
   timing varies; the pass/skip counts are the claim.
 - [ ] `python scripts/make_paper_figures.py` regenerates figures without
   errors and the manifest hash matches the v2 source.

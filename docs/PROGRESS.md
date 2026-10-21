@@ -8,7 +8,8 @@ Checkout state (2026-10-21): `model.onnx`, `best_model.pt`, the OSCD imagery and
 the learned joblib are **absent from this local checkout**. The ONNX file present
 during the owner's earlier Phase A run measured 60,534,573 bytes and failed
 protobuf loading; it is not the verified 33,268,410-byte Drive copy. The v2
-benchmark result files are now present.
+benchmark result files are now present. The training-only LOCO result, the Colab
+model check and `benchmarks/results/COLAB_RUN_SUMMARY.md` are also present.
 
 ## Phase A — Finish setup and verify
 
@@ -18,7 +19,10 @@ benchmark result files are now present.
     && shasum -a 256 model.onnx` → `60534573`; SHA-256
     `b3d95e3e796b3bda4b06dc37a4909a47be8b6c13460b59fed3d6f4a66e2ececd`.
     That file was invalid; replacement is still required. The file is absent
-    from the current checkout, so `/model-status` reports `present: false`.
+    from the current checkout, so `/model-status` reports `present: false`. The
+    Colab model check (2026-10-21) confirms the Drive copy is 33,268,410 bytes,
+    SHA-256 `41c2ab64...`, loads in onnxruntime and has inputs `input_a`,
+    `input_b`; local app inference remains unverified.
 - [x] A1b. Model-dependent features fail with a clear error instead of crashing.
   - Evidence: `tests/test_model_status.py`, `tests/test_model_load_errors.py`;
     live `POST /predict` → HTTP 503 with actionable size/Drive instructions.
@@ -444,6 +448,10 @@ number is claimed.
   and the GitHub Actions workflow remain unverified. Run the push manually from
   the owner terminal (no force):
   `git push origin main`.
+- Push success (2026-10-21): the owner fixed the HTTP 400 by switching the git
+  client to HTTP/1.1. The push reported `40c4c15..e8b6678 main -> main`, so all
+  35 prior commits are on the remote. The Step 7b documentation commit remains
+  local until the owner pushes it; no force push or history rewrite was used.
 
 ## Submission task (2026-10-21)
 
@@ -471,7 +479,7 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
 - [x] Step 2. Source-backed OSCD evidence: trivial baselines, city bootstrap
   CIs (seed 0, 10,000), paired bootstrap, failure/correlation analysis,
   CNN input and blur specifications, train-only LOCO script with a synthetic
-  test; LOCO result pending Colab run.
+  test; LOCO result produced on Colab from training cities only.
   - Evidence: `benchmarks/oscd_evidence.py` reads only
     `benchmarks/results/oscd_results_v2.json` (SHA-256 `37ffe2bb...`, unchanged)
     and writes `benchmarks/results/oscd_evidence.json` plus `.md`. It adds
@@ -486,8 +494,13 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     training city using the same grids as `benchmarks/oscd_eval.py`; it rejects
     official test cities in `train.txt` and accepts no test-label path.
     `tests/test_oscd_loco.py` covers the selection/exclusion logic, tie order,
-    guards, and report assembly with synthetic index arrays. The real OSCD
-    result is **pending Colab run**; no LOCO output file exists locally.
+    guards, and report assembly with synthetic index arrays. The real result is
+    `benchmarks/results/oscd_loco_thresholds.json` (SHA-256 `32d1dbf5...`):
+    14 training cities, hardcoded pooled held-out F1 0.0976 (IoU 0.0513,
+    precision 0.0838, recall 0.1168), percentile F1 0.1469 (IoU 0.0793,
+    precision 0.1544, recall 0.1401); hardcoded grid-edge in 14/14 folds,
+    percentile 0/14; no official test city in `train.txt` and no test-label path
+    accepted. It is a training-split robustness check, not a test score.
   - Tests: `126 passed, 3 skipped, 1 warning in 20.78s`
     (`venv/bin/python -m pytest -q`, 2026-10-21). Commits `b819f53`,
     `6454b87`. The `.gitignore` root-results pattern was narrowed so
@@ -600,8 +613,10 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     (text begins "Decision support only - not ground truth"), CSV 115 bytes,
     GeoJSON 415 bytes. This is export wiring, **not** a new analysis.
   - `model.onnx` and `best_model.pt` are **absent**; no Google Drive mount is
-    present, so no size or SHA-256 can be reported. `/health` and
-    `/model-status` agree that the model is absent. Docker is **not installed**
+    present, so no size or SHA-256 can be reported locally. `/health` and
+    `/model-status` agree that the model is absent. The later Colab model check
+    measured the Drive copy at 33,268,410 bytes, SHA-256 `41c2ab64...`, load
+    `true`; local inference is still unverified. Docker is **not installed**
     (`docker --version` -> command not found); image build remains unverified.
   - Tests: `./venv/bin/python -m pytest -q` -> **128 passed, 3 skipped,
     1 warning in 25.11s** (same three environment skips as Step 5).
@@ -627,21 +642,38 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     stops if the remote checkout lacks the Step 7 files, so the current push
     blocker must be resolved before a Colab run can succeed.
   - Full suite: **136 passed, 3 skipped, 1 warning in 18.99s**.
-  - **Not run on Colab.** No `COLAB_RUN_SUMMARY.md`, LOCO result or model-check
-    JSON exists in this checkout. `docs/paper/ARTIFACT.md` marks them pending.
+  - **Run on Colab 2026-10-21** at commit `e8b6678`; pytest
+    `144 passed, 1 skipped, 7 warnings in 15.79s` (exit 0). Saved:
+    `benchmarks/results/oscd_loco_thresholds.json` (SHA-256 `32d1dbf5...`),
+    `benchmarks/results/colab_model_check.json` (SHA-256 `ec452724...`) and
+    `benchmarks/results/COLAB_RUN_SUMMARY.md` (SHA-256 `77177c59...`). No test
+    label was unzipped, no test city was scored, and no training, fine-tuning or
+    v3 was run. The learned-classifier and auto-improvement notebooks remain
+    unrun.
   - Commits `862bca5` (notebook + renderer), `0339614` (tests) and `3058466`
-    (Step 7 docs). `git push origin main` attempted after the commits and
-    failed with HTTP 400 again; no force push or history rewrite.
-  - At this checkpoint local `main` was **32 commits ahead** of `origin/main`.
-    The Colab notebook cannot clone the Step 7 files until this is resolved.
-- [ ] Step 7b. Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime,
-  pull `benchmarks/results/COLAB_RUN_SUMMARY.md` from the remote, fill only
-  dependent text from that summary, rebuild figures/claims audit, rerun tests,
-  and commit/push. Trigger: the owner says "Colab done".
+    (Step 7 docs). The earlier push blocker was resolved by HTTP/1.1 on
+    2026-10-21; the remote then contained all commits through `e8b6678`.
+- [x] Step 7b. Fill the dependent paper/docs text from the saved Colab summary,
+  rebuild figures/claims audit, rerun tests, and commit locally. Trigger: the
+  owner said "Colab done".
+  - Evidence: both JSON hashes matched the owner-provided values
+    (`32d1dbf5...`, `ec452724...`). `COLAB_RUN_SUMMARY.md` was regenerated from
+    those files only, with the clean caveat line "No test city is used in this
+    script."; its new SHA-256 is `77177c59...`. `docs/paper/paper.tex` now
+    reports the training-only held-out F1 values (0.0976 hardcoded, 0.1469
+    percentile), states that the hardcoded grid edge occurred in all 14 folds,
+    and distinguishes the third training-only source file from the two test-set
+    sources. `CLAIMS_AUDIT.md` adds O22 and G4 and the three source hashes.
+    `ARTIFACT.md`, `SUBMISSION_NOTES.md`, `README.md`,
+    `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md` and
+    `SUBMISSION_CHECKLIST.md` were updated from the same saved files. Figures
+    were rebuilt from the unchanged v2 JSON and degradation CSV. The final test
+    run is recorded below. No test split was touched. The commit is local; the
+    owner will push it.
 - [x] End. Final tests, submission notes, unverified-claim inventory and manual
   actions.
-  - Evidence: `./venv/bin/python -m pytest -q` -> **136 passed, 3 skipped,
-    1 warning in 14.58s**. The three skips are `rasterio` absent, `torch`
+  - Evidence: `./venv/bin/python -m pytest -q` -> **137 passed, 3 skipped,
+    1 warning in 19.61s**. The three skips are `rasterio` absent, `torch`
     absent and the missing `dataset/test/A/test_100_0_0.png` sample.
   - `docs/paper/SUBMISSION_NOTES.md` records the final counts, readiness
     blockers, the numbered owner actions, the full unverified-claim list and
@@ -655,21 +687,21 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
   - README correction: commit `87a7748`. The final notes/checklist commit is
     the HEAD at hand-off; the push attempt is recorded in `git log` and in the
     final report.
-  - **Push still fails with HTTP 400.** No remote CI, Colab run or independent
-    validation exists.
+  - Push succeeded at `e8b6678` on 2026-10-21 after the HTTP/1.1 change; the
+    Step 7b commit is local. Remote CI verification was not performed from this
+    checkout. The learned-classifier and auto-improvement Colab notebooks still
+    have no results.
 
 ## Manual actions for the owner
 
-- Resolve the push blocker and push `main` (no force). The local branch was
-  **32 commits ahead** of `origin/main` at the Step 7 checkpoint; check the
-  current count with `git rev-list --count origin/main..main`. The Colab
-  notebook clones the remote and will stop if the Step 7 files are missing.
-- Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime with
-  `MyDrive/oscd/archive (1).zip` and `MyDrive/oscd/weights/model.onnx`; set
-  `GITHUB_TOKEN` in Colab Secrets only if you want the summary pushed. Then
-  say **"Colab done."**
-- Replace the invalid 60,534,573-byte `model.onnx` with the verified
-  33,268,410-byte Drive copy and confirm input names `input_a`, `input_b`.
+- Push the Step 7b commit (no force). The earlier HTTP 400 was fixed by using
+  HTTP/1.1; the remote contains the prior history through `e8b6678`. Check the
+  current count with `git rev-list --count origin/main..main`.
+- The one-click Colab hand-off has run (2026-10-21 at `e8b6678`); its summary,
+  LOCO result and model check are saved. Do not rerun it against test labels.
+- Place the verified Drive `model.onnx` (33,268,410 bytes, SHA-256 `41c2ab64...`,
+  inputs `input_a` / `input_b`) in the local checkout and verify real inference;
+  do not use the invalid 60,534,573-byte file.
 - Run the other Colab notebooks (`oscd_pixel_classifier.ipynb`,
   `oscd_auto_improve.ipynb`) only if those paused experiments are wanted; local
   checkout has no OSCD data and their results are unverified.

@@ -6,9 +6,11 @@ which are not. It adds no results.
 
 Sources of record: `degradation_results.csv` (SHA-256 `4c301920...`),
 `benchmarks/results/oscd_results_v2.json` (SHA-256 `37ffe2bb...`),
-`benchmarks/results/oscd_evidence.json` (derived from the v2 JSON), and the
-code/logs named in the claims audit. OSCD imagery, LEVIR-CD imagery and the
-model checkpoint are absent from this checkout.
+`benchmarks/results/oscd_evidence.json` (derived from the v2 JSON),
+`benchmarks/results/oscd_loco_thresholds.json` (SHA-256 `32d1dbf5...`,
+training cities only), `benchmarks/results/colab_model_check.json` (SHA-256
+`ec452724...`) and the code/logs named in the claims audit. OSCD imagery,
+LEVIR-CD imagery and the model checkpoint are absent from this checkout.
 
 ## 1. Claim boundary
 
@@ -21,6 +23,8 @@ The paper claims:
   cities, with city-bootstrap intervals;
 - pooled scores for train-selected NDVI/NDBI rules and Otsu, reported as
   reference points;
+- a training-only leave-one-city-out robustness check of the hardcoded and
+  percentile rules, explicitly not a test-set score;
 - an explicit disclosure that the OSCD test cities had been scored before the
   reported run.
 
@@ -74,10 +78,11 @@ are limited to this checkpoint and say so.
 
 The spectral thresholds and CNN preprocessing were selected on the 14 training
 cities. The hardcoded values (NDVI −0.30, NDBI +0.30) sit at the edges of the
-search grid; percentile 99.0 is interior. The full selection log and the CNN’s
-training scores are not retained. No test labels were used to fit the v2
-thresholds according to the project record, but this is documented rather than
-independently audited.
+search grid; the leave-one-city-out check selected a grid-edge configuration in
+all 14 training folds, while percentile 99.0 was interior in all 14. The full
+selection log and the CNN’s training scores are not retained. No test labels
+were used to fit the v2 thresholds according to the project record, but this is
+documented rather than independently audited.
 
 Severity: moderate for interpreting the hardcoded score as an optimum. A wider
 grid could improve or degrade it; the direction is unknown.
@@ -181,7 +186,9 @@ rules under-predict change.
 - LaTeX could not be compiled here (`pdflatex`, `tectonic` and `latexmk` are
   absent). The manuscript is structurally checked but not PDF-verified.
 - The Colab notebooks for the learned classifier and validation search were not
-  run locally and have no pasted outputs. They are unverified, not evidence.
+  run locally and have no pasted outputs. They are unverified, not evidence. The
+  separate `run_all_colab` hand-off did run on 2026-10-21 at `e8b6678`; its LOCO
+  and model-check outputs are training-only checks and add no test score.
 
 See `ARTIFACT.md` for commands, hashes and owner actions.
 
@@ -218,7 +225,7 @@ See `ARTIFACT.md` for commands, hashes and owner actions.
 | Internal | 10 m bins chosen after seeing results | Low as description | Keep descriptive; do not test hypotheses post hoc |
 | External | Ten cities, one sensor family, one label source | High | New multi-region/multi-sensor labels needed |
 | Statistical | n=10 city bootstrap; no OA interval; paired CI includes zero | Moderate–high | Better design needed; not fixable by more arithmetic |
-| Reproducibility | Imagery/weights absent; PDF uncompiled; Colab unrun | High | Owner actions listed in `ARTIFACT.md` |
+| Reproducibility | Imagery/weights absent; PDF uncompiled; learned/auto Colab unrun; local model inference unverified | High | Owner actions listed in `ARTIFACT.md` |
 | Ethics/legal | Automation bias, dual use, privacy, licence ambiguity | High for deployment | Human review, authentication, legal review |
 
 ## 9. What would change the conclusions
@@ -245,9 +252,10 @@ framing is the strongest defensible claim.
 ## 10. Bottom line
 
 The reported numbers are internally consistent and honestly limited: they are
-descriptive scores from one frozen checkpoint, two saved files, a synthetic
-degradation protocol and a small test split that had been used before. They do
-not establish operational accuracy, general change-detection ability, a
-validated spectral fallback or a causal role for resolution in the OSCD result.
-Every use of these numbers should carry the city count, the single label source,
-the one-checkpoint scope and the prior scoring history.
+descriptive scores from one frozen checkpoint, saved test-set files, a
+training-only LOCO check, a synthetic degradation protocol and a small test
+split that had been used before. They do not establish operational accuracy,
+general change-detection ability, a validated spectral fallback or a causal role
+for resolution in the OSCD result. Every use of these numbers should carry the
+city count, the single label source, the one-checkpoint scope and the prior
+scoring history.

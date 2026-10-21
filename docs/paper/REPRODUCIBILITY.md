@@ -25,9 +25,9 @@ manuscript in `docs/paper/paper.tex` and the v2 result files.
 | Auto-improvement search | **Unverified** | No `auto_improve_log.json` |
 | v3 one-shot scoring | **Not run** | No `oscd_results_v3.*`; no scorer in checkout |
 | Docker image | **Unverified** | Docker unavailable on this host |
-| GitHub Actions CI | **Unverified** | Every push failed with HTTP 400 |
+| GitHub Actions CI | **Unverified** | Push now succeeds (HTTP/1.1, `e8b6678`); workflow result not checked from this checkout |
 | LaTeX PDF build | **Unverified** | No `pdflatex`, `tectonic` or `latexmk` |
-| Colab notebooks | **Unverified** | Not run locally; no pasted outputs |
+| Colab notebooks | `run_all_colab` run 2026-10-21 at `e8b6678` (summary and model check saved); learned/auto notebooks unverified | `benchmarks/results/COLAB_RUN_SUMMARY.md`; no output for the other two |
 
 The skips are: the Pipeline A regression (needs `model.onnx` and a dataset
 sample), OSCD label tests (needs `rasterio`, benchmark-only on this host), and
@@ -251,7 +251,7 @@ figure placement, table widths and line breaks.
 | v3 scoring | Implement/verify a protocol-compliant scorer before test access; run once; never tune |
 | LaTeX build | Install TeX with IEEEtran; compile twice; inspect PDF |
 | Docker | Build/run image; check `/health` and PDF export |
-| CI | Resolve the push HTTP 400; confirm the workflow runs |
+| CI | Confirm the workflow result on GitHub after the successful HTTP/1.1 push |
 | Novelty | Verify externally; see `NOVELTY_CHECKLIST.md` |
 | Licence | Legal review of OSCD/Copernicus/OSM terms before redistribution or commercial use |
 

@@ -180,6 +180,7 @@ def test_build_report_reads_only_the_train_list_and_assembles_metadata(tmp_path,
     assert set(report["families"]) == {"hardcoded", "percentile"}
     assert all(len(values["folds"]) == len(names) for values in report["families"].values())
     assert "not a test-set result" in report["caveats"][0]
+    assert "No test city is used in this script." in report["caveats"]
 
     (images / "train.txt").write_text("alpha\nbrasilia\ncharlie\n")
     with pytest.raises(ValueError, match="official test cities"):
