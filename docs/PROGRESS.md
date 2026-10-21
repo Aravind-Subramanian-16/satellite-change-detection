@@ -442,7 +442,14 @@ number is claimed.
 - Phase E commit: `a6dad9e` (uploads, rate limits, headers, logging, viridis
   heatmap, limitations). Push not retried after the repeated HTTP 400; local
   branch ahead by six commits. Remote CI remains unverified.
-- Phase F commit/push: pending.
+- Phase F commit: `7faba84` (paper, generated figures/tables, claims/threats/
+  reproducibility/novelty audits, venue and submission checklists, 12-slide
+  deck, 20-question Q&A, future work). The automated push attempt was blocked
+  before execution because of the prior repeated HTTP 400; **nothing was
+  pushed**. Local `main` is ahead of `origin/main` by seven commits. Remote CI
+  and the GitHub Actions workflow remain unverified. Run the push manually from
+  the owner terminal (no force):
+  `git push origin main`.
 
 ## Manual actions for the owner
 
