@@ -16,7 +16,7 @@ Command:
 Final output:
 
 ```text
-136 passed, 3 skipped, 1 warning in 16.10s
+136 passed, 3 skipped, 1 warning in 14.58s
 ```
 
 The three skips are environmental, not failures:

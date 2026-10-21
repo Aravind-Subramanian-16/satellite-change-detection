@@ -641,7 +641,7 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
 - [x] End. Final tests, submission notes, unverified-claim inventory and manual
   actions.
   - Evidence: `./venv/bin/python -m pytest -q` -> **136 passed, 3 skipped,
-    1 warning in 16.10s**. The three skips are `rasterio` absent, `torch`
+    1 warning in 14.58s**. The three skips are `rasterio` absent, `torch`
     absent and the missing `dataset/test/A/test_100_0_0.png` sample.
   - `docs/paper/SUBMISSION_NOTES.md` records the final counts, readiness
     blockers, the numbered owner actions, the full unverified-claim list and
