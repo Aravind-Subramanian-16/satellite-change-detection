@@ -105,6 +105,27 @@
         busy: $("#busy"),
         busyText: $("#busy-text"),
         toast: $("#toast"),
+        themeToggle: $("#theme-toggle"),
+        wizardFill: $("#wizard-fill"),
+        wizardItems: $$(".wizard-progress li"),
+        stepPanels: $$("[data-step-panel]"),
+        toDatesBtn: $("#to-dates-btn"),
+        toDatesHelp: $("#to-dates-help"),
+        backToAreaBtn: $("#back-to-area-btn"),
+        loadExampleBtn: $("#load-example-btn"),
+        goalInputs: $$('input[name="goal"]'),
+        goalNote: $("#goal-note"),
+        qualityBadge: $("#quality-badge"),
+        qualityText: $("#quality-text"),
+        qualityReasons: $("#quality-reasons"),
+        summaryCards: $("#summary-cards"),
+        learnMoreBtn: $("#learn-more-btn"),
+        learnMore: $("#learn-more"),
+        hintTour: $("#hint-tour"),
+        hintStepCount: $("#hint-step-count"),
+        hintText: $("#hint-text"),
+        hintNext: $("#hint-next"),
+        hintSkip: $("#hint-skip"),
     };
 
     /* ── Small utilities ─────────────────────────────────────────────────── */
@@ -173,6 +194,14 @@
         return Number.isFinite(number) ? `${number.toFixed(digits)}%` : "—";
     }
 
+    function numOr(...values) {
+        for (const value of values) {
+            const number = Number(value);
+            if (Number.isFinite(number)) return number;
+        }
+        return NaN;
+    }
+
     function localISO(date) {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -200,7 +229,14 @@
     }
 
     async function request(url, options = {}) {
-        const response = await fetch(url, options);
+        let response;
+        try {
+            response = await fetch(url, options);
+        } catch (_) {
+            throw new Error(
+                "The app could not reach the analysis service. Check your internet connection, wait a moment, and try again."
+            );
+        }
         const type = response.headers.get("content-type") || "";
         let payload = null;
         if (type.includes("application/json")) {
@@ -229,7 +265,14 @@
     }
 
     async function requestBlob(url, options = {}) {
-        const response = await fetch(url, options);
+        let response;
+        try {
+            response = await fetch(url, options);
+        } catch (_) {
+            throw new Error(
+                "The app could not reach the analysis service. Check your internet connection, wait a moment, and try again."
+            );
+        }
         if (!response.ok) {
             let payload = null;
             try {
@@ -523,9 +566,21 @@
             widthKm,
             heightKm,
             areaKm2,
+            small: areaKm2 * 100 < 0.5,
             message: problems.join(" "),
             maxKm,
         };
+    }
+
+    function formatAreaKm2(areaKm2) {
+        const ha = areaKm2 * 100;
+        if (areaKm2 >= 1) return `${fmt(areaKm2, 2)} km² (${fmtNumber(ha, 0)} ha)`;
+        if (ha >= 0.01) return `${fmt(ha, 2)} ha (${fmt(ha * 2.47105, 1)} acres)`;
+        return `${fmtNumber(areaKm2 * 1e6, 0)} m² (${fmt(ha, 3)} ha)`;
+    }
+
+    function formatLengthKm(km) {
+        return km >= 0.1 ? `${fmt(km, 2)} km` : `${fmtNumber(km * 1000, 0)} m`;
     }
 
     function estimateRaster(aoi) {
@@ -548,6 +603,8 @@
             els.aoiStatus.className = "aoi-status";
             els.aoiStatus.textContent = "No area selected yet.";
             els.aoiManual.value = "";
+            els.toDatesBtn.disabled = true;
+            els.toDatesHelp.textContent = "Choose or draw an area first.";
             return;
         }
         const aoi = state.aoi;
@@ -557,10 +614,14 @@
         els.aoiStatus.className = "aoi-status " + (aoi.valid ? "is-valid" : "is-invalid");
 
         if (aoi.valid) {
-            els.aoiStatus.textContent = `Area selected: ${aoi.widthKm.toFixed(2)} × ${aoi.heightKm.toFixed(2)} km (${aoi.areaKm2.toFixed(2)} km²).`;
+            els.aoiStatus.textContent = `Area selected: ${formatLengthKm(aoi.widthKm)} × ${formatLengthKm(aoi.heightKm)} (${formatAreaKm2(aoi.areaKm2)}).`;
         } else {
             els.aoiStatus.textContent = aoi.message || "This area is not valid for analysis.";
         }
+        els.toDatesBtn.disabled = !aoi.valid;
+        els.toDatesHelp.textContent = aoi.valid
+            ? "Area ready. Continue to pick the two dates."
+            : "Choose or draw an area first.";
         if (!aoi.widthKm) {
             els.aoiManual.value = (aoi.bbox || []).join(", ");
             return;
@@ -571,14 +632,24 @@
             list.appendChild(el("dt", null, label));
             list.appendChild(el("dd", null, value));
         };
-        addRow("Width", `${aoi.widthKm.toFixed(2)} km`);
-        addRow("Height", `${aoi.heightKm.toFixed(2)} km`);
-        addRow("Area", `${aoi.areaKm2.toFixed(2)} km²`);
+        addRow("Width", formatLengthKm(aoi.widthKm));
+        addRow("Height", formatLengthKm(aoi.heightKm));
+        addRow("Area", formatAreaKm2(aoi.areaKm2));
         addRow(
-            "Analysis raster",
+            "Detail level",
             `${raster.width} × ${raster.height} px at about 10 m${raster.capped ? " (capped)" : ""}`
         );
         addRow("Per-side limit", `${aoi.maxKm} km`);
+        if (aoi.small) {
+            const pixels = Math.max(1, Math.round((aoi.areaKm2 * 1e6) / 100));
+            els.aoiInfo.appendChild(
+                el(
+                    "p",
+                    "help",
+                    `Very small area: under 0.5 ha, so about ${pixels} pixels at 10 m. Results on such a small box will be noisy; consider a slightly larger area.`
+                )
+            );
+        }
         if (!aoi.valid) {
             const problem = el("p", "help", aoi.message);
             els.aoiInfo.appendChild(problem);
@@ -767,6 +838,152 @@
         });
     }
 
+    /* ── Wizard steps ────────────────────────────────────────────────────── */
+
+    function updateWizard(step) {
+        const current = Math.max(1, Math.min(3, Number(step) || 1));
+        els.wizardItems.forEach((item) => {
+            const itemStep = Number(item.dataset.step);
+            if (itemStep === current) {
+                item.setAttribute("aria-current", "step");
+                item.classList.remove("is-done");
+            } else {
+                item.removeAttribute("aria-current");
+                item.classList.toggle("is-done", itemStep < current);
+            }
+            const bubble = $(".step-bubble", item);
+            if (bubble) bubble.textContent = itemStep < current ? "✓" : String(itemStep);
+        });
+        els.wizardFill.style.width = current === 1 ? "8%" : current === 2 ? "50%" : "100%";
+        els.stepPanels.forEach((panel) => {
+            panel.hidden = Number(panel.dataset.stepPanel) !== current;
+        });
+        if (current !== 2) els.sceneSection.hidden = true;
+        if (current === 2) $("#next-2").textContent =
+            "What happens next: we list the clearest images around each date, and you pick one per date.";
+    }
+
+    function wireWizard() {
+        els.toDatesBtn.addEventListener("click", () => {
+            updateWizard(2);
+            scrollTo($("#settings-heading"));
+            els.dateBefore.focus();
+        });
+        els.backToAreaBtn.addEventListener("click", () => {
+            updateWizard(1);
+            scrollTo($("#map-heading"));
+        });
+    }
+
+    /* ── Area presets and example ────────────────────────────────────────── */
+
+    function applyPreset(hectares) {
+        if (!state.map) {
+            toast("The interactive map is unavailable; enter a bounding box manually.", "error");
+            return;
+        }
+        const center = state.map.getCenter();
+        const metersPerDegLat = 111320;
+        const metersPerDegLon = 111320 * Math.max(0.05, Math.cos((center.lat * Math.PI) / 180));
+        const sideM = Math.sqrt(hectares * 10000);
+        const dLat = sideM / 2 / metersPerDegLat;
+        const dLon = sideM / 2 / metersPerDegLon;
+        applyAoi([center.lng - dLon, center.lat - dLat, center.lng + dLon, center.lat + dLat], { fit: false });
+    }
+
+    const EXAMPLE_AREA = {
+        name: "Palm Jumeirah, Dubai",
+        bbox: [55.1302, 25.1005, 55.1524, 25.1174],
+        before: "2023-01-15",
+        after: "2023-07-15",
+    };
+
+    function loadExample() {
+        if (state.map) {
+            const [west, south, east, north] = EXAMPLE_AREA.bbox;
+            state.map.fitBounds(L.latLngBounds([[south, west], [north, east]]), { padding: [24, 24], maxZoom: 14 });
+        }
+        els.placeSearch.value = EXAMPLE_AREA.name;
+        applyAoi(EXAMPLE_AREA.bbox, { fit: false });
+        els.dateBefore.value = EXAMPLE_AREA.before;
+        els.dateAfter.value = EXAMPLE_AREA.after;
+        updateSeasonNote();
+        updateWizard(2);
+        scrollTo($("#settings-heading"));
+        toast("Example loaded: Palm Jumeirah, Dubai. Adjust the dates if you like.");
+    }
+
+    function wirePresetsAndExample() {
+        $$(".preset-btn").forEach((button) => {
+            button.addEventListener("click", () => applyPreset(Number(button.dataset.presetHa)));
+        });
+        els.loadExampleBtn.addEventListener("click", loadExample);
+    }
+
+    /* ── Goal picker ─────────────────────────────────────────────────────── */
+
+    const GOAL_PROFILES = {
+        any: "general",
+        farmland: "agriculture",
+        buildings: "builtup",
+        forest: "deforestation",
+        water: "general",
+    };
+    const PROFILE_GOALS = {
+        general: "any",
+        agriculture: "farmland",
+        builtup: "buildings",
+        deforestation: "forest",
+    };
+    const GOAL_NOTES = {
+        any: "Looks at every kind of change and labels each patch as best the rules can. The clearest signals are usually vegetation loss or new bare ground; fine detail is missed at 10 m.",
+        farmland: "Compares how green and how wet the fields were: spots harvest, clearing, and stressed crops. Comparing different seasons can confuse crop cycles with damage.",
+        buildings: "Looks for more built-up surface between the two dates. Tested on one urban dataset with moderate scores; individual buildings (under about 10 m) are usually missed.",
+        forest: "Looks for trees turning to bare ground or water. Seasonal leaf change can be mistaken for loss, so compare similar seasons where you can.",
+        water: "Looks for water appearing or disappearing. The general rules are used for now, so shadows and wet soil can be mistaken for water.",
+    };
+
+    function selectedGoal() {
+        const checked = els.goalInputs.find((input) => input.checked);
+        return checked ? checked.value : null;
+    }
+
+    function updateGoalNote() {
+        const goal = selectedGoal();
+        els.goalNote.textContent = goal && GOAL_NOTES[goal]
+            ? GOAL_NOTES[goal]
+            : "Custom profile chosen in advanced settings — the goal cards are only quick presets.";
+    }
+
+    function syncGoalFromProfile() {
+        const goal = PROFILE_GOALS[els.profileSelect.value];
+        if (goal) {
+            els.goalInputs.forEach((input) => {
+                input.checked = input.value === goal;
+            });
+        } else {
+            els.goalInputs.forEach((input) => {
+                input.checked = false;
+            });
+        }
+        updateGoalNote();
+    }
+
+    function wireGoalPicker() {
+        els.goalInputs.forEach((input) => {
+            input.addEventListener("change", () => {
+                if (!input.checked) return;
+                const profile = GOAL_PROFILES[input.value];
+                if (profile && profile !== els.profileSelect.value) {
+                    els.profileSelect.value = profile;
+                    renderProfileInfo();
+                }
+                updateGoalNote();
+            });
+        });
+        updateGoalNote();
+    }
+
     /* ── Place search ────────────────────────────────────────────────────── */
 
     function closeSearch() {
@@ -868,7 +1085,10 @@
             updateFindButton();
             invalidateScenes();
         });
-        els.profileSelect.addEventListener("change", renderProfileInfo);
+        els.profileSelect.addEventListener("change", () => {
+            renderProfileInfo();
+            syncGoalFromProfile();
+        });
         els.sceneGrid.addEventListener("change", (event) => {
             const input = event.target;
             if (!(input instanceof HTMLInputElement) || input.type !== "radio") return;
@@ -908,7 +1128,7 @@
             showError(els.liveError, "The scene window must be between 1 and 120 days.");
             return;
         }
-        setBusy(true, "Searching the Copernicus catalog…");
+        setBusy(true, "Looking for the clearest images…");
         try {
             const data = await jsonRequest("/scenes", {
                 bbox: state.aoi.bbox,
@@ -920,6 +1140,7 @@
             state.selectedScenes = { before: null, after: null };
             renderScenes(data);
             els.sceneSection.hidden = false;
+            updateWizard(2);
             scrollTo(els.sceneSection);
         } catch (error) {
             showError(els.liveError, liveErrorMessage(error));
@@ -939,12 +1160,12 @@
         const heading = el("h3", null, sceneWindowLabel(key));
         column.appendChild(heading);
         const requested = windowData.requested_date || "";
-        const range = windowData.start && windowData.end ? ` · catalog window ${windowData.start.slice(0, 10)} to ${windowData.end.slice(0, 10)}` : "";
+        const range = windowData.start && windowData.end ? ` · search window ${windowData.start.slice(0, 10)} to ${windowData.end.slice(0, 10)}` : "";
         column.appendChild(el("p", null, `Target ${requested}${range}`));
 
         const scenes = Array.isArray(windowData.scenes) ? windowData.scenes : [];
         if (!scenes.length) {
-            column.appendChild(el("p", "region-empty", "No scenes were returned for this window."));
+            column.appendChild(el("p", "region-empty", "No images were found for this window. Try widening the search window."));
             return column;
         }
 
@@ -957,12 +1178,10 @@
             input.value = scene.id;
             input.dataset.window = key;
             input.id = `scene-${key}-${index}`;
-            input.checked = key === "before"
-                ? scene.id === windowData.recommended_id || (!windowData.recommended_id && index === 0)
-                : scene.id === windowData.recommended_id || (!windowData.recommended_id && index === 0);
+            input.checked = scene.id === windowData.recommended_id || (!windowData.recommended_id && index === 0);
             input.setAttribute(
                 "aria-label",
-                `${sceneWindowLabel(key)} scene ${scene.date || scene.id}, catalog cloud cover ${fmt(scene.cloud_cover_percent, 1)} percent`
+                `${sceneWindowLabel(key)} image ${scene.date || scene.id}, cloud cover ${fmt(scene.cloud_cover_percent, 1)} percent`
             );
             if (input.checked) {
                 state.selectedScenes[key] = scene.id;
@@ -1046,7 +1265,7 @@
         if (state.running) return;
         showError(els.sceneError, "");
         if (!state.sceneData || !state.aoi || !state.aoi.valid) {
-            showError(els.sceneError, "Search for scenes again before running the analysis.");
+            showError(els.sceneError, "Search for images again before running the analysis.");
             return;
         }
         const dates = validateDates();
@@ -1055,7 +1274,7 @@
             return;
         }
         if (!state.selectedScenes.before || !state.selectedScenes.after) {
-            showError(els.sceneError, "Select one scene for each date.");
+            showError(els.sceneError, "Select one image for each date.");
             return;
         }
         let options;
@@ -1068,7 +1287,7 @@
         const windowDays = Number(els.windowDays.value);
         state.running = true;
         updateRunButton();
-        setBusy(true, "Downloading scenes and computing spectral change…");
+        setBusy(true, "Downloading the images and measuring changes…");
         try {
             const result = await jsonRequest("/fetch-and-predict", {
                 bbox: state.aoi.bbox,
@@ -1086,7 +1305,7 @@
             });
             state.historyLoaded = false;
             renderResult(result);
-            els.sceneSection.hidden = true;
+            updateWizard(3);
             scrollTo(els.resultsSection);
         } catch (error) {
             showError(els.sceneError, liveErrorMessage(error));
@@ -1127,6 +1346,8 @@
                 : `The selected rules flagged ${fmt(percent, 2)}% of raster pixels. Decision support, not ground truth.`);
 
         renderValidationBanner(result, isCnn);
+        renderQualityBadge(result, isCnn);
+        renderSummaryCards(result, isCnn);
         renderWarnings(result);
         renderStats(result, isCnn);
         renderCompare(result);
@@ -1138,6 +1359,100 @@
         setActionAvailability(true);
 
         els.resultsSection.hidden = false;
+    }
+
+    /* ── Data-quality badge ───────────────────────────────────────────────── */
+
+    function renderQualityBadge(result, isCnn) {
+        if (isCnn) {
+            els.qualityBadge.hidden = true;
+            return;
+        }
+        const reasons = [];
+        let worst = 0; // 0 good, 1 okay, 2 poor
+
+        const cloudBefore = numOr(result.aoi_cloud_fraction_before, result.cloud_coverage_before);
+        const cloudAfter = numOr(result.aoi_cloud_fraction_after, result.cloud_coverage_after);
+        const worstCloud = Math.max(cloudBefore, cloudAfter);
+        if (Number.isFinite(worstCloud)) {
+            const cloudPct = worstCloud * 100;
+            if (cloudPct > 30) {
+                worst = Math.max(worst, 2);
+                reasons.push(`over ${fmt(cloudPct, 0)}% of your area was cloud or shadow in at least one image`);
+            } else if (cloudPct > 10) {
+                worst = Math.max(worst, 1);
+                reasons.push(`${fmt(cloudPct, 0)}% of your area was cloud or shadow in at least one image`);
+            }
+        }
+
+        if (result.season_warning) {
+            worst = Math.max(worst, 1);
+            reasons.push("the two dates fall in different seasons");
+        }
+
+        const scenes = result.scenes || {};
+        let maxGap = null;
+        ["before", "after"].forEach((key) => {
+            const window = scenes[key];
+            if (!window || !window.date || !window.requested_date) return;
+            const gap = Math.abs(new Date(window.date) - new Date(window.requested_date)) / 86400000;
+            if (!Number.isFinite(gap)) return;
+            maxGap = maxGap === null ? gap : Math.max(maxGap, gap);
+        });
+        if (maxGap !== null && maxGap > 15) {
+            worst = Math.max(worst, maxGap > 60 ? 2 : 1);
+            reasons.push(`the clearest images landed ${fmt(maxGap, 0)} days from the dates you chose`);
+        }
+
+        const levels = [
+            ["is-good", "Data quality: good", "Both images are mostly clear over your area and close to your dates."],
+            ["is-okay", "Data quality: okay", "Use the results with extra care."],
+            ["is-poor", "Data quality: poor", "Treat this result as a rough pointer only."],
+        ];
+        const [cssClass, title, base] = levels[worst];
+        els.qualityBadge.className = `quality-badge ${cssClass}`;
+        els.qualityText.textContent = title;
+        els.qualityReasons.textContent = reasons.length ? `${base} Because: ${reasons.join("; ")}.` : base;
+        els.qualityBadge.hidden = false;
+    }
+
+    /* ── Summary cards ────────────────────────────────────────────────────── */
+
+    function renderSummaryCards(result, isCnn) {
+        clear(els.summaryCards);
+        const percent = Number(result.percent_changed);
+        const regions = Array.isArray(result.change_regions) ? result.change_regions : [];
+        const aoiKm2 = result.aoi && Number(result.aoi.area_km2);
+
+        const card = (label, value, sub) => {
+            const node = el("div", "summary-card");
+            node.appendChild(el("span", "summary-card-label", label));
+            node.appendChild(el("span", "summary-card-value", value));
+            if (sub) node.appendChild(el("span", "summary-card-sub", sub));
+            els.summaryCards.appendChild(node);
+        };
+
+        if (Number.isFinite(percent)) {
+            if (Number.isFinite(aoiKm2)) {
+                const changedKm2 = (percent / 100) * aoiKm2;
+                card("Area changed", formatAreaKm2(changedKm2), `out of a ${formatAreaKm2(aoiKm2)} area`);
+            } else {
+                card("Area changed", "—", "area unknown for pair uploads");
+            }
+            card("Share of the area", pct(percent), isCnn ? "flagged pixels, no cloud mask" : "after cloud and shadow masking");
+        } else {
+            card("Area changed", "—", "no change percentage returned");
+            card("Share of the area", "—", "");
+        }
+
+        const main = regions
+            .slice()
+            .sort((a, b) => Number(b.pixel_area || 0) - Number(a.pixel_area || 0))[0];
+        card(
+            "Main change type",
+            main ? main.change_type || "Change (type unclear)" : "No change detected",
+            main ? "largest patch, by area" : "no patches passed the rules"
+        );
     }
 
     function renderValidationBanner(result, isCnn) {
@@ -1216,9 +1531,9 @@
             addStat("Cloud/shadow masked", pct(result.percent_cloud_masked));
         }
         const regions = Array.isArray(result.change_regions) ? result.change_regions : [];
-        addStat("Regions", String(regions.length));
+        addStat("Patches", String(regions.length));
         if (result.aoi && result.aoi.area_km2 !== undefined) {
-            addStat("AOI", `${fmt(result.aoi.area_km2, 2)} km²`);
+            addStat("AOI", formatAreaKm2(Number(result.aoi.area_km2)));
         }
         if (result.aoi && result.aoi.expected_pixels) {
             const px = result.aoi.expected_pixels;
@@ -1437,13 +1752,13 @@
     function renderRegions(result) {
         clear(els.regionsList);
         const regions = Array.isArray(result.change_regions) ? result.change_regions : [];
-        els.regionCount.textContent = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
+        els.regionCount.textContent = `${regions.length} patch${regions.length === 1 ? "" : "es"}`;
         if (!regions.length) {
             els.regionsList.appendChild(
                 el(
                     "p",
                     "region-empty",
-                    "No connected regions passed the profile's rules and minimum mapping unit. This does not prove that no change occurred; inspect the evidence layers."
+                    "No connected patches passed the profile's rules and minimum mapping unit. This does not prove that no change occurred; inspect the change map."
                 )
             );
         }
@@ -1758,10 +2073,10 @@
 
     function wireResults() {
         $("#new-analysis-btn").addEventListener("click", () => {
-            els.resultsSection.hidden = true;
             state.result = null;
             state.historyId = null;
             setActionAvailability(false);
+            updateWizard(state.sceneData ? 2 : 1);
             els.sceneSection.hidden = !state.sceneData;
             scrollTo(state.sceneData ? els.sceneSection : $("#map-heading"));
         });
@@ -1885,7 +2200,7 @@
             const formData = new FormData();
             formData.append("image_a", els.imageA.files[0]);
             formData.append("image_b", els.imageB.files[0]);
-            setBusy(true, "Running the CNN pair analysis…");
+            setBusy(true, "Comparing your two images…");
             try {
                 const result = await request("/predict", { method: "POST", body: formData });
                 state.historyLoaded = false;
@@ -1969,7 +2284,7 @@
             state.historyId = id;
             activateTab("live");
             renderResult(item.result);
-            els.sceneSection.hidden = true;
+            updateWizard(3);
             scrollTo(els.resultsSection);
         } catch (error) {
             showError(els.historyStatus, error.message || "The analysis could not be opened.");
@@ -1994,13 +2309,101 @@
         $("#refresh-history-btn").addEventListener("click", () => loadHistory(true));
     }
 
+    /* ── Theme, honesty note and hint tour ────────────────────────────────── */
+
+    function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        els.themeToggle.setAttribute(
+            "aria-label",
+            theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+        );
+        try {
+            localStorage.setItem("scd-theme", theme);
+        } catch (_) {
+            /* storage unavailable; theme simply won't persist */
+        }
+    }
+
+    function wireThemeToggle() {
+        els.themeToggle.addEventListener("click", () => {
+            applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        });
+        let saved = null;
+        try {
+            saved = localStorage.getItem("scd-theme");
+        } catch (_) {
+            /* storage unavailable */
+        }
+        const preferred =
+            saved ||
+            (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        applyTheme(preferred);
+    }
+
+    function wireHonestyNote() {
+        els.learnMoreBtn.addEventListener("click", () => {
+            const open = els.learnMore.hidden;
+            els.learnMore.hidden = !open;
+            els.learnMoreBtn.setAttribute("aria-expanded", String(open));
+            els.learnMoreBtn.textContent = open ? "Hide" : "Learn more";
+        });
+    }
+
+    const HINT_TOUR = [
+        "Start by drawing a small box on the map around the place you care about — or search for it by name.",
+        "Then pick the two dates you want to compare, and tell us what kind of change you are looking for.",
+        "We list the clearest satellite images near each date, then show what changed — with an honest data-quality check.",
+    ];
+
+    function wireHintTour() {
+        let shown = false;
+        try {
+            shown = localStorage.getItem("scd-hint-tour-done") === "1";
+        } catch (_) {
+            /* storage unavailable */
+        }
+        const smallScreen = window.innerWidth < 640;
+        if (shown || smallScreen) return;
+
+        let step = 0;
+        const render = () => {
+            els.hintStepCount.textContent = `Tip ${step + 1} of ${HINT_TOUR.length}`;
+            els.hintText.textContent = HINT_TOUR[step];
+            els.hintNext.textContent = step === HINT_TOUR.length - 1 ? "Finish" : "Next";
+        };
+        const close = () => {
+            els.hintTour.hidden = true;
+            try {
+                localStorage.setItem("scd-hint-tour-done", "1");
+            } catch (_) {
+                /* storage unavailable */
+            }
+        };
+        els.hintNext.addEventListener("click", () => {
+            if (step >= HINT_TOUR.length - 1) {
+                close();
+            } else {
+                step += 1;
+                render();
+            }
+        });
+        els.hintSkip.addEventListener("click", close);
+        render();
+        els.hintTour.hidden = false;
+    }
+
     /* ── Init ────────────────────────────────────────────────────────────── */
 
     function init() {
+        wireThemeToggle();
+        wireHonestyNote();
         wireTabs();
         initDates();
         initMap();
         wireMapActions();
+        wireWizard();
+        wirePresetsAndExample();
+        wireGoalPicker();
         wireSearch();
         wireLiveForm();
         wireResults();
@@ -2008,8 +2411,10 @@
         wireHistory();
         setActionAvailability(false);
         updateFindButton();
+        updateWizard(1);
         loadConfig();
         checkHealth();
+        wireHintTour();
     }
 
     if (document.readyState === "loading") {
