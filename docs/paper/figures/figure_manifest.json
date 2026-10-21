@@ -1,0 +1,42 @@
+{
+  "generated_utc": "2026-10-21T05:46:07+00:00",
+  "results_file": "benchmarks/results/oscd_results_v2.json",
+  "results_sha256": "37ffe2bbd01a43c07f04740847843f0176ea1118c17283456c34d2ff2a2bef8f",
+  "rows": 50,
+  "cities": [
+    "brasilia",
+    "chongqing",
+    "dubai",
+    "lasvegas",
+    "milano",
+    "montpellier",
+    "norcia",
+    "rio",
+    "saclay_w",
+    "valencia"
+  ],
+  "methods": [
+    "hardcoded",
+    "percentile",
+    "cnn_joint",
+    "cnn_reflectance",
+    "otsu"
+  ],
+  "figures": {
+    "per_city_f1": "fig_per_city_f1.png",
+    "predicted_vs_true": "fig_predicted_vs_true.png",
+    "precision_recall": "fig_precision_recall.png",
+    "ablation": "fig_ablation.png",
+    "reliability": "fig_reliability.png",
+    "qualitative": "fig_qualitative_placeholder.png"
+  },
+  "tables": [
+    "generated_results_table.tex",
+    "generated_per_city_table.tex",
+    "generated_ablation_table.tex"
+  ],
+  "optional_inputs": {
+    "ablation_log": null,
+    "calibration": null
+  }
+}

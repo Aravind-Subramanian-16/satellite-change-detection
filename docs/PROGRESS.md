@@ -26,10 +26,12 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **108 passed, 3 skipped, 1 warning in
-    11.09s** after the Phase E hardening tests (Phase D2: 96 passed, 3 skipped,
-    10.82s; Phase D: 72 passed, 2 skipped, 7.87s; Phase B/C: 60 passed, 2
-    skipped, 3.87s; initial Phase A: 41 passed, 2 skipped, 4.64s). Skips: the
+    `./venv/bin/python -m pytest -q` → **113 passed, 3 skipped, 1 warning in
+    14.64s** (runtime varies) after the Phase F figure tests (Phase E: 108
+    passed, 3 skipped,
+    11.09s; Phase D2: 96 passed, 3 skipped, 10.82s; Phase D: 72 passed, 2
+    skipped, 7.87s; Phase B/C: 60 passed, 2 skipped, 3.87s; initial Phase A:
+    41 passed, 2 skipped, 4.64s). Skips: the
     Pipeline A regression (needs `model.onnx` and a dataset sample), OSCD label
     tests (rasterio is benchmark-only on this host) and the torch-only
     crop-dataset smoke test.
@@ -348,32 +350,81 @@ number is claimed.
 
 ## Phase F — Paper and presentation
 
-- [ ] F1. `docs/paper/paper.tex` (IEEEtran) with abstract, introduction,
+- [x] F1. `docs/paper/paper.tex` (IEEEtran) with abstract, introduction,
   related work placeholders, methods, experiments, results tables generated from
   JSON, ablations, discussion, limitations, conclusion.
-- [ ] F2. Honest framing (negative transfer: aggregate CNN F1 0.0007; spectral
-  percentile F1 0.1176, hardcoded 0.0782, Otsu 0.0953; two test scoring events
-  in v2, third planned in v3; three non-built-up profiles unvalidated).
-- [ ] F3. `[CITE: topic]` placeholders and `docs/paper/TODO_CITATIONS.md`; no
+  - Evidence: `docs/paper/paper.tex` (IEEEtran conference): abstract,
+    introduction, related work with `[CITE: ...]` slots, data/task, methods,
+    protocol/scoring history, results using generated tables, validation-only
+    ablations, discussion with future work, limitations,
+    reproducibility/ethics, conclusion and appendix. It was **not compiled**:
+    no `pdflatex`/`tectonic`/`latexmk` on this host.
+- [x] F2. Honest framing (negative transfer: aggregate CNN F1 0.0007; spectral
+  percentile F1 0.1176, hardcoded 0.0782, Otsu F1 0.0953 with OA 0.3439 as its
+  headline; two prior test-scoring events disclosed; third preregistered as v3
+  and uncomputed; four non-built-up profiles unvalidated).
+  - Evidence: abstract and results in `paper.tex`; v2 JSON/MD; the four
+    unvalidated profiles are `general`, `agriculture`, `deforestation` and
+    `roads` (plus experimental learned/fusion paths). `CLAIMS_AUDIT.md` lists
+    30 claims and the not-claimed list. No unvalidated accuracy number is
+    displayed.
+- [x] F3. `[CITE: topic]` placeholders and `docs/paper/TODO_CITATIONS.md`; no
   invented references or baselines.
-- [ ] F4. `scripts/make_paper_figures.py` reading saved JSON and writing
+  - Evidence: 18 citation slots covering OSCD, LEVIR-CD, Sentinel-2,
+    indices, Otsu, PIF, surveys, calibration, reproducibility, licences,
+    cross-sensor transfer, test-set reuse, preregistration, spatial CV and
+    open tools. All statuses unverified; no DOI/author/year was invented.
+- [x] F4. `scripts/make_paper_figures.py` reading saved JSON and writing
   `docs/paper/figures/` (per-city F1, predicted vs true fraction,
   precision–recall, ablation, reliability, qualitative placeholder); test with
   fake JSON.
-- [ ] F5. `CLAIMS_AUDIT.md`, `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md`
+  - Evidence: `scripts/make_paper_figures.py` strictly validates 10 cities ×
+    5 methods and writes six PNGs, three `.tex` tables and
+    `figure_manifest.json` (v2 hash
+    `37ffe2bbd01a43c07f04740847843f0176ea1118c17283456c34d2ff2a2bef8f`).
+    Ablation/reliability are labelled placeholders without inputs. Five tests
+    in `tests/test_paper_figures.py`, including rejection of missing methods,
+    duplicates and non-test rows.
+- [x] F5. `CLAIMS_AUDIT.md`, `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md`
   (commands, hashes, seeds, Colab steps, OSCD CC BY-NC-SA and commercial-use
   caveat).
-- [ ] F6. `NOVELTY_CHECKLIST.md` with 3–5 searches per claimed contribution,
+  - Evidence: all three files are present, plus `FUTURE_WORK.md`. They record
+    the v2 source hash, code commit `a6dad9e`, seeds, commands, environment,
+    skips and the unverified items (Docker, CI, LaTeX, Colab, v3, weights).
+    Licence terms are marked as requiring external verification/legal review.
+- [x] F6. `NOVELTY_CHECKLIST.md` with 3–5 searches per claimed contribution,
   databases, status unverified.
-- [ ] F7. `VENUES.md` with venue types and expectations; scope/length/fees
+  - Evidence: `docs/paper/NOVELTY_CHECKLIST.md` records 15 Qoder WebSearch
+    queries (5 per contribution) with dates, selected titles/URLs, the
+    databases **not** searched, and “unverified” verdicts. Its overall status
+    is unverified and no priority claim is permitted.
+- [x] F7. `VENUES.md` with venue types and expectations; scope/length/fees
   flagged for verification; no impact factors or acceptance rates.
-- [ ] F8. `SUBMISSION_CHECKLIST.md`: anonymisation, data/code availability,
+  - Evidence: `docs/paper/VENUES.md` covers software venues, conferences,
+    journals, workshops and preprints; every scope/length/fee item is marked
+    for verification; it explicitly contains no impact factors or acceptance
+    rates and recommends a workshop/software venue over a methods journal in
+    the current state.
+- [x] F8. `SUBMISSION_CHECKLIST.md`: anonymisation, data/code availability,
   licences, ethics/dual-use, contributions, arXiv decision, AI-assistance
   disclosure.
-- [ ] F9. `docs/presentation/slides.md` (12 slides, speaker notes, live-demo
+  - Evidence: `docs/paper/SUBMISSION_CHECKLIST.md` has sections A–L with
+    blocking items: no verified citations/bibliography, no code `LICENSE`, no
+    compiled PDF, no v3/independent validation, blank authors/contributions,
+    unresolved anonymisation, incomplete novelty search. Readiness: **not
+    ready**.
+- [x] F9. `docs/presentation/slides.md` (12 slides, speaker notes, live-demo
   script) and `docs/presentation/QA.md` (20 honest reviewer questions).
-- [ ] F10. Future work: human-feedback loop, labelled agriculture/deforestation
+  - Evidence: `docs/presentation/slides.md` has exactly 12 slides with speaker
+    notes, three demo paths (mocked UI, local UI, report/export), failure
+    scripts, timing and a “do not say” list. `docs/presentation/QA.md` has 20
+    questions with answers limited to v2 evidence and explicit unverified
+    items.
+- [x] F10. Future work: human-feedback loop, labelled agriculture/deforestation
   data, higher-resolution roads, unfinished D2 ideas.
+  - Evidence: `paper.tex` Discussion `Future Work` subsection and
+    `docs/paper/FUTURE_WORK.md` (P0/P1/P2 items, dependencies, evidence needed,
+    explicitly not planned actions). These are plans, not results.
 
 ## Phase commit and push log
 
@@ -388,7 +439,9 @@ number is claimed.
 - Phase D2 commit: `0d7082d` (validation-only search, fusion, uncertainty,
   fine-tuning, preregistration). Same push failure. At the time of writing,
   `main...origin/main [ahead 5]`; v3 is not run locally.
-- Phase E commit/push: pending.
+- Phase E commit: `a6dad9e` (uploads, rate limits, headers, logging, viridis
+  heatmap, limitations). Push not retried after the repeated HTTP 400; local
+  branch ahead by six commits. Remote CI remains unverified.
 - Phase F commit/push: pending.
 
 ## Manual actions for the owner
@@ -398,8 +451,19 @@ number is claimed.
 - Run the Colab notebooks (`oscd_pixel_classifier.ipynb`,
   `oscd_auto_improve.ipynb`) and paste the outputs; local checkout has no OSCD
   data.
+- Write and test a protocol-compliant v3 scorer **before** test access, then
+  run the frozen v3 protocol once and never tune after seeing the result. The
+  current checkout has no v3 scorer and no v3 output.
+- Compile `docs/paper/paper.tex` with IEEEtran after replacing all
+  `[CITE: ...]` placeholders; add a bibliography, author metadata and a code
+  licence (none exists).
+- Have an independent reviewer check the manuscript against
+  `oscd_results_v2.json` and the code.
 - Verify novelty in external databases using `NOVELTY_CHECKLIST.md` before any
   “novel” claim.
-- Choose a target venue after checking its official scope/length/fees.
-- Obtain a legal review of OSCD (CC BY-NC-SA) and OpenStreetMap ODbL
-  obligations before redistribution or commercial use.
+- Choose a target venue after checking its official scope/length/fees, and
+  decide on anonymisation/preprint policy.
+- Obtain a legal review of OSCD (CC BY-NC-SA), Copernicus and OpenStreetMap
+  ODbL obligations before redistribution or commercial use.
+- Build/run the Docker image and confirm GitHub Actions after the push issue is
+  resolved; both remain unverified.

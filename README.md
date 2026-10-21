@@ -231,6 +231,32 @@ Research-only code is not on the default path:
 - `fusion.py` fuses spectral evidence and learned probabilities; `uncertainty.py` computes model agreement and ECE on held-out TRAIN cities; `benchmarks/finetune_cnn.py` fine-tunes a new CNN checkpoint without reading or writing `best_model.pt`/`model.onnx`.
 - `docs/paper/PREREGISTRATION.md` freezes the systems, metrics and one-shot test-scoring rule. No v3 test result exists in this checkout; v2 remains the only scored test result and its earlier preliminary scoring event is disclosed above.
 
+## Paper and audits
+
+The manuscript and its supporting audits are in `docs/paper/`:
+
+- [`paper.tex`](docs/paper/paper.tex) — IEEEtran manuscript (not yet compiled;
+  citations are deliberate placeholders).
+- [`CLAIMS_AUDIT.md`](docs/paper/CLAIMS_AUDIT.md) — claim-by-claim evidence and
+  the not-claimed list.
+- [`THREATS_TO_VALIDITY.md`](docs/paper/THREATS_TO_VALIDITY.md) — construct,
+  internal, external, statistical, reproducibility and ethical threats.
+- [`REPRODUCIBILITY.md`](docs/paper/REPRODUCIBILITY.md) — commands, hashes,
+  seeds, versions and unverified items.
+- [`NOVELTY_CHECKLIST.md`](docs/paper/NOVELTY_CHECKLIST.md) — shallow search
+  log; status unverified, no priority claim.
+- [`TODO_CITATIONS.md`](docs/paper/TODO_CITATIONS.md) — 18 unfilled citation
+  slots; no invented references.
+- [`VENUES.md`](docs/paper/VENUES.md) and
+  [`SUBMISSION_CHECKLIST.md`](docs/paper/SUBMISSION_CHECKLIST.md) — venue
+  options and submission blockers.
+- [`FUTURE_WORK.md`](docs/paper/FUTURE_WORK.md) — concrete follow-up tasks.
+- [`docs/presentation/slides.md`](docs/presentation/slides.md) and
+  [`QA.md`](docs/presentation/QA.md) — 12-slide deck and 20 reviewer questions.
+
+Figures and generated tables are in `docs/paper/figures/`; regenerate them
+with `python scripts/make_paper_figures.py`.
+
 ## Security and limits
 
 Uploads are limited by type, bytes and decoded dimensions; `.npz` archives also have declared-size and pixel caps. API routes use an in-process per-path rate limit, responses carry a request ID and security headers, CORS is same-origin unless `ALLOWED_ORIGINS` lists explicit origins, and access logs are structured JSON with credential redaction. There is **no authentication**: `/history` exposes stored previews, AOIs and results to anyone who can reach the service, so put public deployments behind an authenticated proxy. Rate limiting is per process and resets on restart. See [DEPLOY.md](DEPLOY.md) for variables and proxy guidance.
