@@ -124,6 +124,15 @@ def _result_fixture():
     }
 
 
+HISTORY_FIXTURE = [
+    {"id": 5, "created_at": "2026-10-21T12:00:00+00:00", "location": "Example delta", "pipeline": "spectral", "percent_changed": 12.5},
+    {"id": 4, "created_at": "2026-10-20T12:00:00+00:00", "location": "Example forest", "pipeline": "spectral", "percent_changed": 7.5},
+    {"id": 3, "created_at": "2026-10-19T12:00:00+00:00", "location": "Example town", "pipeline": "spectral", "percent_changed": 3.0},
+    {"id": 2, "created_at": "2026-10-18T12:00:00+00:00", "location": "Example fields", "pipeline": "cnn", "percent_changed": 0.4},
+    {"id": 1, "created_at": "2026-10-17T12:00:00+00:00", "location": "Example coast", "pipeline": "spectral", "percent_changed": 0.0},
+]
+
+
 @pytest.fixture(scope="module")
 def server():
     repo = Path(__file__).resolve().parent.parent
@@ -262,8 +271,55 @@ def test_results_dashboard_and_mobile_layout(page):
     page.wait_for_timeout(300)
     overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 1, f"horizontal overflow {overflow}px"
+
     page.click("#back-to-area-btn")
     page.wait_for_timeout(300)
     assert page.locator("#step-1").is_visible()
     overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 1, f"horizontal overflow {overflow}px"
+
+
+def test_history_dashboard_aggregates_rows_and_hides_when_empty(page):
+    page.route("**/history", lambda route: route.fulfill(json=HISTORY_FIXTURE))
+    page.goto(BASE, wait_until="networkidle")
+    page.wait_for_timeout(500)
+    if page.locator("#hint-tour").is_visible():
+        page.click("#hint-skip")
+
+    page.click("#tab-history")
+    page.wait_for_timeout(400)
+    dashboard = page.locator("#history-dashboard")
+    assert dashboard.is_visible()
+    assert not page.locator(".intro").is_visible()  # dashboard is the focus of this view
+    stats = page.locator("#history-stats").inner_text()
+    stats_lower = stats.lower()
+    assert "saved analyses" in stats_lower and "5" in stats
+    assert "4 / 1" in stats  # four live analyses, one image pair
+    assert "4.68%" in stats  # simple mean of 12.5, 7.5, 3.0, 0.4, 0.0
+    assert "12.50%" in stats
+    assert "not area-weighted" in stats_lower
+
+    recent = page.locator("#history-recent-chart")
+    assert recent.locator(".chart-row").count() == 5
+    assert "#5" in recent.inner_text() and "Example delta" in recent.inner_text()
+    ranges = page.locator("#history-range-chart").inner_text()
+    assert "Under 1%" in ranges and "2 analyses" in ranges
+    assert "10% or more" in ranges and "1 analysis" in ranges
+
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.wait_for_timeout(300)
+    overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1, f"horizontal overflow {overflow}px"
+    history_tab = page.locator("#tab-history").bounding_box()
+    assert history_tab and history_tab["x"] + history_tab["width"] <= 375
+
+    page.unroute("**/history")
+    page.route("**/history", lambda route: route.fulfill(json=[]))
+    page.click("#refresh-history-btn")
+    page.wait_for_timeout(400)
+    assert not dashboard.is_visible()
+    assert "No analyses yet" in page.locator("#history-list").inner_text()
+
+    page.click("#tab-live")
+    page.wait_for_timeout(300)
+    assert page.locator(".intro").is_visible()
