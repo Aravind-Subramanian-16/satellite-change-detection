@@ -26,8 +26,9 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **33 passed, 1 skipped, 1 warning in
-    2.95s**. The skip is the Pipeline A regression test requiring `model.onnx`.
+    `./venv/bin/python -m pytest -q` → **41 passed, 2 skipped, 1 warning in
+    4.64s**. Skips: the Pipeline A regression (needs `model.onnx` and a dataset
+    sample) and OSCD label tests (rasterio is benchmark-only on this host).
     Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
 - [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
   heatmap, report download and History; save screenshots; record console errors;

@@ -35,13 +35,14 @@ splitting benchmark and training dependencies out of the runtime requirements
 
 ```text
 ./venv/bin/python -m pytest -q
-.......................s..........
-33 passed, 1 skipped, 1 warning in 2.95s
+...............................s..........
+41 passed, 2 skipped, 1 warning in 4.64s
 ```
 
-The skip is the Pipeline A regression test, which requires `model.onnx`
-(`tests/test_regression_and_api.py:13`). The warning is a Starlette deprecation
-notice about `httpx` in `TestClient`, not a test failure.
+The skips are the Pipeline A regression test (needs `model.onnx` and a dataset
+sample) and the OSCD label test (needs rasterio, benchmark-only on this host).
+The warning is a Starlette deprecation notice about `httpx` in `TestClient`, not
+a test failure.
 
 Key versions: fastapi 0.156.3, starlette 1.7.0, numpy 2.2.6, onnxruntime 1.19.2,
 scikit-learn 1.7.2, scipy 1.15.3, Pillow 11.3.0, playwright 1.64.0, pytest 8.4.2.
