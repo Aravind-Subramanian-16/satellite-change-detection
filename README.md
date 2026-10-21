@@ -129,7 +129,7 @@ releases; report-only and class-summary fields are additive.
 ./venv/bin/python -m pytest -q
 ```
 
-Last full run in this checkout: **193 passed, 3 skipped, 1 warning** (about 55 s).
+Last full run in this checkout: **193 passed, 3 skipped, 1 warning** (about 45 s; well under 5 minutes).
 The three skips are environment gaps, not failures:
 
 | Skip | Reason |

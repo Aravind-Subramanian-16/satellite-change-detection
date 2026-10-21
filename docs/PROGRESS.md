@@ -739,7 +739,7 @@ the project venv linked; skips are the three environment skips below):
 |---|---|
 | `ui-redesign` | **140 passed, 3 skipped**, 1 warning, 71.72 s |
 | `analysis-profiles` | **179 passed, 3 skipped**, 1 warning, 72.07 s |
-| `final-polish` | **193 passed, 3 skipped**, 1 warning, about 55 s |
+| `final-polish` | **193 passed, 3 skipped**, 1 warning, about 45 s |
 
 The three skips are unchanged: `rasterio` absent (`tests/test_oscd_label.py`),
 `torch` absent (`tests/test_finetune_cnn.py`) and the missing dataset sample

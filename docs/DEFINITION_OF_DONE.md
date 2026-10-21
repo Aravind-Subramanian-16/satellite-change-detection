@@ -252,8 +252,8 @@ Branch commits: `f1720b5` (retries + scene cache), `6957eba` (health fields),
       stated in the final report.)
 - [x] Full test suite + linter + quick load test of the main flow; fix what is
       found (evidence: 193 passed / 3 skipped; `ruff check` clean on every
-      changed file — the repo still has pre-existing style findings outside
-      this work, intentionally not mass-fixed; load test: 120/120 analysis
+      changed Python file except `app.py`, which keeps 27 pre-existing findings
+      (`main`'s `app.py` had 29) — intentionally not mass-fixed; load test: 120/120 analysis
       requests and 200/200 page requests against a local server with a fake
       upstream, no failures)
 
