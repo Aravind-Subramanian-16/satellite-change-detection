@@ -189,7 +189,10 @@ decision or external verification required.
 
 ## J. Final technical checks
 
-- [ ] `./venv/bin/python -m pytest -q` passes with the recorded counts.
+- [x] `./venv/bin/python -m pytest -q` passes with the recorded counts.
+  Evidence (2026-10-21): **136 passed, 3 skipped, 1 warning in 16.10s**; skips
+  are `rasterio` absent, `torch` absent and the missing dataset sample. The
+  timing varies; the pass/skip counts are the claim.
 - [ ] `python scripts/make_paper_figures.py` regenerates figures without
   errors and the manifest hash matches the v2 source.
 - [ ] Verify every figure embedded in the PDF is the latest generated version

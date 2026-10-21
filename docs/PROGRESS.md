@@ -629,18 +629,41 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
   - Full suite: **136 passed, 3 skipped, 1 warning in 18.99s**.
   - **Not run on Colab.** No `COLAB_RUN_SUMMARY.md`, LOCO result or model-check
     JSON exists in this checkout. `docs/paper/ARTIFACT.md` marks them pending.
+  - Commits `862bca5` (notebook + renderer), `0339614` (tests) and `3058466`
+    (Step 7 docs). `git push origin main` attempted after the commits and
+    failed with HTTP 400 again; no force push or history rewrite.
+  - At this checkpoint local `main` was **32 commits ahead** of `origin/main`.
+    The Colab notebook cannot clone the Step 7 files until this is resolved.
 - [ ] Step 7b. Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime,
   pull `benchmarks/results/COLAB_RUN_SUMMARY.md` from the remote, fill only
   dependent text from that summary, rebuild figures/claims audit, rerun tests,
   and commit/push. Trigger: the owner says "Colab done".
-- [ ] End. Final `python -m pytest -q`, `docs/paper/SUBMISSION_NOTES.md`,
-  remaining unverified claims, manual actions.
+- [x] End. Final tests, submission notes, unverified-claim inventory and manual
+  actions.
+  - Evidence: `./venv/bin/python -m pytest -q` -> **136 passed, 3 skipped,
+    1 warning in 16.10s**. The three skips are `rasterio` absent, `torch`
+    absent and the missing `dataset/test/A/test_100_0_0.png` sample.
+  - `docs/paper/SUBMISSION_NOTES.md` records the final counts, readiness
+    blockers, the numbered owner actions, the full unverified-claim list and
+    the wording rules.
+  - `README.md` corrected: unverified STANet/BIT rows and the comparison claim
+    removed; legacy references marked unverified; the old +/-5-day catalog and
+    absolute-lowest-cloud descriptions corrected to the implemented default
+    +/-30-day ranked search; unverified Docker size claims removed; the
+    PREREGISTRATION sentence no longer presents it as strengthening evidence
+    and no longer uses the single-attempt label.
+  - README correction: commit `87a7748`. The final notes/checklist commit is
+    the HEAD at hand-off; the push attempt is recorded in `git log` and in the
+    final report.
+  - **Push still fails with HTTP 400.** No remote CI, Colab run or independent
+    validation exists.
 
 ## Manual actions for the owner
 
-- Resolve the push blocker and push `main` (no force). The local branch is
-  **29 commits ahead** of `origin/main`; the Colab notebook clones the remote
-  and will stop if the Step 7 files are missing.
+- Resolve the push blocker and push `main` (no force). The local branch was
+  **32 commits ahead** of `origin/main` at the Step 7 checkpoint; check the
+  current count with `git rev-list --count origin/main..main`. The Colab
+  notebook clones the remote and will stop if the Step 7 files are missing.
 - Run `notebooks/run_all_colab.ipynb` on a fresh Colab runtime with
   `MyDrive/oscd/archive (1).zip` and `MyDrive/oscd/weights/model.onnx`; set
   `GITHUB_TOKEN` in Colab Secrets only if you want the summary pushed. Then
