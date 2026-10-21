@@ -26,10 +26,11 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **41 passed, 2 skipped, 1 warning in
-    4.64s**. Skips: the Pipeline A regression (needs `model.onnx` and a dataset
-    sample) and OSCD label tests (rasterio is benchmark-only on this host).
-    Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
+    `./venv/bin/python -m pytest -q` → **60 passed, 2 skipped, 1 warning in
+    3.87s** after the Phase B/C additions (initial Phase A run: 41 passed, 2
+    skipped, 4.64s). Skips: the Pipeline A regression (needs `model.onnx` and a
+    dataset sample) and OSCD label tests (rasterio is benchmark-only on this
+    host). Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
 - [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
   heatmap, report download and History; save screenshots; record console errors;
   mark anything not run unverified.
@@ -50,56 +51,123 @@ benchmark result files are now present.
 
 ## Phase B — Live map picker with best-image selection
 
-- [ ] B1. Leaflet pinned to an exact cdnjs version with OSM tiles (optional Esri
+Verified 2026-10-21. The UI screenshots `docs/screenshots/phase_b_live.png`,
+`phase_b_scenes.png`, `phase_b_results.png` and `phase_b_mobile.png` were
+captured with Playwright route interception and **mocked API responses**. Each
+image carries a visible “MOCKED API RESPONSES / MOCKED DATA” banner. They prove
+UI wiring only, not a real Copernicus analysis. Browser console contained only
+the intentional mocked `/predict` 503; there were no page errors; mobile
+horizontal overflow was 0 px and all three tabs rendered at 37 px height.
+
+- [x] B1. Leaflet pinned to an exact cdnjs version with OSM tiles (optional Esri
   World Imagery), correct attribution, no API keys; place search/geocoding,
   zoom-to-location, AOI box; minimum zoom ~12 before confirmation; maximum AOI
   10 km × 10 km configurable; AOI area in km² and expected pixel dimensions;
   clear too-large / too-zoomed-out messages.
-- [ ] B2. Before/after date pickers with a ± window (default 30 days).
-- [ ] B3. `/scenes` queries the Copernicus catalog for Sentinel-2 L2A scenes
+  - Evidence: `static/index.html:8-12` pins Leaflet 1.9.4 and Leaflet.draw
+    1.0.4; `static/app.js` uses OSM tiles with attribution, Nominatim search
+    and `fitBounds` zoom-to-place; “Use current view” is refused below zoom 12
+    (verified by the Playwright smoke test); drawn boxes auto-fit to at most
+    zoom 14 before applying. `computeAoi()` reads `max_aoi_km` from `/config`
+    (default 10) and reports width/height/area/raster plus per-side errors.
+    Manual box `55.10,25.00,55.12,25.02` was accepted as 4.49 km².
+- [x] B2. Before/after date pickers with a ± window (default 30 days).
+  - Evidence: `#date-before`, `#date-after`, `#window-days`; default window
+    from `live_pipeline.DEFAULT_WINDOW_DAYS`; UI validates ISO dates and order.
+- [x] B3. `/scenes` queries the Copernicus catalog for Sentinel-2 L2A scenes
   intersecting the AOI per window; ranks by AOI coverage, cloud cover and
   closeness to requested date; returns top 5 per window with date, cloud % and
   coverage %; UI shows a “recommended” badge and allows override; warns when the
   two dates fall in different seasons.
-- [ ] B4. After fetching, compute cloud and shadow fraction over the AOI from
+  - Evidence: `app.py:_catalog_windows`, `scene_selection.rank_scenes`;
+    `tests/test_scene_selection.py` and
+    `tests/test_live_api.py::test_scenes_returns_ranked_windows_and_recommendation`,
+    `::test_scenes_warns_on_partial_coverage_and_cross_season`.
+    `docs/screenshots/phase_b_scenes.png` shows rank/recommended badges and the
+    season + coverage warnings.
+- [x] B4. After fetching, compute cloud and shadow fraction over the AOI from
   SCL; above a configurable 30% warn and suggest the next-best scene; fully
   masked uses the existing error state.
-- [ ] B5. Pass AOI and chosen scenes through the existing pipeline without
+  - Evidence: `live_pipeline.cloud_fraction` and `_fetch_window`;
+    `CLOUD_WARN_PERCENT` default 30; next-best suggestions in the warning;
+    `FullyMaskedError` → HTTP 422 with window, fraction and candidates.
+    Tests: `::test_fetch_and_predict_honours_selected_scene_and_warns_on_cloud`,
+    `::test_fetch_and_predict_returns_422_details_when_scene_is_fully_masked`.
+- [x] B5. Pass AOI and chosen scenes through the existing pipeline without
   changing detection logic in this phase.
-- [ ] B6. UI shows pipeline used, percent masked, scene IDs and dates, and a
+  - Evidence: `analyse_pair` resolves `scene_before_id` / `scene_after_id` in
+    `choose_scene_window` and calls the existing `detect_profile`; API tests
+    assert the selected IDs reach the result.
+- [x] B6. UI shows pipeline used, percent masked, scene IDs and dates, and a
   decision-support-not-ground-truth note.
-- [ ] B7. pytest tests with mocked catalog responses covering ranking, AOI
+  - Evidence: results header, stat grid, summary and provenance in
+    `docs/screenshots/phase_b_results.png`; Playwright assertions for
+    `#result-stats`, `#result-summary` and `#provenance`.
+- [x] B7. pytest tests with mocked catalog responses covering ranking, AOI
   limits, season warning and cloud warning.
+  - Evidence: `tests/test_live_api.py` (18 cases, network-free fake client)
+    plus `tests/test_scene_selection.py`; full suite 60 passed, 2 skipped.
 
 ## Phase C — Analysis profiles
 
-- [ ] C0. Add an analysis-profile selector to UI and API; each profile is a
+Verified 2026-10-21 from code, synthetic-array tests and the mocked UI run.
+No accuracy number is displayed for any unvalidated profile.
+
+- [x] C0. Add an analysis-profile selector to UI and API; each profile is a
   small declarative config (indices, thresholds, MMU, report wording, honesty
   notes) on top of `spectral_pipeline.py` and `change_reasoner.py`; general
   profile remains default and unchanged.
-- [ ] C1. Agriculture: NDVI and NDMI difference, cropland stress /
+  - Evidence: `profiles/__init__.py` registry, `profiles/detection.py`,
+    `#profile-select`; `tests/test_profiles.py::test_registry_never_hides_unvalidated_status`.
+- [x] C1. Agriculture: NDVI and NDMI difference, cropland stress /
   vegetation-loss flags, enforced same-season warning, optional 3–5 date NDVI
   timeline; report wording explains that single-pair differences confuse
   harvest/season cycles with damage.
-- [ ] C2. Deforestation: NBR and NDVI drop restricted to pixels vegetated in the
+  - Evidence: `test_agriculture_flags_stress_and_vegetation_loss`;
+    `POST /timeline` tests in `tests/test_live_api.py`; timeline is rendered in
+    `phase_b_results.png`; profile notes state the season/harvest caveat.
+- [x] C2. Deforestation: NBR and NDVI drop restricted to pixels vegetated in the
   before image, configurable MMU (default 0.5 ha), area in hectares per region,
   mandatory cloud/shadow masking.
-- [ ] C3. Built-up/industrial: NDBI, built-up index and bare-soil index change
+  - Evidence: `test_deforestation_requires_vegetated_before_and_mmu`,
+    `test_deforestation_mmu_removes_small_patch`,
+    `test_cloud_shadow_is_masked_mandatorily`; regions receive `area_ha` in
+    `live_pipeline._enrich_regions`.
+- [x] C3. Built-up/industrial: NDBI, built-up index and bare-soil index change
   with an NDVI-loss cue; existing change reasoner distinguishes new construction
   from cleared land.
-- [ ] C4. Roads: UI/docs state that roads narrower than ~20 m are mostly
+  - Evidence: `test_builtup_ndbi_and_bare_soil_cues`; API test
+    `test_fetch_and_predict_supports_builtup_extended_indices` exercises the
+    `indices_ext` BSI/NDMI/NBR layer.
+- [x] C4. Roads: UI/docs state that roads narrower than ~20 m are mostly
   sub-pixel at 10 m; do not claim road detection; optional cached OSM/Overpass
   road overlay with attribution and ODbL caveat; report “changed area within X m
   of mapped roads” as context only.
-- [ ] C5. Validation-status badge from `profiles/validation_status.json`:
+  - Evidence: roads profile wording and `show_road_context`;
+    `osm_roads.py` (cached Overpass query, ODbL attribution);
+    `tests/test_exports_and_osm.py::test_road_context_reports_only_nearby_changed_pixels`;
+    results screenshot shows the context box and “not road detection”.
+- [x] C5. Validation-status badge from `profiles/validation_status.json`:
   built-up “quantitatively benchmarked on OSCD (urban change only, pooled F1
   about 0.12)”; all others “unvalidated, qualitative only”; never show accuracy
   numbers for unvalidated profiles.
-- [ ] C6. PDF reports include profile, thresholds, MMU, scene IDs, dates,
+  - Evidence: `test_registry_never_hides_unvalidated_status`; API assertions on
+    `display_metrics`; Playwright asserts the unvalidated banner contains no
+    “F1”. Built-up evidence points to `benchmarks/results/oscd_results_v2.json`
+    and `.md` (F1 0.1176).
+- [x] C6. PDF reports include profile, thresholds, MMU, scene IDs, dates,
   percent masked, code commit hash, validation status and limitations; add
   GeoJSON and CSV exports of regions with area, type and confidence.
-- [ ] C7. pytest tests on synthetic arrays for each profile (index math, MMU,
+  - Evidence: `reports.py`; new
+    `tests/test_reports.py::test_pdf_report_contains_method_provenance_and_unvalidated_badge`
+    decodes the PDF content stream and checks those fields;
+    `tests/test_live_api.py::test_export_and_report_endpoints`; mocked UI
+    download produced a 9,157-byte PDF.
+- [x] C7. pytest tests on synthetic arrays for each profile (index math, MMU,
   vegetated-before restriction, season warning).
+  - Evidence: `tests/test_profiles.py` (11 tests across agriculture,
+    deforestation, built-up, roads, index math, MMU, cleanup); season-warning
+    tests in `tests/test_scene_selection.py` and `tests/test_live_api.py`.
 
 ## Phase D — Learned model beyond the CNN (OSCD train only)
 

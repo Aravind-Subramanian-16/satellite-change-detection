@@ -19,9 +19,22 @@ import io
 import base64
 
 from change_reasoner import reason_regions
-from copernicus_client import fetch_satellite_image
+import copernicus_client as copernicus
+from copernicus_client import CopernicusError, MissingCredentialsError, NoScenesError
 from geocoding import geocode_place, suggest_places
+from exports import csv_bytes, geojson_bytes
+from live_pipeline import (
+    CLOUD_WARN_PERCENT,
+    DEFAULT_WINDOW_DAYS,
+    MAX_ANALYSIS_PX,
+    MAX_AOI_KM,
+    FullyMaskedError,
+    analyse_pair,
+    build_ndvi_timeline,
+)
+from profiles import all_profiles_public
 from provenance import build_provenance, get_commit_hash
+from scene_selection import date_window, rank_scenes, season_warning, validate_aoi
 from spectral_pipeline import SpectralConfig, decode_indices, detect_from_indices
 from tiling import tiled_predict
 from reports import build_report
@@ -30,6 +43,7 @@ import tempfile
 import os
 import logging
 import sys
+from datetime import date
 from pathlib import Path
 
 logger = logging.getLogger("satellite_change")
@@ -39,11 +53,34 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
-class FetchRequest(BaseModel):
+class SceneSearchRequest(BaseModel):
+    bbox: List[float]
+    date_before: str
+    date_after: str
+    window_days: int = DEFAULT_WINDOW_DAYS
+
+
+class LiveRequest(BaseModel):
     bbox: Optional[List[float]] = None
     place_name: Optional[str] = None
     date_before: str
     date_after: str
+    window_days: int = DEFAULT_WINDOW_DAYS
+    scene_before_id: Optional[str] = None
+    scene_after_id: Optional[str] = None
+    profile: str = "general"
+    mmu_ha: Optional[float] = None
+    composite_scenes: int = 1
+    normalise: bool = False
+    cleanup: bool = False
+    include_road_context: bool = False
+
+
+class TimelineRequest(BaseModel):
+    bbox: List[float]
+    dates: List[str]
+    window_days: int = 10
+
 
 class ReportRequest(BaseModel):
     result: dict
@@ -297,64 +334,220 @@ async def history_detail(analysis_id: int):
         raise HTTPException(status_code=404, detail="Analysis not found")
     return item
 
-@app.post("/fetch-and-predict")
-async def fetch_and_predict(req: FetchRequest):
-    bbox = req.bbox
-    resolved_place = None
+def _error(status: int, code: str, message: str, hint: str | None = None, details: dict | None = None) -> JSONResponse:
+    payload = {"error": message, "code": code}
+    if hint:
+        payload["hint"] = hint
+    if details:
+        payload["details"] = details
+    return JSONResponse(status_code=status, content=payload)
 
-    if req.place_name:
-        try:
-            resolved_place, bbox = geocode_place(req.place_name)
-        except ValueError as e:
-            return JSONResponse(status_code=400, content={"error": str(e)})
-        except Exception as e:
-            return JSONResponse(status_code=502, content={"error": f"Failed to geocode place: {str(e)}"})
-    elif not bbox or len(bbox) != 4:
-        return JSONResponse(status_code=400, content={"error": "Either a valid place_name or a 4-float bbox must be provided."})
-        
+
+def _live_error(exc: Exception) -> JSONResponse:
+    if isinstance(exc, MissingCredentialsError):
+        return _error(
+            400,
+            "missing_credentials",
+            str(exc),
+            "Add COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET to the server environment, or use upload mode.",
+        )
+    if isinstance(exc, NoScenesError):
+        return _error(404, "no_scenes", str(exc), "Widen the ± window, move the dates, or check the AOI.")
+    if isinstance(exc, FullyMaskedError):
+        return _error(422, "fully_masked", str(exc), details=exc.details)
+    if isinstance(exc, ValueError):
+        return _error(400, "invalid_request", str(exc))
+    if isinstance(exc, CopernicusError):
+        return _error(502, "upstream_error", str(exc), "Copernicus may be unavailable; retry later.")
+    logger.exception("Unhandled live-analysis error")
+    return _error(500, "internal_error", "The analysis failed unexpectedly. The server log has the traceback.")
+
+
+def _catalog_windows(bbox: list[float], date_before: str, date_after: str, window_days: int) -> dict:
     try:
-        rgb_a_bytes, idx_a_bytes, cloud_before = fetch_satellite_image(bbox, req.date_before)
-        rgb_b_bytes, idx_b_bytes, cloud_after = fetch_satellite_image(bbox, req.date_after)
-    except ValueError as e:
-        # E.g. Missing credentials
-        return JSONResponse(status_code=400, content={"error": str(e)})
-    except Exception as e:
-        # E.g. Network error or Sentinel Hub error
-        return JSONResponse(status_code=502, content={"error": f"Failed to fetch imagery: {str(e)}"})
-        
-    result = spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes)
-    if "error" in result:
-        return JSONResponse(status_code=400, content={"error": result["error"]})
-        
-    result["cloud_coverage_before"] = cloud_before
-    result["cloud_coverage_after"] = cloud_after
-    result["resolved_bbox"] = bbox
-    if resolved_place:
-        result["resolved_place_name"] = resolved_place
-        
-    # Story Mode Summary Sentence
-    pct = result["percent_changed"]
-    if pct < 5: severity = "minimal"
-    elif pct < 15: severity = "moderate"
-    else: severity = "significant"
-    
-    valid_regions = [r for r in result["change_regions"] if r["change_type"] != "Possible cloud interference"]
-    if valid_regions:
-        area_by_type = {}
-        for r in valid_regions:
-            area_by_type[r["change_type"]] = area_by_type.get(r["change_type"], 0) + r["pixel_area"]
-        dominant_category = max(area_by_type.items(), key=lambda x: x[1])[0].lower()
-    else:
-        dominant_category = "unclear changes"
-        
-    place_str = resolved_place or "the selected location"
-    summary_sentence = f"Satellite analysis of {place_str} between {req.date_before} and {req.date_after} shows {severity} change, with approximately {pct:.2f}% of the observed area affected — primarily {dominant_category}."
-    result["summary_sentence"] = summary_sentence
-    result["date_before"] = req.date_before
-    result["date_after"] = req.date_after
-    result["history_id"] = save_analysis(result, {"route": "/fetch-and-predict", "bbox": bbox, "date_before": req.date_before, "date_after": req.date_after}, resolved_place)
-    
+        before_date = date.fromisoformat(str(date_before)[:10])
+        after_date = date.fromisoformat(str(date_after)[:10])
+    except ValueError as exc:
+        raise ValueError("Dates must be valid ISO dates (YYYY-MM-DD).") from exc
+    if before_date >= after_date:
+        raise ValueError("The before date must be earlier than the after date.")
+    window_days = max(1, min(int(window_days), 120))
+    aoi = validate_aoi(bbox, max_km=MAX_AOI_KM, max_px=MAX_ANALYSIS_PX)
+    if not aoi["valid"]:
+        raise ValueError(aoi["message"])
+    client = copernicus.get_client()
+    out = {"aoi": aoi, "window_days": window_days, "season_warning": season_warning(date_before, date_after)}
+    warnings = []
+    for key, target in (("before", date_before), ("after", date_after)):
+        features = client.search_scenes(bbox, target, window_days=window_days)
+        ranked = rank_scenes(features, bbox, target, window_days=window_days, top=5)
+        start, end = date_window(target, window_days)
+        recommended = next((row["id"] for row in ranked if row.get("recommended")), None)
+        out[key] = {
+            "requested_date": str(target)[:10],
+            "start": start,
+            "end": end,
+            "scenes": ranked,
+            "recommended_id": recommended,
+        }
+        if not ranked:
+            raise NoScenesError(f"No usable scenes near {target}.")
+        if ranked[0]["coverage_percent"] < 99.5:
+            warnings.append(
+                {
+                    "code": "coverage",
+                    "severity": "info",
+                    "window": key,
+                    "message": (
+                        f"Top {key} scene footprint covers about {ranked[0]['coverage_percent']:.1f}% "
+                        "of the AOI (bounding-box approximation)."
+                    ),
+                }
+            )
+    if out["season_warning"]:
+        warnings.append({"code": "season", "severity": "warning", "message": out["season_warning"]})
+    out["warnings"] = warnings
+    out["credentials_present"] = bool(
+        os.environ.get("COPERNICUS_CLIENT_ID") and os.environ.get("COPERNICUS_CLIENT_SECRET")
+    )
+    return out
+
+
+@app.get("/config")
+async def config():
+    return {
+        "max_aoi_km": MAX_AOI_KM,
+        "default_window_days": DEFAULT_WINDOW_DAYS,
+        "cloud_warn_percent": CLOUD_WARN_PERCENT,
+        "max_analysis_px": MAX_ANALYSIS_PX,
+        "profiles": all_profiles_public(),
+        "model_present": MODEL_ONNX_PATH.is_file(),
+        "commit": get_commit_hash(),
+        "version": "3.0.0",
+    }
+
+
+@app.get("/profiles")
+async def profiles():
+    return {"profiles": all_profiles_public()}
+
+
+@app.post("/scenes")
+async def scenes(req: SceneSearchRequest):
+    """Catalog search + ranking only. No imagery is downloaded."""
+    try:
+        return JSONResponse(content=_catalog_windows(req.bbox, req.date_before, req.date_after, req.window_days))
+    except Exception as exc:
+        return _live_error(exc)
+
+
+@app.post("/fetch-and-predict")
+async def fetch_and_predict(req: LiveRequest):
+    bbox = req.bbox
+    place = None
+    if bbox is None:
+        if not req.place_name:
+            return _error(400, "invalid_request", "Provide an AOI bbox or a place_name.")
+        try:
+            place, bbox = geocode_place(req.place_name)
+        except ValueError as exc:
+            return _error(400, "place_not_found", str(exc))
+        except Exception as exc:
+            return _error(502, "geocoding_error", f"Failed to geocode place: {exc}")
+    if req.mmu_ha is not None and not 0 <= req.mmu_ha <= 100:
+        return _error(400, "invalid_request", "mmu_ha must be between 0 and 100 hectares.")
+    if not 1 <= int(req.composite_scenes) <= 3:
+        return _error(400, "invalid_request", "composite_scenes must be between 1 and 3.")
+    try:
+        result = analyse_pair(
+            copernicus.get_client(),
+            list(bbox),
+            req.date_before,
+            req.date_after,
+            window_days=req.window_days,
+            scene_before_id=req.scene_before_id,
+            scene_after_id=req.scene_after_id,
+            profile_key=req.profile,
+            mmu_ha=req.mmu_ha,
+            composite_scenes=req.composite_scenes,
+            normalise=req.normalise,
+            cleanup=req.cleanup,
+            include_road_context=req.include_road_context,
+            place_name=place,
+        )
+    except Exception as exc:
+        return _live_error(exc)
+    if place:
+        result["resolved_place_name"] = place
+    result["history_id"] = save_analysis(
+        result,
+        {
+            "route": "/fetch-and-predict",
+            "bbox": bbox,
+            "place_name": place,
+            "date_before": req.date_before,
+            "date_after": req.date_after,
+            "window_days": req.window_days,
+            "scene_before_id": req.scene_before_id,
+            "scene_after_id": req.scene_after_id,
+            "profile": req.profile,
+            "mmu_ha": req.mmu_ha,
+            "composite_scenes": req.composite_scenes,
+            "normalise": req.normalise,
+            "cleanup": req.cleanup,
+        },
+        place,
+    )
     return JSONResponse(content=result)
+
+
+@app.post("/timeline")
+async def timeline(req: TimelineRequest):
+    try:
+        return JSONResponse(
+            content=build_ndvi_timeline(
+                copernicus.get_client(),
+                req.bbox,
+                req.dates,
+                window_days=req.window_days,
+                max_aoi_km=MAX_AOI_KM,
+            )
+        )
+    except Exception as exc:
+        return _live_error(exc)
+
+
+def _export_response(result: dict, fmt: str) -> Response:
+    fmt = fmt.lower()
+    if fmt == "geojson":
+        return Response(
+            content=geojson_bytes(result),
+            media_type="application/geo+json",
+            headers={"Content-Disposition": 'attachment; filename="change-regions.geojson"'},
+        )
+    if fmt == "csv":
+        return Response(
+            content=csv_bytes(result),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="change-regions.csv"'},
+        )
+    raise HTTPException(status_code=404, detail="Unknown export format; use geojson or csv.")
+
+
+@app.post("/export/{fmt}")
+async def export_result(fmt: str, req: ReportRequest):
+    if not isinstance(req.result, dict):
+        raise HTTPException(status_code=400, detail="result must be an object")
+    return _export_response(req.result, fmt)
+
+
+@app.get("/history/{analysis_id}/export/{fmt}")
+async def export_history(analysis_id: int, fmt: str):
+    item = get_analysis(analysis_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return _export_response(item["result"], fmt)
+
 
 @app.get("/geocode-suggest")
 async def geocode_suggest(q: str):

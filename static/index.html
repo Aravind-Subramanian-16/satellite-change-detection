@@ -3,1299 +3,338 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satellite Change Detection — AI-Powered Land Analysis</title>
-    <meta name="description" content="Upload satellite images or search any location to detect construction, deforestation, and land-use changes using deep learning.">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <title>Satellite Change Detection — Sentinel-2 land analysis</title>
+    <meta name="description" content="Compare Sentinel-2 dates or an uploaded image pair over a chosen area. Inspect spectral change evidence, export GeoJSON/CSV, and generate a provenance-rich PDF. Decision support, not ground truth.">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+    <link rel="stylesheet" href="/static/app.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-    <style>
-        /* ── Design Tokens ─────────────────────────────────────── */
-        :root {
-            --bg-deep: #050a18;
-            --bg-surface: #0c1428;
-            --bg-card: rgba(15, 25, 50, 0.65);
-            --primary: #3b82f6;
-            --primary-glow: rgba(59, 130, 246, 0.35);
-            --accent: #a78bfa;
-            --accent-glow: rgba(167, 139, 250, 0.25);
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --text: #f1f5f9;
-            --text-muted: #94a3b8;
-            --text-dim: #64748b;
-            --border: rgba(148, 163, 184, 0.12);
-            --border-hover: rgba(59, 130, 246, 0.4);
-            --radius: 16px;
-            --radius-sm: 10px;
-            --shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.6);
-        }
-
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        html { scroll-behavior: smooth; }
-
-        body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background: var(--bg-deep);
-            color: var(--text);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
-
-        /* ── Hero Section ──────────────────────────────────────── */
-        .hero {
-            position: relative;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 2rem;
-            overflow: hidden;
-        }
-
-        .hero::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 80% 60% at 50% 20%, rgba(59, 130, 246, 0.12), transparent),
-                radial-gradient(ellipse 60% 50% at 80% 80%, rgba(167, 139, 250, 0.08), transparent),
-                radial-gradient(ellipse 50% 40% at 10% 70%, rgba(34, 197, 94, 0.06), transparent);
-            animation: heroPulse 8s ease-in-out infinite alternate;
-        }
-
-        @keyframes heroPulse {
-            0% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-
-        /* Orbiting satellite */
-        .orbit-ring {
-            position: absolute;
-            width: 400px;
-            height: 400px;
-            border: 1px dashed rgba(59, 130, 246, 0.15);
-            border-radius: 50%;
-            animation: orbitSpin 25s linear infinite;
-        }
-
-        .orbit-dot {
-            position: absolute;
-            top: -5px;
-            left: 50%;
-            width: 10px;
-            height: 10px;
-            background: var(--primary);
-            border-radius: 50%;
-            box-shadow: 0 0 20px var(--primary-glow), 0 0 40px var(--primary-glow);
-            transform: translateX(-50%);
-        }
-
-        @keyframes orbitSpin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        .hero-badge {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1.2rem;
-            border-radius: 99px;
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            color: var(--primary);
-            font-size: 0.82rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            margin-bottom: 2rem;
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        .hero-badge .dot {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            background: var(--success);
-            animation: blink 2s ease-in-out infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        .hero h1 {
-            position: relative;
-            font-size: clamp(2.5rem, 6vw, 4.5rem);
-            font-weight: 800;
-            line-height: 1.1;
-            max-width: 800px;
-            background: linear-gradient(135deg, #fff 0%, #60a5fa 40%, #a78bfa 70%, #c084fc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: fadeInUp 0.8s ease-out 0.1s both;
-        }
-
-        .hero .subtitle {
-            position: relative;
-            font-size: 1.15rem;
-            color: var(--text-muted);
-            max-width: 600px;
-            margin: 1.5rem auto 2.5rem;
-            animation: fadeInUp 0.8s ease-out 0.2s both;
-        }
-
-        .hero-cta {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 1rem 2.5rem;
-            background: linear-gradient(135deg, var(--primary), #6366f1);
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s;
-            box-shadow: 0 8px 30px -8px var(--primary-glow);
-            animation: fadeInUp 0.8s ease-out 0.3s both;
-        }
-
-        .hero-cta:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 40px -8px var(--primary-glow);
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ── How It Works ──────────────────────────────────────── */
-        .how-section {
-            padding: 5rem 2rem;
-            text-align: center;
-            position: relative;
-        }
-
-        .section-title {
-            font-size: 0.82rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: var(--primary);
-            margin-bottom: 0.75rem;
-        }
-
-        .section-heading {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 3rem;
-        }
-
-        .steps-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 2rem;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .step-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 2rem;
-            text-align: center;
-            transition: all 0.3s;
-        }
-
-        .step-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-4px);
-            box-shadow: 0 15px 40px -10px rgba(59, 130, 246, 0.15);
-        }
-
-        .step-icon {
-            width: 56px;
-            height: 56px;
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            margin: 0 auto 1.2rem;
-        }
-
-        .step-card:nth-child(1) .step-icon { background: rgba(59, 130, 246, 0.15); }
-        .step-card:nth-child(2) .step-icon { background: rgba(167, 139, 250, 0.15); }
-        .step-card:nth-child(3) .step-icon { background: rgba(34, 197, 94, 0.15); }
-
-        .step-card h3 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-
-        .step-card p {
-            color: var(--text-muted);
-            font-size: 0.92rem;
-        }
-
-        .step-number {
-            display: inline-block;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border);
-            line-height: 26px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
-        }
-
-        /* ── App Section ───────────────────────────────────────── */
-        .app-section {
-            padding: 2rem;
-            max-width: 960px;
-            margin: 0 auto;
-        }
-
-        .glass-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 2rem;
-            box-shadow: var(--shadow);
-        }
-
-        /* Tabs */
-        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
-        .tab-btn {
-            flex: 1;
-            background: none;
-            border: none;
-            color: var(--text-dim);
-            padding: 1rem;
-            font-size: 0.95rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.25s;
-        }
-        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
-        .tab-btn:hover:not(.active) { color: var(--text); }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        /* Upload boxes */
-        .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-        .file-box {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 200px;
-            border: 2px dashed var(--border);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            transition: all 0.3s;
-            background: rgba(5, 10, 24, 0.5);
-            overflow: hidden;
-        }
-        .file-box:hover { border-color: var(--primary); background: rgba(59, 130, 246, 0.05); }
-        .file-box input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-        .file-box .label { color: var(--text-dim); font-weight: 600; font-size: 0.95rem; z-index: 1; }
-        .file-box .icon { font-size: 2rem; margin-bottom: 0.5rem; z-index: 1; }
-        .file-box img.preview {
-            position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: cover; display: none; opacity: 0.75; z-index: 0;
-        }
-        .file-box.has-file { border-style: solid; border-color: var(--primary); }
-
-        /* Input fields */
-        .field { margin-bottom: 1.25rem; text-align: left; }
-        .field label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--text-muted); margin-bottom: 0.4rem; }
-        .field input, .field select {
-            width: 100%;
-            background: rgba(5, 10, 24, 0.6);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 0.75rem 1rem;
-            color: var(--text);
-            font-size: 0.95rem;
-            font-family: inherit;
-            transition: border-color 0.2s;
-        }
-        .field input:focus { outline: none; border-color: var(--primary); }
-        .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-
-        /* Buttons */
-        .btn-primary {
-            width: 100%;
-            padding: 1rem;
-            border: none;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, var(--primary), #6366f1);
-            color: #fff;
-            font-size: 1rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.25s;
-            box-shadow: 0 4px 20px -4px var(--primary-glow);
-            margin-top: 1rem;
-        }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 30px -4px var(--primary-glow); }
-        .btn-primary:active { transform: scale(0.98); }
-        .btn-primary:disabled { background: #1e293b; color: var(--text-dim); cursor: not-allowed; transform: none; box-shadow: none; }
-
-        .btn-outline {
-            padding: 0.75rem 1.5rem;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: transparent;
-            color: var(--text);
-            font-size: 0.9rem;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all 0.25s;
-        }
-        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
-
-        /* ── Loading Overlay ───────────────────────────────────── */
-        .loading-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(5, 10, 24, 0.85);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            z-index: 1000;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 2rem;
-        }
-        .loading-overlay.active { display: flex; }
-
-        .loader-ring {
-            width: 80px; height: 80px;
-            border-radius: 50%;
-            border: 3px solid rgba(59, 130, 246, 0.15);
-            border-top-color: var(--primary);
-            animation: spin 1s linear infinite;
-            position: relative;
-        }
-        .loader-ring::after {
-            content: '🛰️';
-            position: absolute;
-            top: -14px; left: 50%;
-            transform: translateX(-50%);
-            font-size: 1.2rem;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .loading-steps { text-align: center; }
-        .loading-steps .step-text {
-            font-weight: 600;
-            font-size: 1.1rem;
-            color: var(--text);
-            margin-bottom: 0.5rem;
-        }
-        .loading-steps .step-sub {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-        }
-
-        /* ── Results Section ────────────────────────────────────── */
-        .results-section {
-            padding: 2rem;
-            max-width: 960px;
-            margin: 0 auto;
-            display: none;
-        }
-        .results-section.visible { display: block; animation: fadeInUp 0.6s ease-out; }
-
-        /* Summary bar */
-        .summary-bar {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(167, 139, 250, 0.08));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: var(--radius);
-            padding: 1.25rem 1.5rem;
-            margin-bottom: 2rem;
-            font-size: 1.05rem;
-            line-height: 1.6;
-        }
-
-        /* Stats row */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 1.25rem;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 800;
-            line-height: 1;
-            margin-bottom: 0.4rem;
-        }
-        .stat-value.danger { color: var(--danger); }
-        .stat-value.warning { color: var(--warning); }
-        .stat-value.success { color: var(--success); }
-        .stat-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-dim);
-            font-weight: 600;
-        }
-
-        /* Image comparison */
-        .comparison-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
-
-        .image-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .img-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-        }
-
-        .img-card .img-label {
-            padding: 0.6rem 1rem;
-            font-size: 0.8rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .img-card img {
-            width: 100%;
-            display: block;
-            aspect-ratio: 1;
-            object-fit: cover;
-        }
-
-        /* Before/After Slider */
-        .slider-container {
-            position: relative;
-            border-radius: var(--radius);
-            overflow: hidden;
-            cursor: ew-resize;
-            user-select: none;
-            -webkit-user-select: none;
-            border: 1px solid var(--border);
-            margin-bottom: 2rem;
-            aspect-ratio: 1;
-            max-width: 512px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .slider-container img {
-            width: 100%;
-            height: 100%;
-            display: block;
-            object-fit: cover;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-
-        .slider-container .img-after { clip-path: inset(0 0 0 50%); }
-
-        .slider-handle {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 50%;
-            width: 3px;
-            background: #fff;
-            transform: translateX(-50%);
-            z-index: 5;
-            pointer-events: none;
-        }
-        .slider-handle::before {
-            content: '⟨ ⟩';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            background: rgba(255,255,255,0.95);
-            border-radius: 50%;
-            color: #111;
-            font-size: 0.8rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-        }
-
-        .slider-label {
-            position: absolute;
-            bottom: 12px;
-            padding: 4px 12px;
-            border-radius: 6px;
-            background: rgba(0,0,0,0.65);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            color: #fff;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            z-index: 4;
-        }
-        .slider-label.left { left: 12px; }
-        .slider-label.right { right: 12px; }
-
-        /* Change regions */
-        .regions-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            margin-top: 1rem;
-        }
-
-        .region-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 1rem 1.25rem;
-            margin-bottom: 0.75rem;
-            transition: border-color 0.2s;
-        }
-        .region-card:hover { border-color: var(--border-hover); }
-
-        .region-header {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            margin-bottom: 0.5rem;
-        }
-        .region-emoji { font-size: 1.3rem; }
-        .region-type { font-weight: 700; font-size: 0.95rem; }
-        .region-badge {
-            margin-left: auto;
-            padding: 3px 10px;
-            border-radius: 99px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-        }
-
-        .region-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.2rem 1.5rem;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-        .region-stats b { color: var(--text); }
-
-        /* Download area */
-        .actions-bar {
-            display: flex;
-            gap: 1rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-        }
-
-        /* Autocomplete */
-        .ac-wrap { position: relative; }
-        .ac-dropdown {
-            position: absolute; top: 100%; left: 0; width: 100%;
-            max-height: 220px; overflow-y: auto;
-            background: rgba(12, 20, 40, 0.97);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            z-index: 20;
-            box-shadow: 0 12px 30px rgba(0,0,0,0.5);
-            display: none; margin-top: 4px;
-        }
-        .ac-item {
-            padding: 0.7rem 1rem; cursor: pointer;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            font-size: 0.92rem; transition: background 0.15s;
-        }
-        .ac-item:hover { background: rgba(59, 130, 246, 0.15); }
-        .ac-msg { padding: 0.7rem 1rem; color: var(--text-dim); font-style: italic; font-size: 0.9rem; }
-
-        /* Footer */
-        footer {
-            text-align: center;
-            padding: 3rem 2rem;
-            border-top: 1px solid var(--border);
-            margin-top: 4rem;
-        }
-        .footer-brand {
-            font-weight: 700;
-            font-size: 1.1rem;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .footer-tech {
-            margin-top: 0.75rem;
-            font-size: 0.82rem;
-            color: var(--text-dim);
-        }
-        .footer-tech span {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 6px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border);
-            margin: 3px 2px;
-            font-weight: 500;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .upload-grid, .image-grid, .date-row { grid-template-columns: 1fr; }
-            .orbit-ring { width: 250px; height: 250px; }
-            .stats-row { grid-template-columns: 1fr 1fr; }
-        }
-
-        /* Map fix */
-        #map-container { border-radius: var(--radius-sm); border: 1px solid var(--border); overflow: hidden; margin: 1rem 0; }
-    </style>
+    <script src="/static/app.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 
-<!-- ════════════════════════ HERO ════════════════════════ -->
-<section class="hero" id="hero">
-    <div class="orbit-ring">
-        <div class="orbit-dot"></div>
-    </div>
-    <div class="hero-badge">
-        <span class="dot"></span>
-        AI-POWERED SATELLITE ANALYSIS
-    </div>
-    <h1>Detect Changes From Space</h1>
-    <p class="subtitle">
-        Upload satellite images or search any location on Earth to identify construction,
-        deforestation, and land-use changes using deep learning.
-    </p>
-    <a href="#app" class="hero-cta">
-        Start Analyzing
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+<header class="topbar">
+    <a class="brand" href="/" aria-label="Satellite Change Detection home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"></circle>
+            <ellipse cx="16" cy="16" rx="14" ry="5.5" fill="none" stroke="currentColor" stroke-width="1.5" transform="rotate(-28 16 16)"></ellipse>
+            <circle cx="16" cy="16" r="2.4" fill="currentColor"></circle>
+        </svg>
+        <span>Satellite Change Detection</span>
     </a>
-</section>
 
-<!-- ════════════════════ HOW IT WORKS ════════════════════ -->
-<section class="how-section">
-    <p class="section-title">How It Works</p>
-    <h2 class="section-heading">Three Steps to Actionable Intelligence</h2>
-    <div class="steps-grid">
-        <div class="step-card">
-            <div class="step-number">1</div>
-            <div class="step-icon">🛰️</div>
-            <h3>Provide Imagery</h3>
-            <p>Upload before & after satellite images, or search a location and let us fetch live Sentinel-2 data automatically.</p>
-        </div>
-        <div class="step-card">
-            <div class="step-number">2</div>
-            <div class="step-icon">🧠</div>
-            <h3>AI Analysis</h3>
-            <p>Our MobileNetV2-3D Siamese U-Net processes the images and produces a pixel-accurate change mask in seconds.</p>
-        </div>
-        <div class="step-card">
-            <div class="step-number">3</div>
-            <div class="step-icon">📊</div>
-            <h3>Explainable Results</h3>
-            <p>Get classified change regions — deforestation, construction, land clearing — with confidence scores and visual reports.</p>
-        </div>
-    </div>
-</section>
+    <nav class="tabs" role="tablist" aria-label="Analysis mode">
+        <button class="tab" id="tab-live" type="button" role="tab" aria-selected="true" aria-controls="view-live" data-tab="live">Live Sentinel-2</button>
+        <button class="tab" id="tab-upload" type="button" role="tab" aria-selected="false" aria-controls="view-upload" data-tab="upload" tabindex="-1">Upload pair</button>
+        <button class="tab" id="tab-history" type="button" role="tab" aria-selected="false" aria-controls="view-history" data-tab="history" tabindex="-1">History</button>
+    </nav>
 
-<!-- ════════════════════════ APP ═════════════════════════ -->
-<section class="app-section" id="app">
-    <div class="glass-card">
-        <div class="tabs">
-            <button type="button" class="tab-btn active" onclick="switchTab('upload')">📤 Upload Images</button>
-            <button type="button" class="tab-btn" onclick="switchTab('fetch')">🌍 Fetch by Location</button>
-        </div>
+    <p class="service-status" id="service-status" role="status" aria-live="polite">Checking service…</p>
+</header>
 
-        <!-- Upload Tab -->
-        <div id="tab-upload" class="tab-content active">
-            <form id="upload-form">
-                <div class="upload-grid">
-                    <div class="file-box" id="box-a">
-                        <span class="icon">🖼️</span>
-                        <span class="label">Image A (Before)</span>
-                        <input type="file" id="image_a" accept="image/png, image/jpeg" required>
-                        <img id="preview_a" class="preview" alt="Preview A">
+<main id="main">
+    <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Sentinel-2 L2A · 10 m · Copernicus Data Space</p>
+        <h1 id="page-title">See what changed on the ground.</h1>
+        <p class="lede">
+            Choose an area on the map, compare two dates of Sentinel-2 imagery, and review the spectral
+            evidence before you rely on it. Change labels are transparent heuristics, not a validated
+            land-cover classifier. Decision support, not ground truth.
+        </p>
+        <ul class="intro-facts" aria-label="What this tool does">
+            <li>Cloud and shadow masking with visible masked area</li>
+            <li>Scene ranking, seasonal warnings, and minimum mapping units</li>
+            <li>GeoJSON, CSV, and PDF exports with provenance</li>
+        </ul>
+    </section>
+
+    <!-- ══════════════════════ LIVE VIEW ══════════════════════ -->
+    <div class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live" tabindex="0">
+        <div class="workspace">
+            <section class="panel map-panel" aria-labelledby="map-heading">
+                <div class="panel-heading">
+                    <div>
+                        <p class="step-label">Step 1</p>
+                        <h2 id="map-heading">Choose an area</h2>
                     </div>
-                    <div class="file-box" id="box-b">
-                        <span class="icon">🖼️</span>
-                        <span class="label">Image B (After)</span>
-                        <input type="file" id="image_b" accept="image/png, image/jpeg" required>
-                        <img id="preview_b" class="preview" alt="Preview B">
-                    </div>
-                </div>
-                <button type="submit" class="btn-primary" id="btn-upload">Detect Changes</button>
-            </form>
-        </div>
-
-        <!-- Fetch Tab -->
-        <div id="tab-fetch" class="tab-content">
-            <form id="fetch-form">
-                <div class="field">
-                    <label>Place Name</label>
-                    <div class="ac-wrap">
-                        <input type="text" id="place_name" placeholder="e.g. Palm Jumeirah, Dubai" autocomplete="off">
-                        <div id="ac-dropdown" class="ac-dropdown"></div>
-                    </div>
-                    <small style="color:var(--text-dim);margin-top:0.3rem;display:block;">Requires Copernicus Data Space Ecosystem credentials in .env</small>
+                    <span class="zoom-readout" id="zoom-level">Zoom —</span>
                 </div>
 
-                <div id="map-container" style="height: 280px; z-index:1;"></div>
+                <div class="search-field">
+                    <label for="place-search">Search a place</label>
+                    <div class="search-row">
+                        <input id="place-search" type="search" placeholder="e.g. Palm Jumeirah, Dubai" autocomplete="off" aria-describedby="place-help" aria-expanded="false" aria-controls="search-results" role="combobox">
+                        <span class="search-spinner" id="search-spinner" hidden aria-hidden="true"></span>
+                    </div>
+                    <p class="help" id="place-help">Suggestions come from OpenStreetMap Nominatim. Places larger than the analysis limit must be narrowed with a drawn box.</p>
+                    <div class="search-results" id="search-results" role="listbox" aria-label="Place suggestions" hidden></div>
+                </div>
 
-                <details style="margin-bottom: 1rem; color: var(--text-dim); cursor: pointer;">
-                    <summary style="font-weight: 600; font-size: 0.88rem;">Advanced: Enter coordinates manually</summary>
-                    <div class="field" style="margin-top: 0.75rem;">
-                        <label>Bounding Box (min_lon, min_lat, max_lon, max_lat)</label>
-                        <input type="text" id="bbox" placeholder="e.g. -122.0, 37.0, -121.9, 37.1">
+                <div class="map-shell">
+                    <div id="map" class="map" aria-label="Map for choosing the analysis area"></div>
+                    <div class="map-fallback" id="map-fallback" hidden>
+                        <p class="map-fallback-title">The interactive map could not load.</p>
+                        <p>You can still enter a bounding box below, or reload the page to retry the map tiles.</p>
+                    </div>
+                </div>
+
+                <p class="aoi-status" id="aoi-status" role="status" aria-live="polite">No area selected yet.</p>
+                <div class="aoi-actions">
+                    <button class="button button-quiet" id="use-view-btn" type="button">Use current map view</button>
+                    <button class="button button-quiet" id="clear-aoi-btn" type="button">Clear area</button>
+                </div>
+
+                <div class="aoi-info" id="aoi-info" hidden></div>
+
+                <details class="manual-aoi">
+                    <summary>Enter coordinates manually</summary>
+                    <div class="field">
+                        <label for="aoi-manual">Bounding box: west, south, east, north</label>
+                        <div class="inline-field">
+                            <input id="aoi-manual" type="text" inputmode="decimal" placeholder="-122.10, 37.35, -122.00, 37.45">
+                            <button class="button button-quiet" id="apply-bbox-btn" type="button">Apply</button>
+                        </div>
+                        <p class="help">Decimal degrees (WGS 84). Max <span data-max-aoi>10</span> km per side. Draw a rectangle on the map for the same result.</p>
                     </div>
                 </details>
+            </section>
 
-                <div class="date-row">
-                    <div class="field">
-                        <label>Date Before</label>
-                        <input type="date" id="date_before" required>
-                    </div>
-                    <div class="field">
-                        <label>Date After</label>
-                        <input type="date" id="date_after" required>
+            <section class="panel settings-panel" aria-labelledby="settings-heading">
+                <div class="panel-heading">
+                    <div>
+                        <p class="step-label">Step 2</p>
+                        <h2 id="settings-heading">Dates and analysis</h2>
                     </div>
                 </div>
-                <button type="submit" class="btn-primary" id="btn-fetch" disabled>Fetch & Detect Changes</button>
-            </form>
-        </div>
-    </div>
-</section>
 
-<!-- ════════════════════ LOADING OVERLAY ════════════════════ -->
-<div class="loading-overlay" id="loading-overlay">
-    <div class="loader-ring"></div>
-    <div class="loading-steps">
-        <p class="step-text" id="loading-text">Preprocessing images...</p>
-        <p class="step-sub" id="loading-sub">This may take a few seconds</p>
+                <form id="live-form" novalidate>
+                    <div class="date-grid">
+                        <div class="field">
+                            <label for="date-before">Before date</label>
+                            <input id="date-before" type="date" required>
+                        </div>
+                        <div class="field">
+                            <label for="date-after">After date</label>
+                            <input id="date-after" type="date" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="window-days">Scene search window (± days)</label>
+                        <input id="window-days" type="number" min="1" max="120" step="1" value="30" inputmode="numeric">
+                        <p class="help">Wider windows improve the chance of a clear scene but move imagery away from your target dates.</p>
+                    </div>
+
+                    <p class="season-note" id="season-note" hidden></p>
+
+                    <div class="field">
+                        <label for="profile-select">Analysis profile</label>
+                        <select id="profile-select" aria-describedby="profile-info"></select>
+                        <div class="profile-info" id="profile-info" aria-live="polite">Loading profiles…</div>
+                    </div>
+
+                    <details class="advanced" open>
+                        <summary>Analysis options</summary>
+                        <div class="field">
+                            <label for="mmu-ha">Minimum mapping unit (hectares)</label>
+                            <input id="mmu-ha" type="number" min="0" max="100" step="0.05" placeholder="Profile default" inputmode="decimal">
+                            <p class="help">Connected regions below this area are discarded. Leave blank to use the profile default (0 for general and roads).</p>
+                        </div>
+                        <div class="field">
+                            <label for="composite-scenes">Scenes per date</label>
+                            <select id="composite-scenes">
+                                <option value="1" selected>1 — single scene</option>
+                                <option value="2">2 — temporal median (experimental)</option>
+                                <option value="3">3 — temporal median (experimental)</option>
+                            </select>
+                        </div>
+                        <div class="check-grid">
+                            <label class="check"><input id="normalise" type="checkbox"> Radiometric normalisation <span class="tag">experimental</span></label>
+                            <label class="check"><input id="cleanup" type="checkbox"> Morphological cleanup</label>
+                            <label class="check"><input id="include-road-context" type="checkbox"> OSM road context</label>
+                        </div>
+                        <p class="help">Road context is descriptive only; road pixels are usually sub-pixel at 10 m and no road detection is claimed.</p>
+                    </details>
+
+                    <p class="form-error" id="live-error" role="alert" hidden></p>
+                    <button class="button button-primary" id="find-scenes-btn" type="submit" disabled>Find candidate scenes</button>
+                </form>
+            </section>
+        </div>
+
+        <section class="panel scenes-panel" id="scene-section" aria-labelledby="scenes-heading" hidden>
+            <div class="panel-heading">
+                <div>
+                    <p class="step-label">Step 3</p>
+                    <h2 id="scenes-heading">Choose scenes and run</h2>
+                </div>
+                <button class="button button-quiet" id="change-scenes-btn" type="button">Change dates</button>
+            </div>
+            <p class="help">Candidates are ranked by AOI coverage, catalog cloud cover, and date proximity. AOI cloud fraction is measured after download; low catalog cloud does not guarantee a clear AOI.</p>
+            <div class="season-warning" id="season-warning" hidden></div>
+            <div class="scene-grid" id="scene-grid"></div>
+            <p class="form-error" id="scene-error" role="alert" hidden></p>
+            <button class="button button-primary" id="run-analysis-btn" type="button" disabled>Run analysis on selected scenes</button>
+            <p class="help">Downloading imagery and computing indices can take up to a minute. Nothing is written to Copernicus.</p>
+        </section>
+
+        <section class="panel results-panel" id="results-section" aria-labelledby="results-heading" hidden>
+            <div class="panel-heading results-head">
+                <div>
+                    <p class="step-label">Result</p>
+                    <h2 id="results-heading">Change evidence</h2>
+                    <p class="result-mode" id="result-mode"></p>
+                </div>
+                <button class="button button-quiet" id="new-analysis-btn" type="button">New analysis</button>
+            </div>
+
+            <p class="summary" id="result-summary"></p>
+            <div class="validation-banner" id="validation-banner"></div>
+            <ul class="warning-list" id="warnings" hidden></ul>
+
+            <dl class="stat-grid" id="result-stats"></dl>
+
+            <section class="result-block" aria-labelledby="compare-heading">
+                <h3 id="compare-heading">Before / after</h3>
+                <div class="compare" id="compare">
+                    <img id="compare-before" alt="Before image for the analysed area">
+                    <div class="compare-after-wrap" id="compare-after-wrap">
+                        <img id="compare-after" alt="After image for the analysed area">
+                    </div>
+                    <div class="compare-handle" aria-hidden="true"><span></span></div>
+                    <span class="compare-label compare-label-left">Before</span>
+                    <span class="compare-label compare-label-right">After</span>
+                </div>
+                <div class="compare-controls">
+                    <label for="compare-range">Swipe position</label>
+                    <input id="compare-range" type="range" min="0" max="100" value="50" step="1">
+                    <span class="compare-position" id="compare-position">50%</span>
+                </div>
+            </section>
+
+            <section class="result-block" aria-labelledby="evidence-heading">
+                <div class="block-heading">
+                    <h3 id="evidence-heading">Evidence layers</h3>
+                    <div class="segmented" role="tablist" aria-label="Evidence layer">
+                        <button class="segment" type="button" role="tab" aria-selected="true" data-evidence="overlay">Overlay</button>
+                        <button class="segment" type="button" role="tab" aria-selected="false" data-evidence="mask">Mask</button>
+                        <button class="segment" type="button" role="tab" aria-selected="false" data-evidence="heatmap">Rule evidence</button>
+                    </div>
+                </div>
+                <figure class="evidence-figure">
+                    <img id="evidence-image" alt="Overlay of detected change on the after image">
+                    <canvas id="heatmap-canvas" hidden aria-label="Continuous spectral-rule evidence, blue low to yellow high"></canvas>
+                </figure>
+                <p class="evidence-caption" id="evidence-caption"></p>
+                <p class="legend" id="heatmap-legend" hidden>Rule evidence: <span class="legend-swatch" aria-hidden="true"></span> low → high. This is a rescaled NDVI-loss / NDBI-gain magnitude, not a probability.</p>
+            </section>
+
+            <section class="result-block" aria-labelledby="regions-heading">
+                <div class="block-heading">
+                    <h3 id="regions-heading">Changed regions</h3>
+                    <span class="count" id="region-count">0 regions</span>
+                </div>
+                <div class="regions-list" id="regions-list"></div>
+                <div class="road-context" id="road-context" hidden></div>
+            </section>
+
+            <section class="result-block" aria-labelledby="profile-notes-heading">
+                <h3 id="profile-notes-heading">How to read this profile</h3>
+                <ul class="notes-list" id="profile-notes"></ul>
+            </section>
+
+            <section class="result-block timeline-card" id="timeline-card" aria-labelledby="timeline-heading" hidden>
+                <div class="block-heading">
+                    <h3 id="timeline-heading">NDVI timeline (optional)</h3>
+                    <span class="tag">agriculture</span>
+                </div>
+                <p class="help">Three to five dates, cloud/shadow-masked mean NDVI. Few dates cannot resolve phenology. <span id="timeline-dates"></span></p>
+                <button class="button button-quiet" id="timeline-btn" type="button">Build NDVI timeline</button>
+                <p class="form-error" id="timeline-status" role="status" hidden></p>
+                <div class="timeline-chart" id="timeline-chart"></div>
+            </section>
+
+            <section class="result-block" aria-labelledby="provenance-heading">
+                <h3 id="provenance-heading">Provenance</h3>
+                <dl class="provenance-list" id="provenance"></dl>
+                <details class="json-details">
+                    <summary>Raw provenance JSON</summary>
+                    <pre id="provenance-details"></pre>
+                </details>
+            </section>
+
+            <div class="actions-bar">
+                <button class="button button-primary" id="download-pdf" type="button">Download PDF report</button>
+                <button class="button button-quiet" id="export-geojson" type="button">Export GeoJSON</button>
+                <button class="button button-quiet" id="export-csv" type="button">Export CSV</button>
+                <button class="button button-quiet" id="download-images" type="button">Download images</button>
+            </div>
+            <p class="help">Exports describe heuristically detected change. Verify before operational use.</p>
+        </section>
+    </div>
+
+    <!-- ══════════════════════ UPLOAD VIEW ══════════════════════ -->
+    <div class="view" id="view-upload" role="tabpanel" aria-labelledby="tab-upload" tabindex="0" hidden>
+        <section class="panel narrow-panel" aria-labelledby="upload-heading">
+            <p class="step-label">Experimental pair mode</p>
+            <h2 id="upload-heading">Upload a before / after pair</h2>
+            <p class="help" id="model-note">This route runs the optional CNN on the uploaded pixels. It was trained on 0.5 m aerial pairs (LEVIR-CD); transfer to 10 m Sentinel-2 is poor and is reported in the benchmark notes. No accuracy number is shown in this interface.</p>
+
+            <form id="upload-form" novalidate>
+                <div class="upload-grid">
+                    <label class="file-box" id="box-a">
+                        <span class="file-title">Before image</span>
+                        <span class="file-hint">PNG or JPEG</span>
+                        <input id="image-a" type="file" accept="image/png,image/jpeg" required aria-describedby="upload-error">
+                        <img id="preview-a" class="preview" alt="Preview of the before image" hidden>
+                    </label>
+                    <label class="file-box" id="box-b">
+                        <span class="file-title">After image</span>
+                        <span class="file-hint">PNG or JPEG · same size recommended</span>
+                        <input id="image-b" type="file" accept="image/png,image/jpeg" required aria-describedby="upload-error">
+                        <img id="preview-b" class="preview" alt="Preview of the after image" hidden>
+                    </label>
+                </div>
+                <p class="form-error" id="upload-error" role="alert" hidden></p>
+                <button class="button button-primary" id="upload-submit" type="submit">Run CNN pair analysis</button>
+                <p class="help">For real land-change work prefer the live Sentinel-2 path with masking and provenance.</p>
+            </form>
+        </section>
+    </div>
+
+    <!-- ══════════════════════ HISTORY VIEW ══════════════════════ -->
+    <div class="view" id="view-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
+        <section class="panel narrow-panel" aria-labelledby="history-heading">
+            <div class="panel-heading">
+                <div>
+                    <p class="step-label">Local audit trail</p>
+                    <h2 id="history-heading">Analysis history</h2>
+                </div>
+                <button class="button button-quiet" id="refresh-history-btn" type="button">Refresh</button>
+            </div>
+            <p class="help">Stored in the server's local SQLite database. History may disappear when a hosted instance restarts or redeploys.</p>
+            <p class="form-error" id="history-status" role="status" hidden></p>
+            <div class="history-list" id="history-list"></div>
+        </section>
+    </div>
+</main>
+
+<footer class="site-footer">
+    <p>Satellite Change Detection · spectral rules with Sentinel-2 L2A</p>
+    <p class="footer-meta" id="footer-version">Version unavailable</p>
+    <p class="footer-meta">Imagery: Copernicus Sentinel data. Maps: © OpenStreetMap contributors. OSM context is used under ODbL; verify redistribution obligations.</p>
+</footer>
+
+<div class="busy" id="busy" role="status" aria-live="polite" hidden>
+    <div class="busy-card">
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="busy-text">Working…</p>
+        <p class="busy-sub">Please keep this tab open.</p>
     </div>
 </div>
 
-<!-- ═══════════════════════ RESULTS ═════════════════════════ -->
-<section class="results-section" id="results-section">
-
-    <!-- Summary sentence (fetch mode) -->
-    <div class="summary-bar" id="summary-bar" style="display:none;">
-        <span id="summary-text"></span>
-    </div>
-
-    <!-- Stats row -->
-    <div class="stats-row" id="stats-row">
-        <div class="stat-card">
-            <p class="stat-value danger" id="stat-percent">0%</p>
-            <p class="stat-label">Area Changed</p>
-        </div>
-        <div class="stat-card" id="stat-cloud-a" style="display:none;">
-            <p class="stat-value warning" id="stat-cloud-a-val">0%</p>
-            <p class="stat-label">Cloud (Before)</p>
-        </div>
-        <div class="stat-card" id="stat-cloud-b" style="display:none;">
-            <p class="stat-value warning" id="stat-cloud-b-val">0%</p>
-            <p class="stat-label">Cloud (After)</p>
-        </div>
-        <div class="stat-card" id="stat-masked" style="display:none;">
-            <p class="stat-value warning" id="stat-masked-val">0%</p>
-            <p class="stat-label">Cloud Masked</p>
-        </div>
-        <div class="stat-card" id="stat-regions-count">
-            <p class="stat-value success" id="stat-regions-val">0</p>
-            <p class="stat-label">Regions Found</p>
-        </div>
-    </div>
-
-    <!-- Before/After Slider -->
-    <p class="comparison-title">Before / After Comparison <span style="font-weight:400;color:var(--text-dim);font-size:0.85rem;">— drag to compare</span></p>
-    <div class="slider-container" id="ba-slider">
-        <img id="slider-before" src="" alt="Before">
-        <img id="slider-after" src="" alt="After" class="img-after">
-        <div class="slider-handle" id="slider-handle"></div>
-        <span class="slider-label left">Before</span>
-        <span class="slider-label right">After</span>
-    </div>
-
-    <!-- Mask + Overlay grid -->
-    <p class="comparison-title">Analysis Output</p>
-    <div class="image-grid">
-        <div class="img-card">
-            <div class="img-label">Change Mask</div>
-            <img id="res-mask" src="" alt="Change Mask">
-        </div>
-        <div class="img-card">
-            <div class="img-label">Overlay on After</div>
-            <img id="res-overlay" src="" alt="Overlay">
-        </div>
-    </div>
-
-    <!-- Regions -->
-    <div id="regions-wrap" style="display:none;">
-        <p class="regions-title">Detected Change Regions</p>
-        <div id="regions-list"></div>
-    </div>
-
-    <!-- Actions -->
-    <div class="actions-bar">
-        <button class="btn-outline" onclick="window.print()">🖨️ Print / Save PDF</button>
-        <button class="btn-outline" onclick="downloadReport()">📄 Download Report</button>
-        <button class="btn-outline" onclick="toggleHeatmap()">🌡️ Toggle Heatmap</button>
-        <button class="btn-outline" onclick="showHistory()">🕘 History</button>
-        <button class="btn-outline" onclick="downloadImages()">📥 Download Images</button>
-    </div>
-</section>
-
-<!-- ════════════════════════ FOOTER ═════════════════════════ -->
-<footer>
-    <p class="footer-brand">Satellite Change Detection</p>
-    <p style="color:var(--text-dim);font-size:0.85rem;margin-top:0.3rem;">MobileNetV2-3D Siamese U-Net &nbsp;·&nbsp; F1: 87.06% &nbsp;·&nbsp; IoU: 77.08%</p>
-    <div class="footer-tech">
-        <span>PyTorch</span>
-        <span>ONNX Runtime</span>
-        <span>FastAPI</span>
-        <span>Sentinel-2</span>
-        <span>Leaflet.js</span>
-        <span>Docker</span>
-    </div>
-</footer>
-
-<!-- ════════════════════════ JAVASCRIPT ════════════════════════ -->
-<script>
-// ── Confidence colors & emojis ──────────────────────────────
-const CONF = { High: '#22c55e', Medium: '#f59e0b', Low: '#94a3b8' };
-let latestResult = null;
-function typeEmoji(t) {
-    t = t.toLowerCase();
-    if (t.includes('deforest') || t.includes('vegetation')) return '🌲';
-    if (t.includes('construction') || t.includes('urban')) return '🏗️';
-    if (t.includes('soil') || t.includes('clearing')) return '🟤';
-    if (t.includes('water')) return '🌊';
-    if (t.includes('agricultural')) return '🌾';
-    if (t.includes('cloud')) return '☁️';
-    return '🔍';
-}
-
-// ── Tab switching ───────────────────────────────────────────
-function switchTab(id) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector(`.tab-btn[onclick="switchTab('${id}')"]`).classList.add('active');
-    document.getElementById(`tab-${id}`).classList.add('active');
-    document.getElementById('results-section').classList.remove('visible');
-    if (id === 'fetch' && window.map) setTimeout(() => window.map.invalidateSize(), 150);
-}
-
-// ── File preview ────────────────────────────────────────────
-function setupPreview(inputId, previewId, boxId) {
-    const input = document.getElementById(inputId);
-    const preview = document.getElementById(previewId);
-    const box = document.getElementById(boxId);
-    input.addEventListener('change', function() {
-        if (this.files[0]) {
-            const reader = new FileReader();
-            reader.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; box.classList.add('has-file'); };
-            reader.readAsDataURL(this.files[0]);
-        }
-    });
-}
-setupPreview('image_a', 'preview_a', 'box-a');
-setupPreview('image_b', 'preview_b', 'box-b');
-
-// ── Loading overlay ─────────────────────────────────────────
-const loadingEl = document.getElementById('loading-overlay');
-const loadText = document.getElementById('loading-text');
-const loadSub = document.getElementById('loading-sub');
-
-function showLoading(steps) {
-    loadingEl.classList.add('active');
-    let i = 0;
-    loadText.textContent = steps[0][0];
-    loadSub.textContent = steps[0][1];
-    const interval = setInterval(() => {
-        i++;
-        if (i < steps.length) {
-            loadText.textContent = steps[i][0];
-            loadSub.textContent = steps[i][1];
-        } else { clearInterval(interval); }
-    }, 1500);
-    return () => { clearInterval(interval); loadingEl.classList.remove('active'); };
-}
-
-// ── Animated counter ────────────────────────────────────────
-function animateValue(el, end, suffix = '%', duration = 1200) {
-    const start = 0;
-    const startTime = performance.now();
-    function update(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-        const current = start + (end - start) * eased;
-        el.textContent = current.toFixed(end < 10 ? 2 : 1) + suffix;
-        if (progress < 1) requestAnimationFrame(update);
-    }
-    requestAnimationFrame(update);
-}
-
-// ── Display results ─────────────────────────────────────────
-function displayResults(data) {
-    latestResult = data;
-    const sec = document.getElementById('results-section');
-
-    // Stats
-    animateValue(document.getElementById('stat-percent'), data.percent_changed);
-
-    if (data.cloud_coverage_before !== undefined) {
-        document.getElementById('stat-cloud-a').style.display = '';
-        animateValue(document.getElementById('stat-cloud-a-val'), data.cloud_coverage_before);
-    } else { document.getElementById('stat-cloud-a').style.display = 'none'; }
-
-    if (data.cloud_coverage_after !== undefined) {
-        document.getElementById('stat-cloud-b').style.display = '';
-        animateValue(document.getElementById('stat-cloud-b-val'), data.cloud_coverage_after);
-    } else { document.getElementById('stat-cloud-b').style.display = 'none'; }
-    if (data.percent_cloud_masked !== undefined) {
-        document.getElementById('stat-masked').style.display = '';
-        animateValue(document.getElementById('stat-masked-val'), data.percent_cloud_masked);
-    } else { document.getElementById('stat-masked').style.display = 'none'; }
-
-    const validRegions = (data.change_regions || []).filter(r => r.change_type !== 'Possible cloud interference');
-    document.getElementById('stat-regions-val').textContent = validRegions.length;
-
-    // Summary
-    if (data.summary_sentence) {
-        document.getElementById('summary-text').textContent = data.summary_sentence;
-        document.getElementById('summary-bar').style.display = '';
-    } else { document.getElementById('summary-bar').style.display = 'none'; }
-
-    // Before/After slider
-    const b64a = 'data:image/png;base64,' + data.image_a_base64;
-    const b64b = 'data:image/png;base64,' + data.image_b_base64;
-    document.getElementById('slider-before').src = b64a;
-    document.getElementById('slider-after').src = b64b;
-
-    // Mask + overlay
-    document.getElementById('res-mask').src = 'data:image/png;base64,' + data.mask_base64;
-    document.getElementById('res-overlay').src = 'data:image/png;base64,' + data.overlay_base64;
-    document.getElementById('res-overlay').dataset.binarySrc = document.getElementById('res-overlay').src;
-
-    // Regions
-    renderRegions(data.change_regions || []);
-
-    sec.classList.add('visible');
-    setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-}
-
-// ── Render region cards ─────────────────────────────────────
-function renderRegions(regions) {
-    const wrap = document.getElementById('regions-wrap');
-    const list = document.getElementById('regions-list');
-    list.innerHTML = '';
-    const valid = regions.filter(r => r.change_type !== 'Possible cloud interference');
-    if (!valid.length) { wrap.style.display = 'none'; return; }
-
-    valid.forEach(r => {
-        const c = CONF[r.confidence_label] || '#94a3b8';
-        const st = r.stats;
-        const card = document.createElement('div');
-        card.className = 'region-card';
-        card.style.borderLeftColor = c;
-        card.style.borderLeftWidth = '3px';
-        card.innerHTML = `
-            <div class="region-header">
-                <span class="region-emoji">${typeEmoji(r.change_type)}</span>
-                <span class="region-type">${r.change_type}</span>
-                <span class="region-badge" style="background:${c}18;color:${c};border:1px solid ${c}55;">${r.confidence_label}</span>
-            </div>
-            <div class="region-stats">
-                <span>Area: <b>${r.pixel_area.toLocaleString()} px</b></span>
-                <span>Colour shift: <b>${st.color_shift_mag}</b></span>
-                <span>Veg: <b>${st.veg_ratio_before} → ${st.veg_ratio_after}</b></span>
-                <span>Brightness: <b>${st.brightness_before} → ${st.brightness_after}</b></span>
-            </div>
-        `;
-        list.appendChild(card);
-    });
-    wrap.style.display = '';
-}
-
-// ── Upload form submit ──────────────────────────────────────
-document.getElementById('upload-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const a = document.getElementById('image_a').files[0];
-    const b = document.getElementById('image_b').files[0];
-    if (!a || !b) return;
-
-    const hideLoading = showLoading([
-        ['Preprocessing images...', 'Resizing and normalizing'],
-        ['Running AI inference...', 'MobileNetV2-3D ONNX model'],
-        ['Analyzing change regions...', 'Classifying detected changes'],
-    ]);
-
-    try {
-        const fd = new FormData();
-        fd.append('image_a', a);
-        fd.append('image_b', b);
-        const res = await fetch('/predict', { method: 'POST', body: fd });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Server error');
-        hideLoading();
-        displayResults(data);
-    } catch (err) {
-        hideLoading();
-        alert('Error: ' + err.message);
-    }
-});
-
-// ── Map & geocoding ─────────────────────────────────────────
-let selectedBbox = null;
-let geocodeTimeout = null;
-const placeInput = document.getElementById('place_name');
-const acDrop = document.getElementById('ac-dropdown');
-const bboxInput = document.getElementById('bbox');
-const fetchBtn = document.getElementById('btn-fetch');
-
-function updateFetchBtn() {
-    fetchBtn.disabled = !(selectedBbox || bboxInput.value.trim());
-}
-
-window.map = L.map('map-container').setView([20.5937, 78.9629], 4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-}).addTo(window.map);
-
-const drawnItems = new L.FeatureGroup();
-window.map.addLayer(drawnItems);
-window.map.addControl(new L.Control.Draw({
-    edit: { featureGroup: drawnItems },
-    draw: { polygon: false, polyline: false, circle: false, circlemarker: false, marker: false, rectangle: true }
-}));
-
-window.map.on(L.Draw.Event.CREATED, e => {
-    drawnItems.clearLayers();
-    drawnItems.addLayer(e.layer);
-    const b = e.layer.getBounds();
-    bboxInput.value = `${b.getWest().toFixed(4)}, ${b.getSouth().toFixed(4)}, ${b.getEast().toFixed(4)}, ${b.getNorth().toFixed(4)}`;
-    placeInput.value = '';
-    selectedBbox = null;
-    updateFetchBtn();
-});
-window.map.on(L.Draw.Event.DELETED, () => { bboxInput.value = ''; updateFetchBtn(); });
-
-bboxInput.addEventListener('input', () => { if (bboxInput.value.trim()) selectedBbox = null; updateFetchBtn(); });
-
-placeInput.addEventListener('input', (e) => {
-    selectedBbox = null;
-    updateFetchBtn();
-    const q = e.target.value.trim();
-    if (q.length < 2) { acDrop.style.display = 'none'; return; }
-
-    clearTimeout(geocodeTimeout);
-    geocodeTimeout = setTimeout(async () => {
-        try {
-            const res = await fetch(`/geocode-suggest?q=${encodeURIComponent(q)}`);
-            const data = await res.json();
-            acDrop.innerHTML = '';
-            if (!res.ok) throw new Error(data.error);
-            if (!data.length) {
-                acDrop.innerHTML = '<div class="ac-msg">No matches found</div>';
-            } else {
-                data.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'ac-item';
-                    div.textContent = item.display_name;
-                    div.addEventListener('click', () => {
-                        placeInput.value = item.display_name;
-                        selectedBbox = item.boundingbox;
-                        acDrop.style.display = 'none';
-                        bboxInput.value = '';
-                        updateFetchBtn();
-                        const bb = item.boundingbox;
-                        const bounds = [[bb[1], bb[0]], [bb[3], bb[2]]];
-                        window.map.fitBounds(bounds);
-                        drawnItems.clearLayers();
-                        L.rectangle(bounds).addTo(drawnItems);
-                    });
-                    acDrop.appendChild(div);
-                });
-            }
-            acDrop.style.display = 'block';
-        } catch (err) {
-            acDrop.innerHTML = `<div class="ac-msg" style="color:var(--danger);">Error loading suggestions</div>`;
-            acDrop.style.display = 'block';
-        }
-    }, 350);
-});
-
-document.addEventListener('click', e => {
-    if (!placeInput.contains(e.target) && !acDrop.contains(e.target)) acDrop.style.display = 'none';
-});
-
-// ── Fetch form submit ───────────────────────────────────────
-document.getElementById('fetch-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const dateBefore = document.getElementById('date_before').value;
-    const dateAfter = document.getElementById('date_after').value;
-
-    let bbox = selectedBbox;
-    const bboxStr = bboxInput.value.trim();
-    if (bboxStr) {
-        bbox = bboxStr.split(',').map(s => parseFloat(s.trim()));
-        if (bbox.length !== 4 || bbox.some(isNaN)) { alert('Invalid bounding box.'); return; }
-    } else if (!bbox) { alert('Select a place or draw a rectangle.'); return; }
-
-    const hideLoading = showLoading([
-        ['Geocoding location...', 'Resolving coordinates'],
-        ['Fetching satellite imagery...', 'Querying Copernicus Sentinel-2'],
-        ['Computing spectral indices...', 'NDVI & NDBI differencing'],
-        ['Classifying change regions...', 'Analyzing results'],
-    ]);
-
-    try {
-        const payload = { date_before: dateBefore, date_after: dateAfter, bbox };
-        if (selectedBbox) payload.place_name = placeInput.value.trim();
-
-        const res = await fetch('/fetch-and-predict', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Server error');
-        hideLoading();
-        displayResults(data);
-    } catch (err) {
-        hideLoading();
-        alert('Error: ' + err.message);
-    }
-});
-
-// ── Before/After Slider ─────────────────────────────────────
-(function() {
-    const slider = document.getElementById('ba-slider');
-    const handle = document.getElementById('slider-handle');
-    const afterImg = document.getElementById('slider-after');
-    let dragging = false;
-
-    function update(x) {
-        const rect = slider.getBoundingClientRect();
-        let pct = ((x - rect.left) / rect.width) * 100;
-        pct = Math.max(2, Math.min(98, pct));
-        afterImg.style.clipPath = `inset(0 0 0 ${pct}%)`;
-        handle.style.left = pct + '%';
-    }
-
-    slider.addEventListener('mousedown', e => { dragging = true; update(e.clientX); });
-    slider.addEventListener('touchstart', e => { dragging = true; update(e.touches[0].clientX); }, { passive: true });
-    window.addEventListener('mousemove', e => { if (dragging) update(e.clientX); });
-    window.addEventListener('touchmove', e => { if (dragging) update(e.touches[0].clientX); }, { passive: true });
-    window.addEventListener('mouseup', () => dragging = false);
-    window.addEventListener('touchend', () => dragging = false);
-})();
-
-// ── Download images ─────────────────────────────────────────
-function downloadImages() {
-    const overlay = document.getElementById('res-overlay').src;
-    const mask = document.getElementById('res-mask').src;
-    if (!overlay) return;
-    [['overlay.png', overlay], ['mask.png', mask]].forEach(([name, src]) => {
-        const a = document.createElement('a');
-        a.href = src; a.download = name;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    });
-}
-
-async function downloadReport() {
-    if (!latestResult) return;
-    try {
-        const response = await fetch('/report', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({result: latestResult})});
-        if (!response.ok) throw new Error('Report generation failed');
-        const url = URL.createObjectURL(await response.blob());
-        const link = document.createElement('a'); link.href = url; link.download = 'change-report.pdf'; link.click();
-        URL.revokeObjectURL(url);
-    } catch (error) { alert(error.message); }
-}
-
-function heatmapColor(v) { // blue → yellow → red, continuous confidence/evidence
-    const r = Math.round(255 * Math.min(1, v * 2)); const b = Math.round(255 * Math.max(0, 1 - v * 2));
-    return [r, Math.round(255 * (1 - Math.abs(v - .5) * 2)), b];
-}
-function toggleHeatmap() {
-    const image = document.getElementById('res-overlay');
-    if (!latestResult || !latestResult.confidence_base64) return;
-    if (image.dataset.heatmapSrc) { image.src = image.dataset.binarySrc; delete image.dataset.heatmapSrc; return; }
-    const confidence = new Image(); confidence.onload = () => {
-        const canvas = document.createElement('canvas'); canvas.width=confidence.width; canvas.height=confidence.height;
-        const ctx=canvas.getContext('2d'); ctx.drawImage(confidence,0,0); const data=ctx.getImageData(0,0,canvas.width,canvas.height);
-        for(let i=0;i<data.data.length;i+=4) { const [r,g,b]=heatmapColor(data.data[i]/255); data.data[i]=r;data.data[i+1]=g;data.data[i+2]=b; }
-        ctx.putImageData(data,0,0); image.dataset.heatmapSrc=canvas.toDataURL(); image.src=image.dataset.heatmapSrc;
-    }; confidence.src='data:image/png;base64,'+latestResult.confidence_base64;
-}
-async function showHistory() {
-    try { const rows=await (await fetch('/history')).json(); alert(rows.map(r => `${r.id}: ${r.location || 'Upload'} — ${r.percent_changed.toFixed(2)}%`).join('\n') || 'No analyses yet'); }
-    catch (_) { alert('Could not load analysis history.'); }
-}
-</script>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

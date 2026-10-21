@@ -87,12 +87,16 @@ def detect_profile(
     if len({array.shape for array in arrays}) != 1:
         raise ValueError("Profile index arrays must share the same shape")
 
+    normalisation = None
     if normalise:
-        from radiometric import match_pair
+        from radiometric import fit_pif, match_pair
 
+        indices_b = dict(indices_b)
+        normalisation = {}
         for key in required:
-            indices_b = dict(indices_b)
+            normalisation[key] = fit_pif(indices_a[key], indices_b[key])
             indices_b[key] = match_pair(indices_a[key], indices_b[key])
+        arrays = [indices_a[key] for key in required] + [indices_b[key] for key in required]
 
     invalid = (
         cloud_mask(scl_a, scl_b, include_shadow=True)
@@ -130,6 +134,7 @@ def detect_profile(
                 "mmu": mmu_info,
                 "changed_percent": float(np.asarray(mask).mean() * 100.0),
                 "valid_percent": float(valid.mean() * 100.0),
+                "radiometric_normalisation": normalisation,
             }
         )
         return np.asarray(mask, dtype=np.uint8), invalid, meta
@@ -180,6 +185,7 @@ def detect_profile(
                 "changed_percent": float(mask.mean() * 100.0),
                 "valid_percent": float(valid.mean() * 100.0),
                 "flags": flags,
+                "radiometric_normalisation": normalisation,
             }
         )
         return np.asarray(mask, dtype=np.uint8), invalid, meta
@@ -202,7 +208,7 @@ def detect_profile(
         "valid_percent": float(valid.mean() * 100.0),
         "changed_percent": float(mask.mean() * 100.0),
         "flags": flags,
-        "radiometric_normalisation": bool(normalise),
+        "radiometric_normalisation": normalisation,
         "morphological_cleanup": bool(cleanup),
     }
     return mask.astype(np.uint8), invalid, meta

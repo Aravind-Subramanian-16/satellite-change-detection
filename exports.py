@@ -106,3 +106,7 @@ def regions_to_csv(result: dict) -> str:
 
 def geojson_bytes(result: dict) -> bytes:
     return json.dumps(regions_to_geojson(result), indent=2).encode("utf-8")
+
+
+def csv_bytes(result: dict) -> bytes:
+    return regions_to_csv(result).encode("utf-8")

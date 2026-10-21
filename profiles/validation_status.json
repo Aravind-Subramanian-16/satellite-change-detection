@@ -21,7 +21,7 @@
     "status": "quantitatively benchmarked on OSCD (urban change only, pooled F1 about 0.12)",
     "short": "OSCD urban benchmark only",
     "display_metrics": true,
-    "evidence": "The underlying spectral thresholding was scored on the official OSCD test split for urban change only (pooled F1 about 0.12). Source of record: benchmarks/results/oscd_results_v2.json/.md, which is absent from this checkout; verify before quoting. The added NDBI/BSI cues and MMU are not separately validated."
+    "evidence": "The underlying spectral thresholding was scored on the official OSCD test split for urban change only. Source of record: benchmarks/results/oscd_results_v2.json and .md in this repository; the aggregate percentile configuration reached pooled F1 0.1176 (precision 0.2419, recall 0.0777). The added NDBI/BSI cues and MMU are not separately validated."
   },
   "roads": {
     "status": "unvalidated, qualitative only",
