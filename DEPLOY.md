@@ -92,6 +92,43 @@ model or credentials to source control. Free-tier limits and availability
 change; verify them on Render's official site before relying on them. No
 uptime or capacity guarantee is made.
 
+## Google Cloud Run
+
+Cloud Run runs the same Dockerfile, CPU only, with one instance while testing.
+The image contains no model weights and no credentials.
+
+```bash
+# Build and push with Cloud Build (from the repository root).
+gcloud builds submit --tag gcr.io/PROJECT_ID/satellite-change
+
+# Store credentials in Secret Manager first; never pass them as plain env vars.
+printf '%s' "$COPERNICUS_CLIENT_ID" | gcloud secrets create copernicus-client-id --data-file=-
+printf '%s' "$COPERNICUS_CLIENT_SECRET" | gcloud secrets create copernicus-client-secret --data-file=-
+
+gcloud run deploy satellite-change \
+  --image gcr.io/PROJECT_ID/satellite-change \
+  --region europe-west1 \
+  --memory 1Gi --cpu 1 \
+  --min-instances 0 --max-instances 1 \
+  --timeout 300 \
+  --set-secrets COPERNICUS_CLIENT_ID=copernicus-client-id:latest,COPERNICUS_CLIENT_SECRET=copernicus-client-secret:latest \
+  --set-env-vars RATE_LIMIT_PER_MINUTE=30,ANALYSIS_DB_PATH=/tmp/analysis_history.sqlite3
+```
+
+- `/health` is the container health check; it succeeds even when the CNN is
+  absent, and `/model-status` explains how to mount a model.
+- Keep `--max-instances 1` while the in-process rate limiter and scene cache
+  are in use. SQLite history and caches live on the ephemeral filesystem and
+  reset when an instance is replaced; use a mounted volume only if history
+  must persist.
+- Leave `--timeout` above the 60 s per-scene download budget so a slow Process
+  API call can finish or fail cleanly.
+- The default service account needs only permission to read the two secrets.
+  Restrict ingress to match your audience; the app has no authentication.
+- Free-tier quotas, cold starts and pricing change; check Google's current
+  documentation before relying on them. No uptime or capacity guarantee is
+  made.
+
 ## Static hosting
 
 There is no static-only mode: live scene search, PDF reports, history and
@@ -109,6 +146,11 @@ CDNs; Copernicus credentials stay server-side.
   dimensions before inference. `.npz` archives are checked for declared
   uncompressed size and pixel count. Rejections use 400/413/415 with a
   machine-readable `code`.
+- Copernicus authentication, catalog and download calls have bounded timeouts
+  and retry up to three times with exponential backoff on timeouts, HTTP 429
+  and 5xx responses. Downloaded scene bundles are kept in a thread-safe
+  least-recently-used memory cache (`SCENE_CACHE_MB`, `SCENE_CACHE_ENTRIES`);
+  the cache is per process and resets on restart.
 - `RATE_LIMIT_PER_MINUTE` is an in-process sliding window keyed by client and
   path. It resets on restart and is not shared across workers; the deployment
   target is one worker. Enforce additional limits at the proxy. Only set
@@ -160,6 +202,8 @@ rate-limiter scope and data licensing, are documented in
 | `MAX_NPZ_UNCOMPRESSED_MB` | `150` | Declared uncompressed-band cap for `.npz` archives. |
 | `ALLOWED_ORIGINS` | empty | Comma-separated CORS origins. Empty means same-origin only; `*` is ignored. |
 | `TRUST_PROXY_HEADERS` | `0` | Use the first `X-Forwarded-For` hop for rate limiting. Only behind a trusted proxy. |
+| `SCENE_CACHE_MB` | `64` | In-memory budget for downloaded scene bundles; `0` disables caching. |
+| `SCENE_CACHE_ENTRIES` | `32` | Maximum number of cached scene bundles (least-recently-used evicted first). |
 | `LOG_LEVEL` | `INFO` | Log level for the app logger; access logs are structured JSON with request IDs. |
 
 ## Colab
