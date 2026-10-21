@@ -303,8 +303,8 @@ changing the API, database schema or detection path.
       `docs/screenshots/13-history-dashboard-1440.png`,
       `14-history-dashboard-768.png`, `15-history-dashboard-375.png`)
 - [x] Full suite after the addition: **194 passed, 3 skipped**, 1 warning
-      (evidence: `pytest -q`, 61.04 s; the 3 skips are unchanged environment
-      gaps)
+      (evidence: `pytest -q`; 61.04 s after the change and 88.41 s on the
+      final verification run; the 3 skips are unchanged environment gaps)
 - [x] The dashboard screenshots use example rows from the test fixture, not
       real saved analyses; this is stated in the README (evidence: README
       screenshot disclosure)

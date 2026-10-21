@@ -2,7 +2,7 @@
 
 **Date:** 21 October 2026
 **Branch:** `final-polish` (local only; not merged, not pushed)
-**Final suite:** **194 passed, 3 skipped, 1 warning in 61.04 s** (the pre-dashboard run took 42.00 s)
+**Final suite:** **194 passed, 3 skipped, 1 warning in 88.41 s** (earlier runs took 61.04 s post-dashboard and 42.00 s pre-dashboard)
 
 This report closes Phases 0–5 of the redesign. It states what was delivered, the
 exact test results, what is verified and what is not, and the commands to merge
@@ -40,7 +40,7 @@ All branches are linear and fast-forwardable; no merge commits exist.
 | `main` | `a02b27a` | `origin/main` at the same commit |
 | `ui-redesign` | `fbea861` | `origin/ui-redesign` at the same commit |
 | `analysis-profiles` | `44ac7e0` | `origin/analysis-profiles` at the same commit |
-| `final-polish` | `d5e835c` + `dffaac2` + `c0d6627` + `2a8c344` + `8870e59` + this docs commit | **local only** |
+| `final-polish` | `af46bda` + this correction commit | **local only** |
 
 ### Commits by branch (oldest → newest)
 
@@ -62,7 +62,7 @@ d967a91 Enrich PDF report with plain summary, legend, class table and credits
 44ac7e0 Test PDF sections, honesty wording, missing inputs and number parity
 ```
 
-**`analysis-profiles..final-polish`** (11 + 2 docs)
+**`analysis-profiles..final-polish`** (17)
 ```
 f1720b5 Retry transient Copernicus calls and cache scene downloads in memory
 6957eba Report CNN and spectral availability in /health
@@ -79,7 +79,8 @@ dffaac2 Sync docs with final suite time and lint scope
 c0d6627 Add final release report
 2a8c344 Add saved-analyses dashboard and compact mobile tab labels
 8870e59 Test history dashboard aggregates and capture responsive screenshots
-(this commit) Document the history dashboard and final counts
+af46bda Document the history dashboard and final counts
+(this commit) Correct final report commit count and run timing
 ```
 
 Use `git rev-parse --short final-polish` after checkout for the exact tip.
@@ -95,7 +96,7 @@ Use `git rev-parse --short final-polish` after checkout for the exact tip.
 | `main` (baseline) | **137 passed, 3 skipped**, 1 warning | — | `pytest -q` before any changes |
 | `ui-redesign` | **140 passed, 3 skipped**, 1 warning | 71.72 s | temporary worktree with the project venv linked |
 | `analysis-profiles` | **179 passed, 3 skipped**, 1 warning | 72.07 s | temporary worktree with the project venv linked |
-| `final-polish` | **194 passed, 3 skipped**, 1 warning | **61.04 s** (pre-dashboard run 42.00 s) | `pytest -q` in this checkout |
+| `final-polish` | **194 passed, 3 skipped**, 1 warning | **88.41 s** on the final verification run (61.04 s post-dashboard, 42.00 s pre-dashboard) | `pytest -q` in this checkout |
 
 That is **57 more passing tests** than the baseline. No test was deleted or
 skipped to make the suite pass.
@@ -234,7 +235,7 @@ python3 -m venv venv
 
 # Full test suite (no network, fakes only):
 ./venv/bin/python -m pytest -q
-# -> 194 passed, 3 skipped, 1 warning in about 60 s
+# -> 194 passed, 3 skipped, 1 warning in about 60–90 s
 
 # Run the app:
 cp .env.example .env    # add the two Copernicus values, or use upload mode
@@ -251,7 +252,8 @@ README says "under 5 minutes once dependencies are installed".
 
 ### Verified in this checkout
 
-- Full suite: 194 passed, 3 skipped, 1 warning, 61.04 s.
+- Full suite: 194 passed, 3 skipped, 1 warning, 88.41 s on the final
+  verification run.
 - Browser tests against mocked Copernicus routes (wizard, themes, dashboard,
   mobile layout, history analytics) and the 15 screenshots.
 - History dashboard: aggregate values, range buckets, empty state, 375 px
