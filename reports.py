@@ -252,6 +252,13 @@ def build_report(result: dict, output: str | Path) -> Path:
     changed = float(result.get("percent_changed") or 0.0)
     changed_valid = result.get("percent_changed_valid")
     masked = result.get("percent_cloud_masked")
+    aoi_parts = []
+    if aoi.get("area_km2") is not None:
+        aoi_parts.append(f"{aoi['area_km2']} km²")
+    if pixels.get("analysis_width_px") and pixels.get("analysis_height_px"):
+        aoi_parts.append(f"{pixels['analysis_width_px']}×{pixels['analysis_height_px']} px")
+    if pixels.get("pixel_size_x_m") and pixels.get("pixel_size_y_m"):
+        aoi_parts.append(f"~{pixels['pixel_size_x_m']}×{pixels['pixel_size_y_m']} m")
     rows = [
         ("Location", location),
         ("Profile / pipeline", f"{profile} / {pipeline}"),
@@ -261,7 +268,7 @@ def build_report(result: dict, output: str | Path) -> Path:
         ("Changed pixels", f"{changed:.2f}% of raster" + (f" · {float(changed_valid):.2f}% of valid pixels" if changed_valid is not None else "")),
         ("Cloud/shadow masked", f"{float(masked):.2f}%" if masked is not None else "not reported"),
         ("Regions", str(len(result.get("change_regions") or []))),
-        ("AOI", f"{aoi.get('area_km2', 'n/a')} km² · {pixels.get('analysis_width_px', '?')}×{pixels.get('analysis_height_px', '?')} px · ~{pixels.get('pixel_size_x_m', '?')}×{pixels.get('pixel_size_y_m', '?')} m"),
+        ("AOI", " · ".join(aoi_parts) or "not reported"),
         ("Validation status", validation),
     ]
     story.append(_kv_table(rows, styles))

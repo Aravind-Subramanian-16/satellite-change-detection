@@ -196,3 +196,5 @@ def test_pdf_report_handles_missing_inputs_gracefully(tmp_path):
     assert "Satellite change analysis" in text
     assert "Summary in plain language" in text
     assert "Limitations" in text
+    assert "not reported" in text
+    assert "?×?" not in text
