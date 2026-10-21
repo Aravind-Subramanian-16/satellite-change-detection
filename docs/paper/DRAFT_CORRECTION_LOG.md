@@ -16,7 +16,14 @@ The original was left untouched. Evidence:
 | Item | Size | SHA-256 |
 |---|---:|---|
 | Original (Downloads) | 100,962 bytes | `69442ffb872507d03ae2d8d0c737ec00a3d9fcd1e30ec06a68e677b643c49056` |
-| Revised copy in `docs/paper/` | 102,779 bytes | `b41151d005a7f957a7b1fce5db30f0a38aab8e6c9a0d0e9aaa8eb2b177032928` |
+| Revised copy in `docs/paper/` | 102,768 bytes | `ffb084fc440e7869c58061a818aa14dbebdce61570f76a1d18e80e848fa315b7` |
+
+Revision note (2026-10-21): the revised copy and this log were corrected after
+rechecking the per-image IoU values at 10 m. The first revision grouped
+`test_77_768_768.png` (IoU 0.0556) in the 0.1--0.5 band; it belongs in the
+IoU < 0.1 band. The corrected bins are 924 + 4 + 5 + 2 = 935. The table,
+surrounding text and this log now use those counts. The original DOCX in
+Downloads was not opened for writing.
 
 Inputs used for verification:
 
@@ -114,22 +121,22 @@ computable from the saved CSV, among the 935 changed images at 10 m:
 | Behavior | Count | Percentage of 935 |
 |---|---:|---:|
 | No predicted change pixels | 924 | 98.82% |
-| Predicted, IoU < 0.1 | 3 | 0.32% |
-| Predicted, 0.1 ≤ IoU < 0.5 | 6 | 0.64% |
+| Predicted, IoU < 0.1 | 4 | 0.43% |
+| Predicted, 0.1 ≤ IoU < 0.5 | 5 | 0.53% |
 | Predicted, IoU ≥ 0.5 | 2 | 0.21% |
 | Total | 935 | 100.00% |
 
 The 11 non-empty predictions are:
 
-- IoU < 0.1: `test_102_256_256.png`, `test_113_768_768.png`, `test_54_512_0.png`;
-- 0.1 ≤ IoU < 0.5: `test_102_0_512.png`, `test_102_256_768.png`,
-  `test_104_512_0.png`, `test_77_768_768.png`, `test_89_512_256.png`,
-  `test_89_512_512.png`;
-- IoU ≥ 0.5: `test_16_0_256.png`, `test_71_768_768.png`.
+- IoU < 0.1: `test_113_768_768.png` (0.0107), `test_77_768_768.png` (0.0556),
+  `test_54_512_0.png` (0.0727), `test_102_256_256.png` (0.0964);
+- 0.1 ≤ IoU < 0.5: `test_102_0_512.png` (0.1088), `test_104_512_0.png` (0.1130),
+  `test_102_256_768.png` (0.1795), `test_89_512_256.png` (0.3841),
+  `test_89_512_512.png` (0.4318);
+- IoU ≥ 0.5: `test_16_0_256.png` (0.7269), `test_71_768_768.png` (0.6238).
 
-The percentages sum to 99.99 because of rounding; the revised caption/text does not
-claim otherwise. The original “blobby/imprecise” and “partially correct” labels were
-not reproducible from the saved columns and were replaced by the measurable IoU bands.
+The component percentages sum to 99.99 because of rounding; the table's total
+row is 100.00% by definition.
 
 ### 7. Degradation method description
 
