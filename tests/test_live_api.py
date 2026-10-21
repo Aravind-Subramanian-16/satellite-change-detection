@@ -364,6 +364,46 @@ def test_exported_class_table_matches_the_api_response(client, monkeypatch):
     assert float(total[1]) == pytest.approx(data["class_table"]["total"]["area_ha"])
 
 
+def _pdf_text(data: bytes) -> str:
+    import base64
+    import re
+    import zlib
+
+    chunks = []
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.S):
+        raw = match.group(1).strip()
+        try:
+            if raw.endswith(b"~>"):
+                raw = base64.a85decode(raw, adobe=True)
+            raw = zlib.decompress(raw)
+        except Exception:
+            continue
+        chunks.append(raw.decode("latin-1", "replace"))
+    return "\n".join(chunks)
+
+
+def test_report_endpoint_returns_pdf_with_the_same_numbers(client, monkeypatch):
+    pytest.importorskip("reportlab")
+    _use_fake(monkeypatch, FakeCopernicusClient())
+    response = client.post("/fetch-and-predict", json=_live_payload(profile="agriculture"))
+    data = response.json()
+
+    report = client.post("/report", json={"result": data})
+    assert report.status_code == 200
+    assert report.headers["content-type"] == "application/pdf"
+    assert report.content.startswith(b"%PDF")
+    text = _pdf_text(report.content)
+    assert "Summary in plain language" in text
+    assert f"{data['percent_changed']:.2f}%" in text
+    for row in data["class_table"]["rows"]:
+        assert f"{float(row['area_ha']):.2f}" in text
+        assert f"{float(row['percent_of_aoi']):.2f}%" in text
+
+    empty = client.post("/report", json={"result": {}})
+    assert empty.status_code == 200
+    assert empty.content.startswith(b"%PDF")
+
+
 @pytest.mark.parametrize(
     ("overrides", "fragment"),
     [
