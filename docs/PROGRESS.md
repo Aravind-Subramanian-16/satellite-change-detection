@@ -555,8 +555,30 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
     seven submission documents. `REPRODUCIBILITY.md` is marked historical and
     points to `ARTIFACT.md`.
   - Commits `7cc7519`, `e9607d5`, `36fd9c8`, `42755e2`.
-- [ ] Step 5. Twelve-slide talk, 10-minute notes, claims-on-slides, 20 Q&A,
+- [x] Step 5. Twelve-slide talk, 10-minute notes, claims-on-slides, 20 Q&A,
   demo script and handout.
+  - Evidence: `docs/presentation/slides.pptx` has exactly **12 slides** at
+    13.333 x 7.5 in, all 12 with embedded speaker notes; rendered to PDF with
+    LibreOffice and visually checked (slides 3, 7, 9, 10 and 12 rechecked after
+    the final wording changes). `docs/presentation/speaker_notes.md` contains a
+    1253-word script, a 9:45 timing table plus 0:15 buffer, and delivery rules;
+    it is generated from the deck notes by `scripts/make_slides.py`.
+  - `docs/presentation/CLAIMS_ON_SLIDES.md` maps every slide value to
+    `degradation_results.csv`, `oscd_results_v2.json`, `oscd_evidence.json` or
+    the paper; `docs/presentation/QA.md` has exactly **20** numbered questions
+    plus the "If you do not know" instruction; `docs/presentation/DEMO.md` is a
+    2:00 script with a labelled mocked-still fallback and **no committed
+    recording**.
+  - `docs/presentation/handout.pdf` is **one A4 page** (`595.28 x 841.89 pt`),
+    built by `scripts/make_handout.py`; it includes the F1 chart, three
+    key-number boxes, the OSCD line, the claim boundary and a TODO repository
+    URL/DOI line. Header overlap found in QA was fixed and the page re-rendered.
+  - Checks: `./venv/bin/python -m pytest -q` -> **128 passed, 3 skipped,
+    1 warning in 10.27s**; a grep of the presentation docs found no "first",
+    "novel", "state of the art", "one-shot", "fabricat" or "breakthrough".
+    No test-city scoring, training, fine-tuning or v3 run was performed.
+  - Commits `2622ec8` (deck, notes, handout, generators) and `29665ef`
+    (claims audit, Q&A, demo script).
 - [ ] Step 6. Re-verify the app and Phase A evidence; screenshots, console
   errors, Docker; mark anything not run unverified.
 - [ ] Step 7. One-click `notebooks/run_all_colab.ipynb`; results pending a
