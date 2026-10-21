@@ -1,0 +1,5 @@
+# Training / fine-tuning only. The web app and CPU benchmark do not need
+# PyTorch. Colab already provides a compatible torch/torchvision pair.
+-r requirements-benchmark.txt
+torch>=2.0
+torchvision>=0.15

@@ -1,0 +1,7 @@
+# OSCD evaluation, auto-improvement and paper figures.
+# rasterio is benchmark-only; on macOS Intel it may need GDAL and source build.
+# Colab/Linux installs a wheel.
+-r requirements.txt
+rasterio>=1.3,<2
+tqdm>=4.66,<5
+matplotlib>=3.7,<4

@@ -1,0 +1,32 @@
+{
+  "general": {
+    "status": "unvalidated, qualitative only",
+    "short": "unvalidated",
+    "display_metrics": false,
+    "evidence": "No labelled evaluation exists for the mixed general profile. The shared spectral thresholding was stress-tested on OSCD, whose labels cover urban change only; that does not validate agriculture, deforestation or water labels."
+  },
+  "agriculture": {
+    "status": "unvalidated, qualitative only",
+    "short": "unvalidated",
+    "display_metrics": false,
+    "evidence": "No labelled agriculture dataset has been scored. Single-pair NDVI/NDMI differences cannot separate harvest, irrigation or seasonal phenology from crop damage."
+  },
+  "deforestation": {
+    "status": "unvalidated, qualitative only",
+    "short": "unvalidated",
+    "display_metrics": false,
+    "evidence": "No labelled forest-loss dataset has been scored. The profile is a transparent NBR/NDVI rule with a minimum mapping unit, not a validated forest-monitoring product."
+  },
+  "builtup": {
+    "status": "quantitatively benchmarked on OSCD (urban change only, pooled F1 about 0.12)",
+    "short": "OSCD urban benchmark only",
+    "display_metrics": true,
+    "evidence": "The underlying spectral thresholding was scored on the official OSCD test split for urban change only (pooled F1 about 0.12). Source of record: benchmarks/results/oscd_results_v2.json/.md, which is absent from this checkout; verify before quoting. The added NDBI/BSI cues and MMU are not separately validated."
+  },
+  "roads": {
+    "status": "unvalidated, qualitative only",
+    "short": "unvalidated",
+    "display_metrics": false,
+    "evidence": "No road labels have been scored. Roads narrower than about 20 m are mostly sub-pixel at 10 m Sentinel-2 resolution, so this profile does not claim road detection; OSM is context only."
+  }
+}

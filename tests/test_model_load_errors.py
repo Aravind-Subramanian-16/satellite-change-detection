@@ -1,6 +1,7 @@
 """Model-loading failures are clear API errors rather than unhandled crashes."""
 import io
 
+import onnxruntime
 from fastapi.testclient import TestClient
 from PIL import Image
 import pytest
@@ -18,24 +19,25 @@ def test_invalid_onnx_model_has_actionable_runtime_error(tmp_path, monkeypatch):
     model_path = tmp_path / "invalid.onnx"
     model_path.touch()
     monkeypatch.setattr(app_module, "MODEL_ONNX_PATH", model_path)
-    monkeypatch.setattr(app_module, "session", None)
+    app_module.reset_model_session()
     monkeypatch.setattr(
-        app_module.onnxruntime,
+        onnxruntime,
         "InferenceSession",
         lambda _path: (_ for _ in ()).throw(RuntimeError("InvalidProtobuf")),
     )
 
-    with pytest.raises(RuntimeError, match="verified Drive model.onnx.*33,268,410 bytes.*InvalidProtobuf"):
+    with pytest.raises(app_module.ModelUnavailable, match="InvalidProtobuf.*Drive copy.*33268410"):
         app_module.get_onnx_session()
+    app_module.reset_model_session()
 
 
 def test_predict_returns_service_unavailable_for_invalid_onnx(tmp_path, monkeypatch):
     model_path = tmp_path / "invalid.onnx"
     model_path.touch()
     monkeypatch.setattr(app_module, "MODEL_ONNX_PATH", model_path)
-    monkeypatch.setattr(app_module, "session", None)
+    app_module.reset_model_session()
     monkeypatch.setattr(
-        app_module.onnxruntime,
+        onnxruntime,
         "InferenceSession",
         lambda _path: (_ for _ in ()).throw(RuntimeError("InvalidProtobuf")),
     )
@@ -47,5 +49,8 @@ def test_predict_returns_service_unavailable_for_invalid_onnx(tmp_path, monkeypa
     )
 
     assert response.status_code == 503
-    assert "replace it with the verified Drive model.onnx" in response.json()["detail"]
-    assert "InvalidProtobuf" in response.json()["detail"]
+    payload = response.json()
+    assert payload["code"] == "model_unavailable"
+    assert "33268410" in payload["error"]
+    assert "InvalidProtobuf" in payload["error"]
+    app_module.reset_model_session()

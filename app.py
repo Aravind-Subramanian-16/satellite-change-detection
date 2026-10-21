@@ -12,7 +12,7 @@ except ImportError:
 
 # Load environment variables from .env
 load_dotenv()
-import onnxruntime
+import hashlib
 import numpy as np
 from PIL import Image
 import io
@@ -21,13 +21,23 @@ import base64
 from change_reasoner import reason_regions
 from copernicus_client import fetch_satellite_image
 from geocoding import geocode_place, suggest_places
+from provenance import build_provenance, get_commit_hash
 from spectral_pipeline import SpectralConfig, decode_indices, detect_from_indices
 from tiling import tiled_predict
 from reports import build_report
 from history_store import save_analysis, list_analyses, get_analysis
 import tempfile
 import os
+import logging
+import sys
 from pathlib import Path
+
+logger = logging.getLogger("satellite_change")
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
 class FetchRequest(BaseModel):
     bbox: Optional[List[float]] = None
@@ -42,32 +52,105 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 MODEL_ONNX_PATH = Path(os.environ.get("MODEL_ONNX_PATH", "model.onnx"))
+EXPECTED_ONNX_BYTES = 33268410
 session = None
+_model_error: str | None = None
+_model_fingerprint: tuple[int, int] | None = None
+
+
+class ModelUnavailable(RuntimeError):
+    """Raised when the optional CNN cannot be loaded; the spectral path stays usable."""
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def model_status(attempt_load: bool = False) -> dict:
+    """Report model presence and loadability without ever modifying the file."""
+    global _model_error, _model_fingerprint
+    path = MODEL_ONNX_PATH
+    if not path.is_file():
+        return {
+            "present": False,
+            "path": str(path),
+            "expected_bytes": EXPECTED_ONNX_BYTES,
+            "error": f"No ONNX model at {path}. Set MODEL_ONNX_PATH or copy the Drive model.onnx (expected {EXPECTED_ONNX_BYTES} bytes).",
+        }
+    stat = path.stat()
+    fingerprint = (stat.st_size, stat.st_mtime_ns)
+    if attempt_load and (session is None or _model_fingerprint != fingerprint):
+        try:
+            get_onnx_session()
+        except ModelUnavailable as exc:
+            _model_error = str(exc)
+    return {
+        "present": True,
+        "path": str(path),
+        "size_bytes": stat.st_size,
+        "sha256": _file_sha256(path),
+        "expected_bytes": EXPECTED_ONNX_BYTES,
+        "size_matches_expected": stat.st_size == EXPECTED_ONNX_BYTES,
+        "loaded": session is not None,
+        "error": _model_error,
+    }
+
 
 def get_onnx_session():
     """Load the optional CNN weights only when Pipeline A is requested."""
-    global session
-    if session is None:
-        if not MODEL_ONNX_PATH.is_file():
-            raise FileNotFoundError(
-                f"Pipeline A requires an ONNX model, but {MODEL_ONNX_PATH} is missing. "
-                "Set MODEL_ONNX_PATH or copy model.onnx into the repository."
-            )
-        try:
-            session = onnxruntime.InferenceSession(str(MODEL_ONNX_PATH))
-        except Exception as exc:
-            raise RuntimeError(
-                f"Pipeline A could not load ONNX model {MODEL_ONNX_PATH}. The file may be "
-                "incompatible or invalid; replace it with the verified Drive model.onnx "
-                "(33,268,410 bytes). "
-                f"ONNX Runtime error: {exc}"
-            ) from exc
+    global session, _model_error, _model_fingerprint
+    if session is not None:
+        return session
+    if not MODEL_ONNX_PATH.is_file():
+        raise ModelUnavailable(
+            f"Pipeline A requires an ONNX model, but {MODEL_ONNX_PATH} is missing. "
+            "Set MODEL_ONNX_PATH or copy the Drive model.onnx (expected "
+            f"{EXPECTED_ONNX_BYTES} bytes). The spectral/live pipeline is unaffected."
+        )
+    try:
+        import onnxruntime
+        stat = MODEL_ONNX_PATH.stat()
+        session = onnxruntime.InferenceSession(str(MODEL_ONNX_PATH))
+        _model_fingerprint = (stat.st_size, stat.st_mtime_ns)
+        _model_error = None
+    except Exception as exc:  # InvalidProtobuf, missing runtime, incompatible opset
+        size = MODEL_ONNX_PATH.stat().st_size
+        digest = _file_sha256(MODEL_ONNX_PATH)
+        _model_error = (
+            f"model.onnx failed to load ({type(exc).__name__}: {exc}). "
+            f"size={size} bytes sha256={digest}. Replace it with the Drive copy "
+            f"({EXPECTED_ONNX_BYTES} bytes)."
+        )
+        session = None
+        raise ModelUnavailable(_model_error) from exc
     return session
+
+
+def reset_model_session() -> None:
+    global session, _model_error, _model_fingerprint
+    session = None
+    _model_error = None
+    _model_fingerprint = None
+
 
 @app.get("/health")
 async def health():
-    """Container-friendly liveness check that never exposes secrets."""
-    return {"status": "ok", "model_loaded": session is not None}
+    """Container-friendly liveness check that never exposes secrets or loads weights."""
+    return {
+        "status": "ok",
+        "model_present": MODEL_ONNX_PATH.is_file(),
+        "model_loaded": session is not None,
+        "commit": get_commit_hash(),
+    }
+
+
+@app.get("/model-status")
+async def model_status_endpoint():
+    return model_status(attempt_load=True)
 
 def preprocess_image(image_bytes):
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
@@ -108,7 +191,7 @@ def run_inference_arrays(img_a_rgb, img_b_rgb):
     binary_mask = (probs > 0.5).astype(np.uint8)
     regions = reason_regions(img_a_rgb, img_b_rgb, binary_mask)
     overlay = img_b_rgb.copy(); overlay[binary_mask == 1] = [255, 0, 0]
-    return {"percent_changed": float(binary_mask.mean() * 100), "overlay_base64": _encode_image(Image.blend(Image.fromarray(img_b_rgb), Image.fromarray(overlay), .5)), "image_a_base64": _encode_image(Image.fromarray(img_a_rgb)), "image_b_base64": _encode_image(Image.fromarray(img_b_rgb)), "mask_base64": _encode_image(Image.fromarray(binary_mask * 255)), "change_regions": regions, "confidence_base64": _encode_image(Image.fromarray((probs * 255).astype(np.uint8))), "pipeline": "cnn"}
+    return {"percent_changed": float(binary_mask.mean() * 100), "overlay_base64": _encode_image(Image.blend(Image.fromarray(img_b_rgb), Image.fromarray(overlay), .5)), "image_a_base64": _encode_image(Image.fromarray(img_a_rgb)), "image_b_base64": _encode_image(Image.fromarray(img_b_rgb)), "mask_base64": _encode_image(Image.fromarray(binary_mask * 255)), "change_regions": regions, "confidence_base64": _encode_image(Image.fromarray((probs * 255).astype(np.uint8))), "pipeline": "cnn", "profile": "general", "provenance": build_provenance("cnn", profile="general")}
 
 def run_inference_pipeline(img_a_bytes, img_b_bytes):
     try:
@@ -173,14 +256,23 @@ def spectral_change_detection(rgb_a_bytes, rgb_b_bytes, idx_a_bytes, idx_b_bytes
 async def predict(image_a: UploadFile = File(...), image_b: UploadFile = File(...)):
     img_a_bytes = await image_a.read()
     img_b_bytes = await image_b.read()
-    
+
     try:
         result = run_inference_pipeline(img_a_bytes, img_b_bytes)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ModelUnavailable as exc:
+        status = model_status()
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": str(exc),
+                "code": "model_unavailable",
+                "hint": "The live Sentinel-2 spectral path still works without model.onnx.",
+                "model": status,
+            },
+        )
     if "error" in result:
-        return JSONResponse(status_code=400, content={"error": result["error"]})
-        
+        return JSONResponse(status_code=400, content={"error": result["error"], "code": "invalid_image"})
+
     result["history_id"] = save_analysis(result, {"route": "/predict", "image_a": image_a.filename, "image_b": image_b.filename})
     return JSONResponse(content=result)
 

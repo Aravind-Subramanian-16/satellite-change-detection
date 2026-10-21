@@ -1,86 +1,196 @@
-# Project progress checklist
+# Project progress
 
-Evidence is recorded next to each checked item. Do not check items until the stated work or verification is complete. “Unverified” items remain unchecked, with reason/evidence noted in the phase log.
+Status legend: `[x]` verified with evidence below it, `[ ]` not verified.
+Evidence must be a command output or a committed file path. No benchmark number
+appears here without a local result file behind it.
+
+Checkout state (2026-10-21): `model.onnx`, `best_model.pt`, the OSCD imagery and
+the learned joblib are **absent from this local checkout**. The ONNX file present
+during the owner's earlier Phase A run measured 60,534,573 bytes and failed
+protobuf loading; it is not the verified 33,268,410-byte Drive copy. The v2
+benchmark result files are now present.
 
 ## Phase A — Finish setup and verify
 
-- [x] A1. Record local `model.onnx` byte size and SHA-256; do not modify it; tell user to replace it with the Drive copy of 33,268,410 bytes. Evidence: `stat -f 'size_bytes=%z' model.onnx && shasum -a 256 model.onnx` → `60534573`; SHA-256 `b3d95e3e796b3bda4b06dc37a4909a47be8b6c13460b59fed3d6f4a66e2ececd`. User must replace it with the 33,268,410-byte Drive copy.
-- [x] A1. Ensure model-dependent features fail with a clear error instead of crashing. Evidence: `tests/test_model_load_errors.py`; live curl `POST /predict` returned HTTP 503 with `Pipeline A could not load ONNX model... replace it with the verified Drive model.onnx (33,268,410 bytes)`.
-- [ ] A2. Install dependencies in the venv using `python -m pip`. Attempt: `venv/bin/python -m pip install -r requirements.txt` failed while building rasterio's build requirements: `[Errno 28] No space left on device`; rasterio also requires GDAL when built from source.
-- [x] A2. Run `python -m pytest -q` and record exact counts. Evidence: `venv/bin/python -m pytest -q` → `13 passed, 3 skipped, 2 warnings in 4.03s`; skips: invalid-model regression, rasterio, reportlab.
-- [x] A3. Start the app; verify `/health`. Evidence: live uvicorn + curl → `GET /health: {"status":"ok","model_loaded":false}`.
-- [x] A3. Verify image upload flow. Evidence: synthetic PNG multipart upload via curl reached `/predict` and returned HTTP 503 with actionable model-replacement error; successful inference awaits the verified Drive model.
-- [x] A3. Verify dashboard rendering. Evidence: `curl GET /` returned HTTP 200 and included dashboard HTML markers (`slider-container`, `heatmap`, `History`, `tab-btn`).
-- [ ] A3. Verify before/after slider. Unverified: no Playwright/browser available; only static HTML was fetched.
-- [ ] A3. Verify heatmap toggle. Unverified: no Playwright/browser available; only static HTML was fetched.
-- [ ] A3. Verify report download. Unverified: `POST /report` returned HTTP 500 because reportlab is not installed; dependency install was blocked by disk space.
-- [ ] A3. Verify History tab. Unverified: API `GET /history` returned HTTP 200 and `[]`; UI interaction was not browser-tested.
-- [ ] A3. Save screenshots under `docs/screenshots/` and record browser console errors; mark unavailable checks unverified. Unverified: Playwright unavailable; no screenshots or browser console are fabricated.
-- [x] A4. Build Docker image if Docker exists; verify `/health` and PDF generation in container, or record Docker unavailable. Evidence: `docker --version` → `sh: docker: command not found`.
-- [x] A5. Add secret-free `.env.example`. Evidence: `.env.example`; contains blank credential fields only.
-- [x] A5. Add CPU-only Render free-tier `render.yaml` with health check. Evidence: `render.yaml`; `plan: free`, Python service, `/health` check, no GPU request.
-- [x] A5. Add `DEPLOY.md`. Evidence: `DEPLOY.md`; documents local setup, model replacement, free-tier caveats, and secrets.
+- [x] A1. Record the local `model.onnx` byte size and SHA-256; do not modify it;
+  tell the owner to replace it with the Drive copy of 33,268,410 bytes.
+  - Evidence (owner's earlier environment): `stat -f 'size_bytes=%z' model.onnx
+    && shasum -a 256 model.onnx` → `60534573`; SHA-256
+    `b3d95e3e796b3bda4b06dc37a4909a47be8b6c13460b59fed3d6f4a66e2ececd`.
+    That file was invalid; replacement is still required. The file is absent
+    from the current checkout, so `/model-status` reports `present: false`.
+- [x] A1b. Model-dependent features fail with a clear error instead of crashing.
+  - Evidence: `tests/test_model_status.py`, `tests/test_model_load_errors.py`;
+    live `POST /predict` → HTTP 503 with actionable size/Drive instructions.
+- [x] A2. Install dependencies in a venv with `python -m pip`; run
+  `python -m pytest -q`; record exact counts.
+  - Evidence: split runtime/benchmark/dev requirements; local install succeeded
+    (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
+    `./venv/bin/python -m pytest -q` → **33 passed, 1 skipped, 1 warning in
+    2.95s**. The skip is the Pipeline A regression test requiring `model.onnx`.
+    Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
+- [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
+  heatmap, report download and History; save screenshots; record console errors;
+  mark anything not run unverified.
+  - Evidence: `docs/PHASE_A_REPORT.md#a3-browser-verification`;
+    `docs/screenshots/phase_a_*.png`;
+    `docs/screenshots/phase_a_report_sample.pdf` (168,765 bytes, downloaded via
+    the UI). Dashboard/slider/heatmap used a **synthetic injected result**;
+    real CNN inference is unverified without weights. Console: expected 503
+    from `/predict`, one missing-favicon 404, no page errors.
+- [x] A4. Build Docker if available and check `/health` plus PDF generation;
+  otherwise state Docker is unavailable.
+  - Evidence: `docker --version` → command not found. Image checks are
+    **unverified**; recorded in `docs/PHASE_A_REPORT.md#a4-docker`.
+- [x] A5. Add `.env.example` (no secrets), `render.yaml` (free tier, CPU only,
+  health check) and `DEPLOY.md`.
+  - Evidence: `.env.example`, `render.yaml` (`plan: free`, Docker, `/health`,
+    no GPU), `DEPLOY.md`.
 
-## Phase B — Live map picker and best-image selection
+## Phase B — Live map picker with best-image selection
 
-- [ ] B1. Pin Leaflet to an exact cdnjs version; use OSM tiles with required attribution and optional Esri imagery without API keys.
-- [ ] B1. Implement place search via `geocoding.py`, zoom-to-location, and an AOI box.
-- [ ] B1. Enforce minimum zoom near 12 before AOI confirmation.
-- [ ] B1. Enforce configurable maximum AOI dimensions of 10 km × 10 km; report area, expected pixel dimensions, too-large and too-zoomed-out states.
-- [ ] B2. Add before/after date pickers and configurable ± date windows (default 30 days).
-- [ ] B3. Add `/scenes` using `copernicus_client.py` to query Sentinel-2 L2A scenes intersecting each AOI/date window.
-- [ ] B3. Rank scenes by AOI coverage, cloud cover, and requested-date proximity; return top five per window with date, cloud, and coverage.
-- [ ] B3. Show recommended scenes, allow overrides, and warn on different seasons.
-- [ ] B4. Compute AOI cloud/shadow fraction from SCL after fetch; warn above configurable 30%, suggest next scene, and preserve fully-masked error handling.
-- [ ] B5. Pass AOI and selected scenes through the existing pipeline without changing detection logic.
-- [ ] B6. Display pipeline, masked fraction, scene IDs/dates, and decision-support-not-ground-truth note.
-- [ ] B7. Add network-free mocked-catalog pytest tests for ranking, AOI limits, season warning, and cloud warning.
+- [ ] B1. Leaflet pinned to an exact cdnjs version with OSM tiles (optional Esri
+  World Imagery), correct attribution, no API keys; place search/geocoding,
+  zoom-to-location, AOI box; minimum zoom ~12 before confirmation; maximum AOI
+  10 km × 10 km configurable; AOI area in km² and expected pixel dimensions;
+  clear too-large / too-zoomed-out messages.
+- [ ] B2. Before/after date pickers with a ± window (default 30 days).
+- [ ] B3. `/scenes` queries the Copernicus catalog for Sentinel-2 L2A scenes
+  intersecting the AOI per window; ranks by AOI coverage, cloud cover and
+  closeness to requested date; returns top 5 per window with date, cloud % and
+  coverage %; UI shows a “recommended” badge and allows override; warns when the
+  two dates fall in different seasons.
+- [ ] B4. After fetching, compute cloud and shadow fraction over the AOI from
+  SCL; above a configurable 30% warn and suggest the next-best scene; fully
+  masked uses the existing error state.
+- [ ] B5. Pass AOI and chosen scenes through the existing pipeline without
+  changing detection logic in this phase.
+- [ ] B6. UI shows pipeline used, percent masked, scene IDs and dates, and a
+  decision-support-not-ground-truth note.
+- [ ] B7. pytest tests with mocked catalog responses covering ranking, AOI
+  limits, season warning and cloud warning.
 
 ## Phase C — Analysis profiles
 
-- [ ] C0. Add profile selector to UI/API; keep general profile as unchanged default; define declarative profile configs for indices, thresholds, MMU, report wording, and honesty notes.
-- [ ] C1. Agriculture: NDVI + NDMI (B08/B11), stress/vegetation-loss flags, enforced same-season warning, optional 3–5 date phenology timeline, and single-pair harvest/seasonal-confusion wording.
-- [ ] C2. Deforestation: NBR (B08/B12) + NDVI drop restricted to before-image vegetation; configurable 0.5 ha default MMU; hectares per region; mandatory cloud/shadow mask.
-- [ ] C3. Built-up/industrial: NDBI, built-up and bare-soil index changes plus NDVI-loss cue; use existing reasoner to classify new construction vs cleared land; identify as OSCD-overlapping profile.
-- [ ] C4. Roads: state that <~20 m roads are mostly sub-pixel at 10 m and do not claim road detection; optional cached Overpass road context overlay, AOI query, attribution, ODbL verification note, and changed-area-within-X-m context only.
-- [ ] C5. Add `profiles/validation_status.json`; show built-up “quantitatively benchmarked on OSCD (urban change only, pooled F1 about 0.12)” and other profiles “unvalidated, qualitative only”; never show accuracy for unvalidated profiles.
-- [ ] C6. Include profile, thresholds, MMU, scenes, dates, masked fraction, code commit, validation status, and limitations in PDF reports; add GeoJSON/CSV region exports with area/type/confidence.
-- [ ] C7. Add synthetic pytest coverage for each profile: index math, MMU, before-vegetation restriction, and season warning.
+- [ ] C0. Add an analysis-profile selector to UI and API; each profile is a
+  small declarative config (indices, thresholds, MMU, report wording, honesty
+  notes) on top of `spectral_pipeline.py` and `change_reasoner.py`; general
+  profile remains default and unchanged.
+- [ ] C1. Agriculture: NDVI and NDMI difference, cropland stress /
+  vegetation-loss flags, enforced same-season warning, optional 3–5 date NDVI
+  timeline; report wording explains that single-pair differences confuse
+  harvest/season cycles with damage.
+- [ ] C2. Deforestation: NBR and NDVI drop restricted to pixels vegetated in the
+  before image, configurable MMU (default 0.5 ha), area in hectares per region,
+  mandatory cloud/shadow masking.
+- [ ] C3. Built-up/industrial: NDBI, built-up index and bare-soil index change
+  with an NDVI-loss cue; existing change reasoner distinguishes new construction
+  from cleared land.
+- [ ] C4. Roads: UI/docs state that roads narrower than ~20 m are mostly
+  sub-pixel at 10 m; do not claim road detection; optional cached OSM/Overpass
+  road overlay with attribution and ODbL caveat; report “changed area within X m
+  of mapped roads” as context only.
+- [ ] C5. Validation-status badge from `profiles/validation_status.json`:
+  built-up “quantitatively benchmarked on OSCD (urban change only, pooled F1
+  about 0.12)”; all others “unvalidated, qualitative only”; never show accuracy
+  numbers for unvalidated profiles.
+- [ ] C6. PDF reports include profile, thresholds, MMU, scene IDs, dates,
+  percent masked, code commit hash, validation status and limitations; add
+  GeoJSON and CSV exports of regions with area, type and confidence.
+- [ ] C7. pytest tests on synthetic arrays for each profile (index math, MMU,
+  vegetated-before restriction, season warning).
 
-## Phase D — Learned model beyond CNN (OSCD train only)
+## Phase D — Learned model beyond the CNN (OSCD train only)
 
-- [ ] D1. Add `benchmarks/train_pixel_classifier.py` with CPU random forest or gradient boosting over both-date bands, NDVI/NDBI/NBR/NDMI/BSI differences, and 3×3/7×7 local means.
-- [ ] D1. Restrict training/model selection to 14 OSCD train cities; use fixed seeded three-city validation; choose class weight/threshold there; enforce no test-city reads.
-- [ ] D2. Score the 10 test cities once; write separate `oscd_results_v3.json/.md` with metrics and predicted/true fractions, labelled “learned pixel classifier (OSCD train)”; disclose third test-split scoring.
-- [ ] D3. Save joblib outside git and add optional app loader/flag; keep explainable spectral default.
-- [ ] D3. Add `notebooks/oscd_pixel_classifier.ipynb` aligned with OSCD benchmark setup; do not run locally; v3 results stay unverified until user supplies Colab output.
-- [ ] D4. Add synthetic feature-builder and no-test-city-guard tests.
+- [ ] D1. `benchmarks/train_pixel_classifier.py`: gradient-boosted trees or
+  random forest (scikit-learn, CPU) on per-pixel band reflectances for both
+  dates, NDVI/NDBI/NBR/NDMI/BSI differences, and 3×3/7×7 local means; train on
+  14 OSCD TRAIN cities with 3 fixed seeded held-out train cities; never read the
+  10 test cities during training/selection.
+- [ ] D2. Save the model as a small joblib file outside git; loader available to
+  the app as an optional “learned” pipeline behind a flag; explainable spectral
+  pipeline stays default.
+- [ ] D3. `notebooks/oscd_pixel_classifier.ipynb` matching `oscd_benchmark.ipynb`
+  setup; not run locally; results unverified until owner pastes Colab output.
+- [ ] D4. Tests with synthetic data for the feature builder and the no-test-city
+  guard.
+- [ ] D5. Test-set scoring deferred to Phase D2 step 6 for pre-registered
+  systems only.
+
+## Phase D2 — X-factors and autonomous accuracy improvement
+
+- [ ] D2.1. `docs/paper/XFACTORS.md`: differentiators, evidence needed, prior-work
+  comparison topics as `[CITE: topic]`, status implemented/partial/idea.
+- [ ] D2.2. Implement behind flags, each with a synthetic-data test, default
+  pipeline unchanged: (a) radiometric normalisation, (b) temporal median
+  compositing, (c) morphological cleanup + object MMU, (d) CNN fine-tuning on
+  OSCD train only (new file, never `best_model.pt`), (e) fusion/stacking, (f)
+  uncertainty from model agreement with ECE on held-out train cities.
+- [ ] D2.3. `benchmarks/auto_improve.py`: fixed search space/seeds,
+  leave-city-out CV over 14 train cities, hard trial budget, every trial logged
+  to `benchmarks/results/auto_improve_log.json` including failures, selection by
+  validation F1 only, guard that raises if any test city is read, ablation tables
+  on validation only.
+- [ ] D2.4. `notebooks/oscd_auto_improve.ipynb` (Colab); not run locally; gains
+  unverified until owner pastes output.
+- [ ] D2.5. `docs/paper/PREREGISTRATION.md` committed before any test scoring,
+  listing exact systems, metrics and selection rule.
+- [ ] D2.6. Score the 10 test cities ONCE for pre-registered systems into
+  `oscd_results_v3.json/.md` without overwriting v2; record the third scoring; no
+  tuning/reselection after seeing results. **Blocked: OSCD data and weights
+  absent locally; only Colab can run it.**
+- [ ] D2.7. Report improvements with variance across cities; drop and log
+  components that do not help on validation.
 
 ## Phase E — Production hardening
 
-- [ ] E1. Validate upload type, size, and dimensions; rate-limit; enforce strict CORS/security headers; keep secrets out of logs; add structured logs and request IDs.
-- [ ] E1. Run Docker as non-root; pin compatible dependency ranges for Colab; do not pin onnx in runtime requirements; keep onnx in dev requirements only.
-- [ ] E2. Add GitHub Actions pytest workflow; model-dependent tests skip cleanly.
-- [ ] E3. Review accessibility/UX: keyboard slider, color-blind-safe heatmap, legends/units, loading/errors for bad file/Copernicus/no imagery/fully masked/oversized AOI, responsive layout, empty states.
-- [ ] E4. Add provenance to every result: code commit, pipeline, profile, thresholds, scenes, dates, masked fraction, timestamp.
-- [ ] E5. Add user-facing `docs/LIMITATIONS.md` covering 10 m resolution, seasonal confusion, clouds, and no ground-truth guarantee.
+- [ ] E1. Upload validation (type, size, dimensions), rate limiting, strict
+  CORS, security headers, no secrets in logs, structured logging, request IDs,
+  non-root Docker user, pinned compatible dependency ranges that install on
+  Colab (no onnx pin; onnx only in `requirements-dev.txt`).
+- [ ] E2. GitHub Actions workflow running pytest on push with model-dependent
+  tests skipped cleanly.
+- [ ] E3. Accessibility/UX review: keyboard slider, colour-blind-safe heatmap,
+  legends/units, loading and error states for every failure, responsive layout,
+  empty states.
+- [ ] E4. Provenance on every result: commit hash, pipeline, profile,
+  thresholds, scene IDs, dates, percent masked, timestamp.
+- [ ] E5. `docs/LIMITATIONS.md`: 10 m resolution, seasonal confusion, clouds,
+  no ground-truth guarantee.
 
 ## Phase F — Paper and presentation
 
-- [ ] F1. Create `docs/paper/paper.tex` using IEEEtran: abstract, introduction, related-work placeholders, methods, experiments, results tables from saved JSON, discussion, limitations, conclusion.
-- [ ] F1. Cover LEVIR-CD 0.5 m CNN, spectral+SCL hardcoded/Otsu/percentile, reasoner, profiles, map/AOI best-scene Copernicus workflow, and learned classifier.
-- [ ] F2. Frame contribution honestly as reproducible deployed hybrid 10 m benchmark; CNN transfer F1 ~0.0007; spectral best ~0.12 but weak; not state-of-the-art; domain gap hypothesis; explain Otsu over- and tuned-threshold under-prediction; disclose two test scoring events (three after v3); state three non-built-up profiles are unvalidated.
-- [ ] F3. Use `[CITE: topic]` placeholders only; maintain `docs/paper/TODO_CITATIONS.md`; invent no citations, DOIs, impact factors, baselines, or acceptance rates.
-- [ ] F4. Add `scripts/make_paper_figures.py` reading saved JSON for per-city F1, predicted-vs-true fraction, precision-recall scatter, and qualitative placeholder; add fake-JSON test.
-- [ ] F5. Add `CLAIMS_AUDIT.md`, `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md`; include commands, commits, seeds, Colab steps, and OSCD CC BY-NC-SA/commercial-use legal-review note.
-- [ ] F6. Add `docs/paper/VENUES.md` describing venue types/expectations; explicitly require official verification of scope, length, fees; no impact factors/acceptance rates.
-- [ ] F7. Add `docs/presentation/slides.md` with 12 slides, speaker notes, live demo script; add `docs/presentation/QA.md` with 20 honest reviewer/panel Q&As.
-- [ ] F8. Include future work: human-feedback labels, CNN fine-tuning on OSCD train, labeled agriculture/deforestation data, higher-resolution roads imagery.
+- [ ] F1. `docs/paper/paper.tex` (IEEEtran) with abstract, introduction,
+  related work placeholders, methods, experiments, results tables generated from
+  JSON, ablations, discussion, limitations, conclusion.
+- [ ] F2. Honest framing (negative transfer: aggregate CNN F1 0.0007; spectral
+  percentile F1 0.1176, hardcoded 0.0782, Otsu 0.0953; two test scoring events
+  in v2, third planned in v3; three non-built-up profiles unvalidated).
+- [ ] F3. `[CITE: topic]` placeholders and `docs/paper/TODO_CITATIONS.md`; no
+  invented references or baselines.
+- [ ] F4. `scripts/make_paper_figures.py` reading saved JSON and writing
+  `docs/paper/figures/` (per-city F1, predicted vs true fraction,
+  precision–recall, ablation, reliability, qualitative placeholder); test with
+  fake JSON.
+- [ ] F5. `CLAIMS_AUDIT.md`, `THREATS_TO_VALIDITY.md`, `REPRODUCIBILITY.md`
+  (commands, hashes, seeds, Colab steps, OSCD CC BY-NC-SA and commercial-use
+  caveat).
+- [ ] F6. `NOVELTY_CHECKLIST.md` with 3–5 searches per claimed contribution,
+  databases, status unverified.
+- [ ] F7. `VENUES.md` with venue types and expectations; scope/length/fees
+  flagged for verification; no impact factors or acceptance rates.
+- [ ] F8. `SUBMISSION_CHECKLIST.md`: anonymisation, data/code availability,
+  licences, ethics/dual-use, contributions, arXiv decision, AI-assistance
+  disclosure.
+- [ ] F9. `docs/presentation/slides.md` (12 slides, speaker notes, live-demo
+  script) and `docs/presentation/QA.md` (20 honest reviewer questions).
+- [ ] F10. Future work: human-feedback loop, labelled agriculture/deforestation
+  data, higher-resolution roads, unfinished D2 ideas.
 
 ## Phase commit and push log
 
-- Initial checklist commit: `d3ebed5` (local checkpoint; pending push with Phase A checkpoint).
-- Phase A partial checkpoint: pending. Phase A remains incomplete pending dependency space, verified model replacement, browser interactions/screenshots, and PDF dependency.
+- Phase A checkpoint: rebased onto remote v2 results; commit hash recorded in
+  `git log` (message begins “feat: harden model fallback”). Push attempted.
 - Phase B commit/push: pending.
 - Phase C commit/push: pending.
 - Phase D commit/push: pending; v3 is not run locally.
@@ -89,7 +199,13 @@ Evidence is recorded next to each checked item. Do not check items until the sta
 
 ## Manual actions for the owner
 
-- Replace `model.onnx` with Drive `oscd/weights/model.onnx` without deleting the current file: from the project directory run `mv model.onnx model.onnx.local-backup 2>/dev/null`, copy the Drive file to `model.onnx`, then check `ls -l model.onnx` is 33,268,410 bytes.
-- Re-run `venv/bin/python -c "import onnxruntime as o; s=o.InferenceSession('model.onnx'); print([i.name for i in s.get_inputs()])"` and share output; expected names: `['input_a', 'input_b']`.
-- Free disk space (without deleting project/user data) and retry `venv/bin/python -m pip install -r requirements.txt` so reportlab/rasterio and remaining dependencies can install.
-- For interactive UI validation/screenshots, provide a browser/Playwright runtime; Docker is not installed in this environment.
+- Replace the invalid 60,534,573-byte `model.onnx` with the verified
+  33,268,410-byte Drive copy and confirm input names `input_a`, `input_b`.
+- Run the Colab notebooks (`oscd_pixel_classifier.ipynb`,
+  `oscd_auto_improve.ipynb`) and paste the outputs; local checkout has no OSCD
+  data.
+- Verify novelty in external databases using `NOVELTY_CHECKLIST.md` before any
+  “novel” claim.
+- Choose a target venue after checking its official scope/length/fees.
+- Obtain a legal review of OSCD (CC BY-NC-SA) and OpenStreetMap ODbL
+  obligations before redistribution or commercial use.

@@ -1,3 +1,9 @@
+# Local test / UI-smoke dependencies (no rasterio: benchmark-only).
 -r requirements.txt
-# ONNX is required only to export a PyTorch checkpoint, not to run the app.
+pytest>=7.4,<9
+httpx>=0.27,<1
+# ONNX is needed only to export a PyTorch checkpoint; intentionally unpinned.
 onnx
+playwright>=1.44,<2
+tqdm>=4.66,<5
+matplotlib>=3.7,<4

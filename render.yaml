@@ -1,17 +1,33 @@
 services:
   - type: web
     name: satellite-change-detection
-    runtime: python
+    runtime: docker
     plan: free
-    buildCommand: python -m pip install -r requirements.txt
-    startCommand: python -m uvicorn app:app --host 0.0.0.0 --port $PORT
+    region: oregon
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.10
-      - key: MODEL_ONNX_PATH
-        value: model.onnx
       - key: COPERNICUS_CLIENT_ID
         sync: false
       - key: COPERNICUS_CLIENT_SECRET
         sync: false
+      - key: ANALYSIS_DB_PATH
+        value: /app/data/analysis_history.sqlite3
+      - key: MAX_AOI_KM
+        value: "10"
+      - key: DEFAULT_WINDOW_DAYS
+        value: "30"
+      - key: CLOUD_WARN_PERCENT
+        value: "30"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: LOG_LEVEL
+        value: INFO
+      # Optional: mount a valid 33,268,410-byte model at /app/model.onnx or
+      # point this at a path provided by a persistent disk/secret mount.
+      - key: MODEL_ONNX_PATH
+        value: /app/model.onnx
+      - key: ENABLE_LEARNED_MODEL
+        value: "0"
