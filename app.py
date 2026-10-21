@@ -20,6 +20,7 @@ import base64
 
 from change_reasoner import reason_regions
 import copernicus_client as copernicus
+import learned_pipeline
 from copernicus_client import CopernicusError, MissingCredentialsError, NoScenesError
 from geocoding import geocode_place, suggest_places
 from exports import csv_bytes, geojson_bytes
@@ -188,6 +189,91 @@ async def health():
 @app.get("/model-status")
 async def model_status_endpoint():
     return model_status(attempt_load=True)
+
+
+@app.get("/learned-model-status")
+async def learned_model_status_endpoint():
+    """Report the optional joblib model without making it a startup dependency."""
+    return learned_pipeline.model_status(attempt_load=True)
+
+
+@app.post("/predict-learned")
+async def predict_learned(
+    bands_before: UploadFile = File(...),
+    bands_after: UploadFile = File(...),
+):
+    """Optional experimental pipeline; accepts .npz reflectance bands, not RGB PNGs."""
+    if not learned_pipeline.is_enabled():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "The learned pixel pipeline is disabled.",
+                "code": "learned_pipeline_disabled",
+                "hint": "Set ENABLE_LEARNED_MODEL=1 and LEARNED_MODEL_PATH to an OSCD-trained joblib artifact.",
+                "model": learned_pipeline.model_status(),
+            },
+        )
+    before_bytes = await bands_before.read()
+    after_bytes = await bands_after.read()
+    try:
+        bands_a = learned_pipeline.bands_from_npz(before_bytes)
+        bands_b = learned_pipeline.bands_from_npz(after_bytes)
+        mask, probability, meta = learned_pipeline.predict_change(bands_a, bands_b)
+    except learned_pipeline.LearnedModelUnavailable as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": str(exc),
+                "code": "learned_model_unavailable",
+                "hint": "Train the optional joblib model on OSCD TRAIN cities or use the spectral/live path.",
+                "model": learned_pipeline.model_status(),
+            },
+        )
+    except (ValueError, KeyError) as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc), "code": "invalid_bands"})
+
+    rgb_a = learned_pipeline.rgb_from_bands(bands_a)
+    rgb_b = learned_pipeline.rgb_from_bands(bands_b)
+    regions = reason_regions(rgb_a, rgb_b, mask)
+    overlay = rgb_b.copy()
+    overlay[mask == 1] = [255, 0, 0]
+    blended = Image.blend(Image.fromarray(rgb_b), Image.fromarray(overlay), alpha=0.5)
+    result = {
+        "percent_changed": float(mask.mean() * 100.0),
+        "image_a_base64": _encode_image(Image.fromarray(rgb_a)),
+        "image_b_base64": _encode_image(Image.fromarray(rgb_b)),
+        "mask_base64": _encode_image(Image.fromarray(mask * 255)),
+        "overlay_base64": _encode_image(blended),
+        "probabilities_base64": _encode_image(Image.fromarray((probability * 255).astype(np.uint8))),
+        "change_regions": regions,
+        "pipeline": "learned_pixel",
+        "profile": "learned_oscd_urban",
+        "profile_label": "Learned OSCD urban-change classifier (experimental)",
+        "percent_cloud_masked": None,
+        "validation_status": "experimental; trained on OSCD training cities only; test-set score not available here",
+        "display_metrics": False,
+        "model": meta,
+        "image_shape": [int(mask.shape[0]), int(mask.shape[1])],
+    }
+    result["provenance"] = build_provenance(
+        "learned_pixel",
+        profile="learned_oscd_urban",
+        thresholds={"probability": meta["threshold"]},
+        extra={
+            "model": {"path": meta["model"], "feature_count": meta["feature_count"]},
+            "options": {"input": "Sentinel-2 L2A reflectance .npz", "bands": list(learned_pipeline.BAND_KEYS)},
+        },
+    )
+    result["history_id"] = save_analysis(
+        result,
+        {
+            "route": "/predict-learned",
+            "bands_before": bands_before.filename,
+            "bands_after": bands_after.filename,
+            "threshold": meta["threshold"],
+        },
+    )
+    return JSONResponse(content=result)
 
 def preprocess_image(image_bytes):
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')

@@ -208,6 +208,19 @@ Limitations: city-level results vary widely (for example, percentile F1 ranges f
 
 **TODO:** Add published OSCD baselines with citations and comparable evaluation protocols; no baseline numbers are invented here. The v2 LaTeX versions of both tables are in [`PAPER_NOTES.md`](PAPER_NOTES.md).
 
+## Optional learned pixel classifier (experimental)
+
+`learned_features.py` builds 55 per-pixel features from B02/B03/B04/B08/B11/B12 on both dates: bands, five spectral indices, their differences and 3×3/7×7 local means. `benchmarks/train_pixel_classifier.py` fits a CPU `HistGradientBoostingClassifier` on 14 OSCD training cities, holding out 3 seeded training cities only to select the probability threshold. A hard guard rejects the 10 official test cities before any raster is read, and the trainer never scores the test split.
+
+Training runs on Colab via [`notebooks/oscd_pixel_classifier.ipynb`](notebooks/oscd_pixel_classifier.ipynb); the joblib artifact is written to Drive, outside git (`*.joblib`, `artifacts/` are ignored). The artifact is **not** in this checkout, so training results are unverified here and no accuracy claim is made. The app exposes `GET /learned-model-status` and `POST /predict-learned` (two `.npz` files with the six bands). The endpoint is opt-in:
+
+```bash
+export ENABLE_LEARNED_MODEL=1
+export LEARNED_MODEL_PATH=artifacts/learned_pixel_model.joblib
+```
+
+Without the flag or artifact the endpoint returns HTTP 503 and the spectral/live pipelines are unchanged. Learned results always report `display_metrics: false` and an experimental validation status; a test-city score is deferred to the preregistered Phase D2 scoring run.
+
 ## Deployment
 
 Build with `docker build -t satellite-change .` and run `docker run -p 8000:8000 --env-file .env satellite-change`. Supply `COPERNICUS_CLIENT_ID` and `COPERNICUS_CLIENT_SECRET` through the platform secret manager, never source control. For Render/Railway/Fly.io: select Docker deployment, expose port 8000, set the two secrets, and configure health check `/health`. Use one CPU worker because ONNX model memory and free-tier cold starts are limiting.

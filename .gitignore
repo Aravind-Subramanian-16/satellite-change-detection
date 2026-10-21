@@ -19,6 +19,8 @@ analysis_history.sqlite3
 *.pt
 *.onnx
 *.pth
+*.joblib
+artifacts/
 
 # ── Dataset (too large for GitHub) ───────────────────────
 dataset/

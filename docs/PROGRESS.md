@@ -26,11 +26,12 @@ benchmark result files are now present.
   `python -m pytest -q`; record exact counts.
   - Evidence: split runtime/benchmark/dev requirements; local install succeeded
     (fastapi 0.156.3, numpy 2.2.6, onnxruntime 1.19.2, scikit-learn 1.7.2).
-    `./venv/bin/python -m pytest -q` → **60 passed, 2 skipped, 1 warning in
-    3.87s** after the Phase B/C additions (initial Phase A run: 41 passed, 2
-    skipped, 4.64s). Skips: the Pipeline A regression (needs `model.onnx` and a
-    dataset sample) and OSCD label tests (rasterio is benchmark-only on this
-    host). Details: `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
+    `./venv/bin/python -m pytest -q` → **72 passed, 2 skipped, 1 warning in
+    7.87s** after the Phase D additions (Phase B/C run: 60 passed, 2 skipped,
+    3.87s; initial Phase A run: 41 passed, 2 skipped, 4.64s). Skips: the
+    Pipeline A regression (needs `model.onnx` and a dataset sample) and OSCD
+    label tests (rasterio is benchmark-only on this host). Details:
+    `docs/PHASE_A_REPORT.md#a2-dependencies-and-tests`.
 - [x] A3. Start the app and verify `/health`, upload flow, dashboard, slider,
   heatmap, report download and History; save screenshots; record console errors;
   mark anything not run unverified.
@@ -171,20 +172,59 @@ No accuracy number is displayed for any unvalidated profile.
 
 ## Phase D — Learned model beyond the CNN (OSCD train only)
 
-- [ ] D1. `benchmarks/train_pixel_classifier.py`: gradient-boosted trees or
+Verified 2026-10-21 from code and synthetic-array tests. The local checkout has
+no OSCD imagery and no joblib artifact, so **training, held-out validation
+numbers and real-artifact inference are unverified**. No learned accuracy
+number is claimed.
+
+- [x] D1. `benchmarks/train_pixel_classifier.py`: gradient-boosted trees or
   random forest (scikit-learn, CPU) on per-pixel band reflectances for both
   dates, NDVI/NDBI/NBR/NDMI/BSI differences, and 3×3/7×7 local means; train on
   14 OSCD TRAIN cities with 3 fixed seeded held-out train cities; never read the
   10 test cities during training/selection.
-- [ ] D2. Save the model as a small joblib file outside git; loader available to
+  - Evidence: `learned_features.py` builds a 55-feature stack (12 bands, 10
+    indices, 11 differences, 22 local means);
+    `benchmarks/train_pixel_classifier.py` requires exactly 14 train cities,
+    seeds the 3 held-out cities (`DEFAULT_SEED=42`), fits on 11, selects the
+    threshold on held-out TRAIN only, and records
+    `official_test_cities_excluded` + `test_split_scored: false`. The trainer
+    raises through `assert_no_test_cities` before reading rasters. Training has
+    **not** been run locally; `notebooks/oscd_pixel_classifier.ipynb` is the
+    owner-run Colab path.
+- [x] D2. Save the model as a small joblib file outside git; loader available to
   the app as an optional “learned” pipeline behind a flag; explainable spectral
   pipeline stays default.
-- [ ] D3. `notebooks/oscd_pixel_classifier.ipynb` matching `oscd_benchmark.ipynb`
+  - Evidence: `*.joblib` and `artifacts/` are in `.gitignore`;
+    `learned_pipeline.py` loads a dict bundle lazily and validates feature
+    layout and threshold. `POST /predict-learned` requires
+    `ENABLE_LEARNED_MODEL=1` (otherwise HTTP 503
+    `learned_pipeline_disabled`), accepts two six-band `.npz` uploads, returns
+    `display_metrics: false`, experimental validation text and provenance, and
+    never changes the default spectral/live path. `GET /learned-model-status`
+    reports enabled/present/loaded. Documented in README and `.env.example`.
+    Synthetic fake-model test:
+    `tests/test_learned_pipeline.py::test_learned_status_and_endpoints`.
+- [x] D3. `notebooks/oscd_pixel_classifier.ipynb` matching `oscd_benchmark.ipynb`
   setup; not run locally; results unverified until owner pastes Colab output.
-- [ ] D4. Tests with synthetic data for the feature builder and the no-test-city
+  - Evidence: notebook mounts Drive, unzips the same OSCD archive, pulls/clones
+    the repo, installs benchmark requirements, runs the learned tests, verifies
+    14 TRAIN cities + labels, runs the trainer to a Drive artifact, and prints
+    the artifact's held-out TRAIN metadata. It does not unzip/use test labels or
+    score test cities. **Not executed locally; no output pasted.**
+- [x] D4. Tests with synthetic data for the feature builder and the no-test-city
   guard.
-- [ ] D5. Test-set scoring deferred to Phase D2 step 6 for pre-registered
+  - Evidence: `tests/test_learned_features.py` (6 tests: shapes/names/index
+    math, local means, both window sizes, determinism, missing-band/shape
+    errors, test-city guard) and `tests/test_learned_pipeline.py` (6 tests:
+    fake-model prediction, threshold override, feature-layout mismatch, missing
+    model, npz validation, endpoint status/disabled/503/400/success). Full suite
+    72 passed, 2 skipped.
+- [x] D5. Test-set scoring deferred to Phase D2 step 6 for pre-registered
   systems only.
+  - Evidence: trainer never scores a test city and writes
+    `test_split_scored: false`; no v3 result file exists; README and notebook
+    state the deferral. Phase D2.6 remains blocked locally without OSCD data
+    and weights.
 
 ## Phase D2 — X-factors and autonomous accuracy improvement
 
