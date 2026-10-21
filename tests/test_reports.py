@@ -1,10 +1,14 @@
-import base64, io, re, zlib
-from pathlib import Path
+import base64
+import io
+import re
+import zlib
+
 import pytest
+
 pytest.importorskip("reportlab")
 from PIL import Image
-from reports import build_report
 
+from reports import build_report
 
 FORBIDDEN = ("accurate", "ai-powered", "state of the art", "reliable")
 
@@ -12,13 +16,13 @@ FORBIDDEN = ("accurate", "ai-powered", "state of the art", "reliable")
 def _pdf_text(data: bytes) -> str:
     """Decode ReportLab's ASCII85+Flate content streams for text assertions."""
     chunks = []
-    for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.S):
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.DOTALL):
         raw = match.group(1).strip()
         try:
             if raw.endswith(b"~>"):
                 raw = base64.a85decode(raw, adobe=True)
             raw = zlib.decompress(raw)
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 - streams that are not Flate text are skipped
             continue
         chunks.append(raw.decode("latin-1", "replace"))
     return "\n".join(chunks)

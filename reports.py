@@ -19,8 +19,15 @@ try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas
-    from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        Image,
+        KeepTogether,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
     _HAVE_REPORTLAB = True
 except ImportError:  # pragma: no cover - exercised only without the dependency
     _HAVE_REPORTLAB = False
@@ -73,7 +80,7 @@ def _image(base64_text, width_mm=82, height_mm=62):
         image.verify()
         reader.seek(0)
         return Image(reader, width=width_mm * mm, height=height_mm * mm, kind="proportional")
-    except Exception:
+    except Exception:  # noqa: BLE001 - a corrupt image must not break the whole report
         return None
 
 
