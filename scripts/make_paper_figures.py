@@ -1,16 +1,22 @@
-"""Generate paper figures and LaTeX tables from saved benchmark JSON only.
+"""Generate the submission paper's figures and tables from saved data only.
 
-No network access, no model inference and no invented values. Missing optional
-logs produce clearly labelled placeholder figures/tables rather than estimates.
+Inputs are ``benchmarks/results/oscd_results_v2.json`` and
+``degradation_results.csv``. No network access, model inference, test scoring
+or invented values. If the degradation CSV is absent, the resolution figure and
+table are replaced by clearly labelled placeholders rather than estimates.
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
+import re
+import sys
+import zlib
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 import matplotlib
 
@@ -18,31 +24,37 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
-METHOD_ORDER = ("hardcoded", "percentile", "cnn_joint", "cnn_reflectance", "otsu")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from benchmarks.oscd_eval import OFFICIAL_TEST_CITIES  # noqa: E402
+from benchmarks.oscd_evidence import (  # noqa: E402
+    METHODS,
+    baseline_summary,
+    bootstrap_summary,
+    load_results,
+    pooled as pooled_from_rows,
+)
+
+METHOD_ORDER = tuple(METHODS)
 METHOD_LABELS = {
-    "hardcoded": "Spectral hardcoded",
-    "percentile": "Spectral percentile",
+    "hardcoded": "Hardcoded NDVI/NDBI",
+    "percentile": "Percentile 99.0",
+    "otsu": "Otsu",
     "cnn_joint": "CNN joint percentile",
     "cnn_reflectance": "CNN reflectance",
-    "otsu": "Spectral Otsu",
 }
-COLORS = {
-    "hardcoded": "#0072B2",
-    "percentile": "#009E73",
-    "cnn_joint": "#D55E00",
-    "cnn_reflectance": "#CC79A7",
-    "otsu": "#E69F00",
+METHOD_STYLE = {
+    "hardcoded": {"color": "#111111", "marker": "o", "linestyle": "-", "mfc": "#111111", "mew": 0.0},
+    "percentile": {"color": "#333333", "marker": "s", "linestyle": "--", "mfc": "#333333", "mew": 0.0},
+    "otsu": {"color": "#555555", "marker": "^", "linestyle": ":", "mfc": "white", "mew": 0.7},
+    "cnn_joint": {"color": "#777777", "marker": "D", "linestyle": "-.", "mfc": "white", "mew": 0.7},
+    "cnn_reflectance": {"color": "#999999", "marker": "x", "linestyle": "", "mfc": "none", "mew": 0.8},
 }
-F1_METHODS = ("hardcoded", "percentile", "cnn_joint", "cnn_reflectance")
-REPORTED_SCORE = {
-    "hardcoded": "F1",
-    "percentile": "F1",
-    "cnn_joint": "F1",
-    "cnn_reflectance": "F1",
-    "otsu": "OA",
-}
-CITIES_EXPECTED = 10
+DEGRADATION_FACTORS = (1, 2, 4, 8, 16, 20)
+DEGRADATION_COLUMNS = ("image", "factor", "real_world_resolution", "tp", "fp", "fn")
+RESOLUTION_RE = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*m\s*$", re.IGNORECASE)
 
 
 def sha256_file(path: Path) -> str:
@@ -53,273 +65,283 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def method_key(row: dict) -> str:
-    if row.get("pipeline") == "cnn":
-        preprocess = row.get("preprocess")
-        if preprocess == "joint_percentile":
-            return "cnn_joint"
-        if preprocess == "reflectance":
-            return "cnn_reflectance"
-        raise ValueError(f"Unknown CNN preprocess in results: {preprocess!r}")
-    if row.get("pipeline") == "spectral":
-        configuration = row.get("configuration")
-        if configuration in {"hardcoded", "percentile", "otsu"}:
-            return configuration
-        raise ValueError(f"Unknown spectral configuration in results: {configuration!r}")
-    raise ValueError(f"Unknown pipeline in results: {row.get('pipeline')!r}")
-
-
-def load_results(path: Path) -> list[dict]:
-    data = json.loads(path.read_text())
-    if not isinstance(data, list) or not data:
-        raise ValueError(f"{path} must contain a non-empty JSON list of result rows")
-    rows = []
-    seen = set()
-    for index, row in enumerate(data):
-        if not isinstance(row, dict):
-            raise ValueError(f"Row {index} is not an object")
-        for key in ("city", "pipeline", "split", "metrics"):
-            if key not in row:
-                raise ValueError(f"Row {index} is missing {key!r}")
-        if row["split"] != "test":
-            raise ValueError(f"Row {index} is not a test row; paper figures use test results only")
-        metrics = row["metrics"]
-        for key in ("precision", "recall", "f1", "overall_accuracy", "predicted_fraction", "true_fraction", "tp", "fp", "fn", "tn"):
-            if key not in metrics:
-                raise ValueError(f"Row {index} metrics are missing {key!r}")
-        identity = (row["city"], method_key(row))
-        if identity in seen:
-            raise ValueError(f"Duplicate result for city/method {identity}")
-        seen.add(identity)
-        rows.append(row)
-    cities = {row["city"] for row in rows}
-    for city in cities:
-        present = {method_key(row) for row in rows if row["city"] == city}
-        missing = set(METHOD_ORDER) - present
-        if missing:
-            raise ValueError(f"{city} is missing methods: {', '.join(sorted(missing))}")
-    return rows
-
-
-def _metric(row: dict, key: str) -> float:
-    value = float(row["metrics"][key])
-    if not np.isfinite(value):
-        raise ValueError(f"Non-finite metric {key} for {row['city']}")
-    return value
-
-
-def pooled_metrics(rows: Iterable[dict]) -> dict:
-    rows = list(rows)
-    tp = sum(int(row["metrics"]["tp"]) for row in rows)
-    fp = sum(int(row["metrics"]["fp"]) for row in rows)
-    fn = sum(int(row["metrics"]["fn"]) for row in rows)
-    tn = sum(int(row["metrics"]["tn"]) for row in rows)
-    total = tp + fp + fn + tn
-    if total <= 0:
-        raise ValueError("Pooled confusion counts are empty")
+def _score_metrics(tp: int, fp: int, fn: int) -> dict[str, float]:
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {
-        "n_pixels": total,
         "precision": precision,
         "recall": recall,
-        "f1": f1,
-        "overall_accuracy": (tp + tn) / total,
-        "predicted_fraction": (tp + fp) / total,
-        "true_fraction": (tp + fn) / total,
+        "f1": 2 * precision * recall / (precision + recall) if precision + recall else 0.0,
+        "iou": tp / (tp + fp + fn) if tp + fp + fn else 0.0,
     }
 
 
-def _rows_by_method(rows: list[dict]) -> dict[str, list[dict]]:
-    grouped = {method: [] for method in METHOD_ORDER}
-    for row in rows:
-        grouped[method_key(row)].append(row)
-    return grouped
+def load_degradation_csv(path: Path) -> dict:
+    """Pool the saved per-image TP/FP/FN counts at each degradation factor."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing degradation CSV: {path}")
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        missing = [name for name in DEGRADATION_COLUMNS if name not in (reader.fieldnames or ())]
+        if missing:
+            raise ValueError(f"{path} is missing columns: {missing}")
+        raw = list(reader)
+    if not raw:
+        raise ValueError(f"{path} contains no rows")
+    counts_by_factor: dict[int, dict[str, dict[str, int]]] = defaultdict(dict)
+    resolution_by_factor: dict[int, float] = {}
+    for index, row in enumerate(raw, start=2):
+        try:
+            factor = int(row["factor"])
+            counts = {name: int(row[name]) for name in ("tp", "fp", "fn")}
+            resolution = float(RESOLUTION_RE.match(row["real_world_resolution"]).group(1))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError(f"{path} row {index} has an invalid factor, resolution or count") from exc
+        if any(value < 0 for value in counts.values()):
+            raise ValueError(f"{path} row {index} has a negative count")
+        if factor in resolution_by_factor and resolution_by_factor[factor] != resolution:
+            raise ValueError(f"{path}: factor {factor} has conflicting resolutions")
+        resolution_by_factor[factor] = resolution
+        image = row["image"].strip()
+        if not image:
+            raise ValueError(f"{path} row {index} has an empty image name")
+        if image in counts_by_factor[factor]:
+            raise ValueError(f"{path}: duplicate image/factor {image}/{factor}")
+        counts_by_factor[factor][image] = counts
+    factors = tuple(sorted(counts_by_factor))
+    if factors != DEGRADATION_FACTORS:
+        raise ValueError(f"{path}: expected factors {DEGRADATION_FACTORS}, got {factors}")
+    image_sets = {factor: set(rows) for factor, rows in counts_by_factor.items()}
+    reference = image_sets[factors[0]]
+    for factor, images in image_sets.items():
+        if images != reference:
+            raise ValueError(f"{path}: factor {factor} does not cover the same images as factor {factors[0]}")
+    metrics = {}
+    for factor in factors:
+        totals = {name: sum(row[name] for row in counts_by_factor[factor].values()) for name in ("tp", "fp", "fn")}
+        metrics[factor] = {
+            **totals,
+            **_score_metrics(totals["tp"], totals["fp"], totals["fn"]),
+            "n_images": len(counts_by_factor[factor]),
+            "predicted_pixels": totals["tp"] + totals["fp"],
+        }
+    return {
+        "path": str(path),
+        "sha256": sha256_file(path),
+        "n_images": len(reference),
+        "factors": factors,
+        "resolutions": {factor: resolution_by_factor[factor] for factor in factors},
+        "metrics": metrics,
+    }
 
 
-def _style_axes(axis) -> None:
-    axis.spines[["top", "right"]].set_visible(False)
-    axis.grid(axis="y", color="#dddddd", linewidth=0.6, zorder=0)
+def city_f1_interval(counts: dict[str, int], *, seed: int = 0, resamples: int = 10_000, key: str = "") -> list[float]:
+    """Pixel-bootstrap interval for one city under an independent-pixel model.
+
+    Saved counts are resampled as a multinomial over TP/FP/FN/TN. This interval
+    ignores spatial correlation and is therefore descriptive only.
+    """
+    total = sum(int(counts[name]) for name in ("tp", "fp", "fn", "tn"))
+    if total <= 0 or resamples <= 0:
+        return [0.0, 0.0]
+    probabilities = np.array([counts[name] for name in ("tp", "fp", "fn", "tn")], dtype=float) / total
+    if probabilities.sum() <= 0:
+        return [0.0, 0.0]
+    probabilities /= probabilities.sum()
+    stream = (int(seed) + zlib.crc32(key.encode("utf-8"))) % (2**32)
+    samples = np.random.default_rng(stream).multinomial(int(total), probabilities, size=int(resamples))
+    tp, fp, fn = samples[:, 0], samples[:, 1], samples[:, 2]
+    precision = np.divide(tp, tp + fp, out=np.zeros(len(tp), dtype=float), where=(tp + fp) > 0)
+    recall = np.divide(tp, tp + fn, out=np.zeros(len(tp), dtype=float), where=(tp + fn) > 0)
+    f1 = np.divide(2 * precision * recall, precision + recall, out=np.zeros(len(tp), dtype=float), where=(precision + recall) > 0)
+    low, high = np.percentile(f1, (2.5, 97.5))
+    return [float(low), float(high)]
 
 
-def plot_per_city_f1(rows: list[dict], output: Path) -> None:
-    cities = sorted({row["city"] for row in rows})
-    positions = np.arange(len(cities), dtype=float)
-    width = 0.19
-    figure, axis = plt.subplots(figsize=(7.2, 3.3))
-    grouped = _rows_by_method(rows)
-    for offset, method in enumerate(F1_METHODS):
-        values = []
-        for city in cities:
-            match = next(row for row in grouped[method] if row["city"] == city)
-            values.append(_metric(match, "f1"))
-        axis.bar(
-            positions + (offset - 1.5) * width,
-            values,
-            width=width,
-            color=COLORS[method],
-            label=METHOD_LABELS[method],
-            zorder=2,
-        )
-    axis.set_xticks(positions, cities, rotation=30, ha="right")
-    axis.set_ylabel("F1")
-    axis.set_ylim(0, max(0.05, max(_metric(row, "f1") for row in rows) * 1.15))
-    axis.legend(frameon=False, ncol=2, fontsize=7, loc="upper left")
-    axis.set_title("Per-city F1 on the official OSCD test split (v2)", fontsize=9)
-    _style_axes(axis)
-    figure.tight_layout()
-    figure.savefig(output, dpi=220)
-    plt.close(figure)
-
-
-def plot_predicted_vs_true(rows: list[dict], output: Path) -> None:
-    figure, (left, right) = plt.subplots(1, 2, figsize=(7.2, 3.2), gridspec_kw={"width_ratios": [1, 1]})
-    grouped = _rows_by_method(rows)
+def city_f1_intervals(by_method: dict[str, dict[str, dict]], *, seed: int = 0, resamples: int = 10_000) -> dict[str, dict[str, dict]]:
+    intervals = {}
     for method in METHOD_ORDER:
-        subset = grouped[method]
-        true = [_metric(row, "true_fraction") * 100 for row in subset]
-        predicted = [_metric(row, "predicted_fraction") * 100 for row in subset]
-        left.scatter(true, predicted, s=20, color=COLORS[method], label=METHOD_LABELS[method], alpha=0.9)
-        if method != "otsu":
-            right.scatter(true, predicted, s=24, color=COLORS[method], alpha=0.9)
-    limit = max([_metric(row, "true_fraction") * 100 for row in rows] + [12.0]) * 1.1
-    right.plot([0, limit], [0, limit], color="#666666", linewidth=0.8, linestyle="--", label="predicted = true")
-    left.plot([0, 12], [0, 12], color="#666666", linewidth=0.8, linestyle="--")
-    left.set_yscale("symlog", linthresh=0.01)
-    left.set_xlim(0, 11)
-    left.set_ylim(0, 120)
-    left.set_title("All methods (symlog y)", fontsize=8)
-    right.set_xlim(0, limit)
-    right.set_ylim(0, limit)
-    right.set_title("Low range, Otsu excluded", fontsize=8)
-    for axis in (left, right):
-        axis.set_xlabel("True change (%)")
-        axis.set_ylabel("Predicted change (%)")
-        _style_axes(axis)
-    left.legend(frameon=False, fontsize=6, loc="lower right")
-    figure.tight_layout()
-    figure.savefig(output, dpi=220)
-    plt.close(figure)
-
-
-def plot_precision_recall(rows: list[dict], output: Path) -> None:
-    cities = sorted({row["city"] for row in rows})
-    figure, axis = plt.subplots(figsize=(4.4, 3.4))
-    grouped = _rows_by_method(rows)
-    for method in METHOD_ORDER:
-        subset = grouped[method]
-        axis.scatter(
-            [_metric(row, "recall") for row in subset],
-            [_metric(row, "precision") for row in subset],
-            s=16,
-            color=COLORS[method],
-            alpha=0.55,
-            edgecolor="none",
-            label=f"{METHOD_LABELS[method]} (cities)",
-        )
-        pooled = pooled_metrics(subset)
-        axis.scatter(
-            [pooled["recall"]],
-            [pooled["precision"]],
-            s=110,
-            marker="*",
-            color=COLORS[method],
-            edgecolor="black",
-            linewidth=0.4,
-            zorder=4,
-        )
-    axis.scatter([], [], marker="*", s=110, color="#555555", edgecolor="black", label="Pooled (stars)")
-    axis.set_xlim(0, 1)
-    axis.set_ylim(0, 1)
-    axis.set_xlabel("Recall")
-    axis.set_ylabel("Precision")
-    axis.set_title(f"Per-city points and pooled stars ({len(cities)} cities)", fontsize=8)
-    axis.legend(frameon=False, fontsize=5.5, loc="upper right")
-    _style_axes(axis)
-    figure.tight_layout()
-    figure.savefig(output, dpi=220)
-    plt.close(figure)
+        intervals[method] = {}
+        for city, row in sorted(by_method[method].items()):
+            point = float(row["metrics"]["f1"])
+            low, high = city_f1_interval(row["metrics"], seed=seed, resamples=resamples, key=f"{method}:{city}")
+            intervals[method][city] = {"point": point, "ci95": [low, high]}
+    return intervals
 
 
 def _placeholder(output: Path, title: str, message: str) -> None:
-    figure, axis = plt.subplots(figsize=(5.2, 3.0))
+    figure, axis = plt.subplots(figsize=(3.5, 2.5))
     axis.axis("off")
-    axis.text(0.5, 0.62, title, ha="center", va="center", fontsize=11, weight="bold")
-    axis.text(0.5, 0.34, message, ha="center", va="center", fontsize=8.5, wrap=True)
-    figure.savefig(output, dpi=200)
+    axis.text(0.5, 0.62, title, ha="center", va="center", fontsize=9, weight="bold")
+    axis.text(0.5, 0.36, message, ha="center", va="center", fontsize=7, wrap=True)
+    figure.tight_layout(pad=0.3)
+    figure.savefig(output, dpi=300)
     plt.close(figure)
 
 
-def plot_ablation(log_path: Path | None, output: Path) -> dict | None:
-    if log_path is None or not log_path.is_file():
+def plot_resolution_f1(data: dict | None, output: Path) -> bool:
+    if data is None:
         _placeholder(
             output,
-            "Validation ablation not run in this checkout",
-            "No benchmarks/results/auto_improve_log.json was supplied.\n"
-            "No synthetic or estimated values are plotted.",
+            "F1-versus-resolution data not found",
+            "No degradation_results.csv was supplied.\nNo F1 values are inferred.",
         )
-        return None
-    payload = json.loads(log_path.read_text())
-    rows = [row for row in payload.get("ablations", []) if row.get("mean_delta_f1") is not None]
-    if not rows:
-        _placeholder(output, "Validation ablation has no paired results", "The supplied log contains no paired component comparisons.")
-        return payload
-    labels = [row["component"] for row in rows]
-    means = [float(row["mean_delta_f1"]) for row in rows]
-    figure, axis = plt.subplots(figsize=(5.4, 2.9))
-    axis.bar(range(len(rows)), means, color=["#009E73" if value >= 0 else "#D55E00" for value in means], zorder=2)
-    axis.axhline(0, color="#444444", linewidth=0.8)
-    axis.set_xticks(range(len(rows)), labels, rotation=25, ha="right")
-    axis.set_ylabel("Mean paired ΔF1 (held-out train cities)")
-    axis.set_title("Validation ablation from the supplied auto-improve log", fontsize=9)
-    _style_axes(axis)
-    figure.tight_layout()
-    figure.savefig(output, dpi=220)
-    plt.close(figure)
-    return payload
-
-
-def plot_reliability(path: Path | None, output: Path) -> dict | None:
-    if path is None or not path.is_file():
-        _placeholder(
-            output,
-            "Reliability diagram not available",
-            "No held-out-TRAIN calibration JSON was supplied.\nNo ECE or calibration curve is inferred.",
-        )
-        return None
-    payload = json.loads(path.read_text())
-    bins = payload.get("bins") if isinstance(payload, dict) else payload
-    if not isinstance(bins, list) or not bins:
-        raise ValueError("Calibration JSON must contain a non-empty bins list")
-    usable = [row for row in bins if row.get("count") and row.get("mean_confidence") is not None]
-    if not usable:
-        _placeholder(output, "Reliability diagram has no populated bins", "The supplied calibration file has no non-empty bins.")
-        return payload
-    figure, axis = plt.subplots(figsize=(3.8, 3.4))
-    axis.plot([0, 1], [0, 1], color="#666666", linestyle="--", linewidth=0.8, label="perfect calibration")
+        return False
+    factors = data["factors"]
+    positions = np.arange(len(factors))
+    metrics = data["metrics"]
+    figure, axis = plt.subplots(figsize=(3.5, 2.55))
     axis.plot(
-        [float(row["mean_confidence"]) for row in usable],
-        [float(row["accuracy"]) for row in usable],
+        positions,
+        [100 * metrics[factor]["f1"] for factor in factors],
+        color="#111111",
         marker="o",
-        color="#0072B2",
+        markersize=3.8,
         linewidth=1.2,
-        label="observed",
+        label="F1",
     )
-    axis.set_xlim(0, 1)
-    axis.set_ylim(0, 1)
-    axis.set_xlabel("Mean predicted probability")
-    axis.set_ylabel("Observed change frequency")
-    title = "Reliability (held-out TRAIN only)"
-    if isinstance(payload, dict) and payload.get("ece") is not None:
-        title += f", ECE={float(payload['ece']):.3f}"
-    axis.set_title(title, fontsize=8)
-    axis.legend(frameon=False, fontsize=6)
-    _style_axes(axis)
-    figure.tight_layout()
-    figure.savefig(output, dpi=220)
+    axis.plot(
+        positions,
+        [100 * metrics[factor]["precision"] for factor in factors],
+        color="#555555",
+        marker="s",
+        markersize=3.2,
+        linewidth=0.9,
+        linestyle="--",
+        label="Precision",
+    )
+    axis.plot(
+        positions,
+        [100 * metrics[factor]["recall"] for factor in factors],
+        color="#888888",
+        marker="^",
+        markersize=3.4,
+        linewidth=0.9,
+        linestyle=":",
+        label="Recall",
+    )
+    for position, factor in zip(positions, factors):
+        axis.annotate(
+            f"{100 * metrics[factor]['f1']:.1f}",
+            (position, 100 * metrics[factor]["f1"]),
+            textcoords="offset points",
+            xytext=(0, 5),
+            ha="center",
+            fontsize=5.8,
+            color="#111111",
+        )
+    axis.set_xticks(positions, [f"{data['resolutions'][factor]:g}" for factor in factors])
+    axis.set_xlabel("Simulated resolution (m)", fontsize=7.5)
+    axis.set_ylabel("Score (%)", fontsize=7.5)
+    axis.set_ylim(-3, 106)
+    axis.tick_params(labelsize=7)
+    axis.grid(axis="y", color="#dddddd", linewidth=0.5)
+    axis.spines[["top", "right"]].set_visible(False)
+    axis.legend(frameon=False, fontsize=6.3, loc="center right")
+    figure.tight_layout(pad=0.35)
+    figure.savefig(output, dpi=300)
     plt.close(figure)
-    return payload
+    return True
+
+
+def plot_oscd_panel(by_method: dict[str, dict[str, dict]], intervals: dict, output: Path) -> None:
+    cities = sorted({city for rows in by_method.values() for city in rows})
+    positions = np.arange(len(cities), dtype=float)
+    figure, (left, right) = plt.subplots(
+        1,
+        2,
+        figsize=(7.16, 2.95),
+        gridspec_kw={"width_ratios": [1.28, 1.0]},
+    )
+
+    offsets = {method: (index - (len(METHOD_ORDER) - 1) / 2) * 0.13 for index, method in enumerate(METHOD_ORDER)}
+    for method in METHOD_ORDER:
+        style = METHOD_STYLE[method]
+        points = np.array([intervals[method][city]["point"] for city in cities])
+        lows = np.array([intervals[method][city]["ci95"][0] for city in cities])
+        highs = np.array([intervals[method][city]["ci95"][1] for city in cities])
+        left.errorbar(
+            positions + offsets[method],
+            points,
+            yerr=np.vstack((np.maximum(points - lows, 0), np.maximum(highs - points, 0))),
+            fmt=style["marker"],
+            color=style["color"],
+            markerfacecolor=style["mfc"],
+            markeredgewidth=style["mew"],
+            markersize=3.3,
+            capsize=1.2,
+            elinewidth=0.5,
+            linestyle="none",
+            label=METHOD_LABELS[method],
+            zorder=3,
+        )
+    random_expected = [
+        baseline_summary(by_method["hardcoded"][city]["metrics"])["random_at_prevalence"]["f1"] for city in cities
+    ]
+    left.scatter(
+        positions,
+        random_expected,
+        marker="_",
+        s=22,
+        color="#555555",
+        linewidths=0.8,
+        label="Random at prevalence",
+        zorder=2,
+    )
+    top = max(
+        [intervals[method][city]["ci95"][1] for method in METHOD_ORDER for city in cities]
+        + [max(random_expected)]
+        + [0.05]
+    )
+    left.set_xticks(positions, cities, rotation=35, ha="right", fontsize=6.2)
+    left.set_ylabel("F1", fontsize=7.5)
+    left.set_ylim(0, top * 1.18)
+    left.tick_params(axis="y", labelsize=7)
+    left.grid(axis="y", color="#dddddd", linewidth=0.5)
+    left.spines[["top", "right"]].set_visible(False)
+    left.set_title("(a) Per-city F1, 95% pixel intervals", fontsize=7.8)
+    handles = [
+        Line2D([], [], color=METHOD_STYLE[method]["color"], marker=METHOD_STYLE[method]["marker"],
+               linestyle="none", markersize=3.5, markerfacecolor=METHOD_STYLE[method]["mfc"],
+               markeredgewidth=METHOD_STYLE[method]["mew"], label=METHOD_LABELS[method])
+        for method in METHOD_ORDER
+    ]
+    handles.append(Line2D([], [], color="#555555", marker="_", linestyle="none", markersize=6, label="Random at prevalence"))
+    left.legend(handles=handles, frameon=False, fontsize=5.4, ncol=2, loc="upper left")
+
+    for method in METHOD_ORDER:
+        style = METHOD_STYLE[method]
+        true = [100 * float(by_method[method][city]["metrics"]["true_fraction"]) for city in cities]
+        predicted = [100 * float(by_method[method][city]["metrics"]["predicted_fraction"]) for city in cities]
+        right.scatter(
+            true,
+            predicted,
+            marker=style["marker"],
+            s=15,
+            color=style["color"],
+            facecolors=style["mfc"],
+            linewidths=style["mew"],
+            label=METHOD_LABELS[method],
+            zorder=3,
+        )
+    right.plot([0, 11], [0, 11], color="#555555", linewidth=0.7, linestyle="--", zorder=1)
+    right.set_yscale("symlog", linthresh=0.01, linscale=0.35)
+    right.set_xlim(0, 11)
+    right.set_ylim(0, 120)
+    right.set_xticks([0, 2, 4, 6, 8, 10])
+    right.set_yticks([0, 0.01, 0.1, 1, 10, 100])
+    right.set_yticklabels(["0", "0.01", "0.1", "1", "10", "100"])
+    right.set_xlabel("True change (%)", fontsize=7.5)
+    right.set_ylabel("Predicted change (%)", fontsize=7.5)
+    right.tick_params(labelsize=7)
+    right.grid(axis="y", color="#dddddd", linewidth=0.5)
+    right.spines[["top", "right"]].set_visible(False)
+    right.set_title("(b) Predicted and true change", fontsize=7.8)
+    right.legend(frameon=False, fontsize=5.4, loc="lower right")
+
+    figure.tight_layout(pad=0.35, w_pad=1.0)
+    figure.savefig(output, dpi=300)
+    plt.close(figure)
 
 
 def _escape_latex(value: str) -> str:
@@ -338,139 +360,145 @@ def _escape_latex(value: str) -> str:
     return "".join(replacements.get(character, character) for character in str(value))
 
 
-def write_tables(rows: list[dict], out_dir: Path, ablation_payload: dict | None) -> list[Path]:
-    grouped = _rows_by_method(rows)
-    pooled_lines = [
-        r"% Generated by scripts/make_paper_figures.py from the saved v2 JSON. Do not edit by hand.",
+def write_degradation_table(data: dict | None, out_dir: Path) -> Path:
+    path = out_dir / "generated_degradation_table.tex"
+    if data is None:
+        caption = "CNN scores versus simulated resolution. Source data not found; table not generated."
+    else:
+        caption = (
+            f"CNN scores versus simulated resolution on the {data['n_images']:,} LEVIR-CD test pairs. "
+            "Values are computed from pooled TP/FP/FN counts, not averaged per image."
+        )
+    lines = [
+        r"% Generated by scripts/make_paper_figures.py from degradation_results.csv. Do not edit by hand.",
+        r"\begin{table}[t]",
+        r"\centering",
+        rf"\caption{{{caption}}}",
+        r"\label{tab:degradation}",
+        r"\footnotesize",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\begin{tabular}{rrrrrr}",
+        r"\toprule",
+        r"Factor & Resolution (m) & Precision & Recall & F1 & IoU \\",
+        r"\midrule",
+    ]
+    if data is None:
+        lines.append(r"\multicolumn{6}{c}{Source data not found; table not generated.} \\")
+    else:
+        for factor in data["factors"]:
+            metrics = data["metrics"][factor]
+            lines.append(
+                f"{factor} & {data['resolutions'][factor]:g} & {100 * metrics['precision']:.2f} & "
+                f"{100 * metrics['recall']:.2f} & {100 * metrics['f1']:.2f} & {100 * metrics['iou']:.2f} \\\\"
+            )
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}", ""]
+    path.write_text("\n".join(lines))
+    return path
+
+
+def write_oscd_table(by_method: dict[str, dict[str, dict]], bootstrap: dict, out_dir: Path) -> Path:
+    path = out_dir / "generated_oscd_table.tex"
+    hardcoded = pooled_from_rows(by_method["hardcoded"])
+    true_fraction = hardcoded["true_fraction"]
+    otsu_fraction = pooled_from_rows(by_method["otsu"])["predicted_fraction"]
+    total_pixels = hardcoded["tp"] + hardcoded["fp"] + hardcoded["fn"] + hardcoded["tn"]
+    lines = [
+        r"% Generated by scripts/make_paper_figures.py from benchmarks/results/oscd_results_v2.json. Do not edit by hand.",
         r"\begin{table*}[t]",
         r"\centering",
-        r"\caption{Pooled results on the official OSCD test split (v2). True change is 5.17\% of pooled pixels. Otsu's reported score is overall accuracy (OA); its F1 is shown for completeness only.}",
-        r"\label{tab:pooled}",
-        r"\small",
-        r"\begin{tabular}{lrrrrrrl}",
+        rf"\caption{{Pooled results on the ten official OSCD test cities ({total_pixels:,} pixels; true change {100 * true_fraction:.2f}\%). "
+        r"F1 intervals are 95\% percentile intervals from a city-level bootstrap (seed 0, 10,000 resamples); they reflect city sampling only. "
+        r"OA is shown for every method; Otsu's predicted fraction is "
+        rf"{100 * otsu_fraction:.2f}\%, so its OA is its headline score. "
+        r"Precision is reported as 0 by convention for methods with no positive predictions.}",
+        r"\label{tab:oscd}",
+        r"\footnotesize",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\begin{tabular}{lrrrrrrr}",
         r"\toprule",
-        r"Method & True (\%) & Pred. (\%) & Precision & Recall & F1 & OA & Reported \\",
+        r"Method & Pred. (\%) & Precision & Recall & F1 & F1 95\% CI & IoU & OA \\",
         r"\midrule",
     ]
     for method in METHOD_ORDER:
-        metrics = pooled_metrics(grouped[method])
-        pooled_lines.append(
-            f"{METHOD_LABELS[method]} & {metrics['true_fraction'] * 100:.2f} & "
-            f"{metrics['predicted_fraction'] * 100:.2f} & {metrics['precision']:.4f} & "
-            f"{metrics['recall']:.4f} & {metrics['f1']:.4f} & {metrics['overall_accuracy']:.4f} & "
-            f"{REPORTED_SCORE[method]} \\\\"
+        metrics = pooled_from_rows(by_method[method])
+        estimate = bootstrap["methods"][method]["f1"]["ci95"]
+        lines.append(
+            f"{METHOD_LABELS[method]} & {100 * metrics['predicted_fraction']:.2f} & "
+            f"{metrics['precision']:.4f} & {metrics['recall']:.4f} & {metrics['f1']:.4f} & "
+            f"[{estimate[0]:.4f}, {estimate[1]:.4f}] & {metrics['iou']:.4f} & {metrics['overall_accuracy']:.4f} \\\\"
         )
-    pooled_lines += [r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""]
-    pooled_path = out_dir / "generated_results_table.tex"
-    pooled_path.write_text("\n".join(pooled_lines))
-
-    per_city_lines = [
-        r"% Generated by scripts/make_paper_figures.py from the saved v2 JSON. Do not edit by hand.",
-        r"\begin{longtable}{llrrrrrr}",
-        r"\caption{Per-city results on the official OSCD test split (v2). Fractions are percentages. Otsu's reported score is OA; its F1 is included for completeness.}\\",
-        r"\toprule",
-        r"City & Method & True (\%) & Pred. (\%) & Precision & Recall & F1 & OA \\",
-        r"\midrule",
-        r"\endfirsthead",
-        r"\toprule",
-        r"City & Method & True (\%) & Pred. (\%) & Precision & Recall & F1 & OA \\",
-        r"\midrule",
-        r"\endhead",
-    ]
-    for city in sorted({row["city"] for row in rows}):
-        for method in METHOD_ORDER:
-            row = next(item for item in grouped[method] if item["city"] == city)
-            per_city_lines.append(
-                f"{_escape_latex(city)} & {METHOD_LABELS[method]} & {_metric(row, 'true_fraction') * 100:.2f} & "
-                f"{_metric(row, 'predicted_fraction') * 100:.2f} & {_metric(row, 'precision'):.4f} & "
-                f"{_metric(row, 'recall'):.4f} & {_metric(row, 'f1'):.4f} & {_metric(row, 'overall_accuracy'):.4f} \\\\"
-            )
-    per_city_lines += [r"\bottomrule", r"\end{longtable}", ""]
-    per_city_path = out_dir / "generated_per_city_table.tex"
-    per_city_path.write_text("\n".join(per_city_lines))
-
-    ablation_lines = [
-        r"% Generated by scripts/make_paper_figures.py from an optional auto-improve log.",
-        r"\begin{table}[t]",
-        r"\centering",
-        r"\caption{Validation-only component ablation on held-out OSCD training cities. Positive $\Delta$F1 means the component helped. This is not a test-set result.}",
-        r"\label{tab:ablation}",
-        r"\small",
-        r"\begin{tabular}{lrrrr}",
-        r"\toprule",
-        r"Component & Pairs & Mean $\Delta$F1 & SD & Decision \\",
-        r"\midrule",
-    ]
-    ablation_rows = (ablation_payload or {}).get("ablations", [])
-    if ablation_rows:
-        for row in ablation_rows:
-            mean = "--" if row.get("mean_delta_f1") is None else f"{float(row['mean_delta_f1']):.4f}"
-            std = "--" if row.get("std_delta_f1") is None else f"{float(row['std_delta_f1']):.4f}"
-            pairs = f"{row.get('pairs_available', 0)}/{row.get('pairs_expected', 0)}"
-            ablation_lines.append(
-                f"{_escape_latex(row.get('component', 'unknown'))} & {pairs} & {mean} & {std} & "
-                f"{_escape_latex(row.get('decision', 'unknown'))} \\\\"
-            )
-    else:
-        ablation_lines.append(
-            r"\multicolumn{5}{c}{No auto-improve log was present in this checkout; the ablation was not run.} \\"
-        )
-    ablation_lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}", ""]
-    ablation_path = out_dir / "generated_ablation_table.tex"
-    ablation_path.write_text("\n".join(ablation_lines))
-
-    return [pooled_path, per_city_path, ablation_path]
+    random = baseline_summary(pooled_from_rows(by_method["hardcoded"]))["random_at_prevalence"]
+    no_change = baseline_summary(pooled_from_rows(by_method["hardcoded"]))["all_no_change"]
+    lines.append(
+        f"Random at prevalence & {100 * true_fraction:.2f} & {random['precision']:.4f} & {random['recall']:.4f} & "
+        f"{random['f1']:.4f} & -- & {random['iou']:.4f} & -- \\\\"
+    )
+    lines.append(
+        f"All no change & 0.00 & -- & {no_change['recall']:.4f} & {no_change['f1']:.4f} & -- & {no_change['iou']:.4f} & "
+        f"{no_change['overall_accuracy']:.4f} \\\\"
+    )
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""]
+    path.write_text("\n".join(lines))
+    return path
 
 
 def make_all_figures(
     results_path: Path,
     out_dir: Path,
     *,
-    ablation_log: Path | None = None,
-    calibration_path: Path | None = None,
+    degradation_csv: Path | None = None,
+    seed: int = 0,
+    resamples: int = 10_000,
 ) -> dict:
-    rows = load_results(results_path)
+    by_method = load_results(results_path, expected_cities=OFFICIAL_TEST_CITIES)
     out_dir.mkdir(parents=True, exist_ok=True)
-    outputs = {
-        "per_city_f1": out_dir / "fig_per_city_f1.png",
-        "predicted_vs_true": out_dir / "fig_predicted_vs_true.png",
-        "precision_recall": out_dir / "fig_precision_recall.png",
-        "ablation": out_dir / "fig_ablation.png",
-        "reliability": out_dir / "fig_reliability.png",
-        "qualitative": out_dir / "fig_qualitative_placeholder.png",
-    }
-    plot_per_city_f1(rows, outputs["per_city_f1"])
-    plot_predicted_vs_true(rows, outputs["predicted_vs_true"])
-    plot_precision_recall(rows, outputs["precision_recall"])
-    ablation_payload = plot_ablation(ablation_log, outputs["ablation"])
-    plot_reliability(calibration_path, outputs["reliability"])
-    _placeholder(
-        outputs["qualitative"],
-        "Qualitative panel intentionally absent",
-        "No redistributable before/after screenshot with verified labels is committed.\n"
-        "The UI screenshots in docs/screenshots use mocked API data and are not results.",
-    )
-    tables = write_tables(rows, out_dir, ablation_payload)
+    degradation = None
+    degradation_error = None
+    if degradation_csv is not None:
+        try:
+            degradation = load_degradation_csv(Path(degradation_csv))
+        except FileNotFoundError as exc:
+            degradation_error = str(exc)
+    if degradation is None:
+        resolution_name = "fig_f1_vs_resolution_placeholder.png"
+        plot_resolution_f1(None, out_dir / resolution_name)
+    else:
+        resolution_name = "fig_f1_vs_resolution.png"
+        plot_resolution_f1(degradation, out_dir / resolution_name)
+    intervals = city_f1_intervals(by_method, seed=seed, resamples=resamples)
+    panel_name = "fig_oscd_per_city_and_fractions.png"
+    plot_oscd_panel(by_method, intervals, out_dir / panel_name)
+    bootstrap = bootstrap_summary(by_method, seed=seed, resamples=resamples)
+    degradation_table = write_degradation_table(degradation, out_dir)
+    oscd_table = write_oscd_table(by_method, bootstrap, out_dir)
     manifest = {
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "results_file": str(results_path),
         "results_sha256": sha256_file(results_path),
-        "rows": len(rows),
-        "cities": sorted({row["city"] for row in rows}),
+        "rows": sum(len(rows) for rows in by_method.values()),
+        "cities": sorted({city for rows in by_method.values() for city in rows}),
         "methods": list(METHOD_ORDER),
-        "figures": {name: path.name for name, path in outputs.items()},
-        "tables": [path.name for path in tables],
-        "optional_inputs": {
-            "ablation_log": None if ablation_log is None or not ablation_log.is_file() else {
-                "path": str(ablation_log),
-                "sha256": sha256_file(ablation_log),
-                "available": True,
-            },
-            "calibration": None if calibration_path is None or not calibration_path.is_file() else {
-                "path": str(calibration_path),
-                "sha256": sha256_file(calibration_path),
-                "available": True,
-            },
+        "figures": {
+            "resolution_f1": resolution_name,
+            "oscd_per_city_and_fractions": panel_name,
+        },
+        "tables": [degradation_table.name, oscd_table.name],
+        "degradation": {
+            "available": degradation is not None,
+            "error": degradation_error,
+            "path": None if degradation is None else degradation["path"],
+            "sha256": None if degradation is None else degradation["sha256"],
+            "n_images": None if degradation is None else degradation["n_images"],
+            "factors": None if degradation is None else list(degradation["factors"]),
+            "resolutions_m": None if degradation is None else [degradation["resolutions"][f] for f in degradation["factors"]],
+        },
+        "intervals": {
+            "pooled": "city bootstrap percentile 2.5-97.5",
+            "pooled_seed": seed,
+            "pooled_resamples": resamples,
+            "per_city": "pixel bootstrap percentile 2.5-97.5, independent-pixel approximation; spatial correlation not modeled",
+            "per_city_seed": seed,
+            "per_city_resamples": resamples,
         },
     }
     (out_dir / "figure_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -480,20 +508,23 @@ def make_all_figures(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, default=Path("benchmarks/results/oscd_results_v2.json"))
+    parser.add_argument("--degradation", type=Path, default=Path("degradation_results.csv"))
     parser.add_argument("--out", type=Path, default=Path("docs/paper/figures"))
-    parser.add_argument("--ablation-log", type=Path, default=Path("benchmarks/results/auto_improve_log.json"))
-    parser.add_argument("--calibration", type=Path, default=Path("benchmarks/results/uncertainty_holdout.json"))
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--resamples", type=int, default=10_000)
     args = parser.parse_args(argv)
     manifest = make_all_figures(
         args.results,
         args.out,
-        ablation_log=args.ablation_log if args.ablation_log.is_file() else None,
-        calibration_path=args.calibration if args.calibration.is_file() else None,
+        degradation_csv=args.degradation,
+        seed=args.seed,
+        resamples=args.resamples,
     )
     print(
         f"Wrote {len(manifest['figures'])} figures and {len(manifest['tables'])} tables "
-        f"from {manifest['rows']} rows ({manifest['results_sha256'][:12]}) to {args.out}"
+        f"from {manifest['rows']} OSCD rows ({manifest['results_sha256'][:12]}) to {args.out}"
     )
+    print(f"degradation_available={manifest['degradation']['available']} images={manifest['degradation']['n_images']}")
     return 0
 
 

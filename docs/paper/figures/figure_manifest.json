@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-10-21T05:46:07+00:00",
+  "generated_utc": "2026-10-21T06:47:25+00:00",
   "results_file": "benchmarks/results/oscd_results_v2.json",
   "results_sha256": "37ffe2bbd01a43c07f04740847843f0176ea1118c17283456c34d2ff2a2bef8f",
   "rows": 50,
@@ -18,25 +18,47 @@
   "methods": [
     "hardcoded",
     "percentile",
+    "otsu",
     "cnn_joint",
-    "cnn_reflectance",
-    "otsu"
+    "cnn_reflectance"
   ],
   "figures": {
-    "per_city_f1": "fig_per_city_f1.png",
-    "predicted_vs_true": "fig_predicted_vs_true.png",
-    "precision_recall": "fig_precision_recall.png",
-    "ablation": "fig_ablation.png",
-    "reliability": "fig_reliability.png",
-    "qualitative": "fig_qualitative_placeholder.png"
+    "resolution_f1": "fig_f1_vs_resolution.png",
+    "oscd_per_city_and_fractions": "fig_oscd_per_city_and_fractions.png"
   },
   "tables": [
-    "generated_results_table.tex",
-    "generated_per_city_table.tex",
-    "generated_ablation_table.tex"
+    "generated_degradation_table.tex",
+    "generated_oscd_table.tex"
   ],
-  "optional_inputs": {
-    "ablation_log": null,
-    "calibration": null
+  "degradation": {
+    "available": true,
+    "error": null,
+    "path": "degradation_results.csv",
+    "sha256": "4c301920d03d09dbc416d82fa76b93e76e1fab9b74bc2db5155da9735965fa88",
+    "n_images": 2048,
+    "factors": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      20
+    ],
+    "resolutions_m": [
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0,
+      10.0
+    ]
+  },
+  "intervals": {
+    "pooled": "city bootstrap percentile 2.5-97.5",
+    "pooled_seed": 0,
+    "pooled_resamples": 10000,
+    "per_city": "pixel bootstrap percentile 2.5-97.5, independent-pixel approximation; spatial correlation not modeled",
+    "per_city_seed": 0,
+    "per_city_resamples": 10000
   }
 }
