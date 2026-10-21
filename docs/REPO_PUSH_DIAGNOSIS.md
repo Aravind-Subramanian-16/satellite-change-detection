@@ -61,6 +61,19 @@ sideband packet`) are consistent with a transport/proxy/remote problem, not a
 large-blob rejection. History rewriting is therefore **not indicated** and was
 not performed.
 
+Follow-up: after committing this report and the `.gitignore` additions
+(commit `8989525`, no file over 2 MB), `git push origin main` failed with the
+same error:
+
+```text
+error: RPC failed; HTTP 400 curl 22 The requested URL returned error: 400
+send-pack: unexpected disconnect while reading sideband packet
+fatal: the remote end hung up unexpectedly
+```
+
+This is a second data point against a large-file cause: a small commit also
+fails. The local branch remains ahead of the remote; no force push was used.
+
 Before rewriting anything, capture the failing request:
 
 ```bash
