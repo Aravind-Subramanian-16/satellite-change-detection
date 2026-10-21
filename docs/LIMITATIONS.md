@@ -36,11 +36,29 @@ The limits below are part of the result, not fine print.
 - An earlier preliminary scoring event also used the official test split. It
   is disclosed in `PAPER_NOTES.md`; it is not an independent second test, and
   its values are not a competing final estimate.
-- The `general`, `agriculture`, `deforestation` and `roads` profiles are
-  unvalidated and qualitative only. The `builtup` profile is benchmarked only
-  through the underlying spectral thresholding on OSCD urban change; its
+- The `general`, `agriculture`, `deforestation`, `roads` and `water` profiles
+  are unvalidated and qualitative only. The `builtup` profile is benchmarked
+  only through the underlying spectral thresholding on OSCD urban change; its
   additional NDBI/BSI cues and MMU are not separately ablated. No profile has
   been validated for agriculture, forest loss, water or road labels.
+- The water profile added in this release uses NDVI and NDMI ceilings chosen by
+  the developer. The green band needed for the usual NDWI water index is not
+  fetched by the current Evalscript, so dark wet soil, shadow and dark roofs
+  can be confused with open water. Seasonal floods, tides and reservoir
+  operation change water extent between any two dates; this is not a flood
+  assessment.
+- The agriculture profile's "became greener" threshold is new and was chosen by
+  the developer to mirror the pre-existing loss threshold. It has no labelled
+  evaluation and is not used by any pre-existing profile.
+- The data-quality badge is a plain heuristic over cloud/shadow share,
+  cross-season dates and the gap between requested and actual dates (10%/30%
+  cloud, 15/60-day gap). It is not a calibrated quality score and does not know
+  about haze, smoke or thin cloud.
+- `benchmarks/reference_checks/` can compare patches against a reference map
+  such as ESA WorldCover and reports **"agreement with a reference map"**. It
+  has not been run against a real reference tile in this release, and agreement
+  would not be an accuracy measurement: the map is a single-date snapshot with
+  different classes and resolution.
 - No accuracy or F1 number is shown in the interface for an unvalidated
   profile. OSCD labels cover urban change only.
 - OSCD provides no Sentinel-2 SCL in the benchmark layout used here, so cloud
@@ -87,6 +105,23 @@ The limits below are part of the result, not fine print.
 - Morphological opening/closing and the minimum mapping unit intentionally
   remove small regions. Sub-MMU change is excluded by design and must not be
   interpreted as "no change".
+
+## Reports, downloads and caching
+
+- The PDF report, CSV, GeoJSON and on-screen table are different renderings of
+  the same analysis result. Agreement between them is checked by tests; none of
+  them is an independent verification of the change itself.
+- The PDF repeats the result's data-quality badge and limitations. A polished
+  report does not make an estimate any more certain.
+- Downloaded scenes are cached in process memory (default 64 MB, 32 entries)
+  for identical area, scene and output size. The cache is per process, lost on
+  restart, not shared between workers, and can serve an earlier identical
+  response within that process. It does not change the analysis rules.
+- Transient Copernicus failures are retried up to three times with backoff.
+  Exhausted retries return a structured error; retries do not guarantee that an
+  upstream service is available or that an image is cloud-free.
+- History reads and report/export routes now count toward the same per-path
+  rate limit as new analyses. The limit remains per process and per path.
 
 ## Optional learned classifier
 

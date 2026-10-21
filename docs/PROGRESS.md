@@ -721,3 +721,46 @@ a one-click Colab notebook. No test re-scoring, no v3, no training.
   ODbL obligations before redistribution or commercial use.
 - Build/run the Docker image and confirm GitHub Actions after the push issue is
   resolved; both remain unverified.
+
+## UI redesign, profiles, reports and robustness (2026-10-21)
+
+Branch chain, each cut from the previous after its checks passed:
+
+- `ui-redesign`: `aba4cba`, `7b6beb3`, `fbea861`.
+- `analysis-profiles`: `cb09168`, `4de953d`, `24224c5`, `5262e95`, `d53cb87`,
+  `d967a91` (reports), `0c1a994` (lint).
+- `final-polish`: `f1720b5`, `6957eba`, `3f51766`, `1ed6db5`, `45f6162`,
+  `a19907b`.
+
+Test counts from real full-suite runs (each branch in a temporary worktree with
+the project venv linked; skips are the three environment skips below):
+
+| Branch | Result |
+|---|---|
+| `ui-redesign` | **140 passed, 3 skipped**, 1 warning, 71.72 s |
+| `analysis-profiles` | **179 passed, 3 skipped**, 1 warning, 72.07 s |
+| `final-polish` | **193 passed, 3 skipped**, 1 warning, about 55 s |
+
+The three skips are unchanged: `rasterio` absent (`tests/test_oscd_label.py`),
+`torch` absent (`tests/test_finetune_cnn.py`) and the missing dataset sample
+`dataset/test/A/test_100_0_0.png` (`tests/test_regression_and_api.py`).
+
+What this work added: a three-step plain-language wizard with a hint tour,
+dark/light themes and 375/768/1440 px screenshots; a water profile, an
+agriculture greening class, per-profile explanations and a shared class table;
+a rewritten PDF report with a plain summary, badge reasons, class table,
+credits, limitations and provenance; `GET /history/{id}/report`; retries,
+a bounded scene cache, `/health` availability fields, history rate limits, and
+regression fixes for composite mode. Evidence:
+`docs/DEFINITION_OF_DONE.md`, `docs/FINAL_REPORT.md`,
+`docs/screenshots/01-*` through `12-*`, and the tests named there.
+
+Caveats: the browser screenshots use mocked Copernicus responses; the Docker
+image was not built (Docker absent); Cloud Run was not deployed; the WorldCover
+reference check was not run on real data; the general, agriculture,
+deforestation, roads and water profiles remain unlabelled estimates; and
+`final-polish` is local only (the push was blocked by the permission system and
+not retried).
+
+No OSCD test city was scored, no test label was read, no model file was
+modified, and `docs/paper/` was not edited by this work.
