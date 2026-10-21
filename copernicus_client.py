@@ -9,7 +9,9 @@ import io
 import os
 import re
 import tarfile
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta
 
 import requests
@@ -20,6 +22,11 @@ AUTH_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/o
 CATALOG_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 COLLECTION = "sentinel-2-l2a"
+
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+RETRY_ATTEMPTS = 3
+RETRY_BASE_SECONDS = 0.5
+RETRY_MAX_SECONDS = 4.0
 
 EVALSCRIPT = """//VERSION=3
 function setup() {
@@ -58,6 +65,143 @@ class MissingCredentialsError(ValueError):
 
 class NoScenesError(CopernicusError):
     """No intersecting Sentinel-2 L2A scenes in the requested window."""
+
+
+def _retry_delay(attempt: int, retry_after: str | None, sleep_fn) -> None:
+    delay = min(RETRY_MAX_SECONDS, RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
+    if retry_after:
+        try:
+            delay = min(RETRY_MAX_SECONDS, max(delay, float(retry_after)))
+        except (TypeError, ValueError):
+            pass
+    if delay > 0:
+        sleep_fn(delay)
+
+
+def _post_with_retry(url, *, sleep_fn=time.sleep, attempts: int = RETRY_ATTEMPTS, **kwargs):
+    """POST with a bounded retry on timeouts and transient upstream statuses."""
+    attempts = max(1, int(attempts))
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.post(url, **kwargs)
+        except requests.exceptions.RequestException:
+            if attempt >= attempts:
+                raise
+            _retry_delay(attempt, None, sleep_fn)
+            continue
+        if response.status_code in RETRYABLE_STATUS and attempt < attempts:
+            _retry_delay(attempt, response.headers.get("Retry-After"), sleep_fn)
+            continue
+        return response
+    raise AssertionError("unreachable: the final attempt either returns or raises")
+
+
+class _SceneCache:
+    """Thread-safe LRU cache for downloaded scene bundles with a byte budget."""
+
+    def __init__(self, max_bytes: int, max_entries: int):
+        self.max_bytes = max(0, int(max_bytes))
+        self.max_entries = max(1, int(max_entries))
+        self._items: OrderedDict[tuple, dict] = OrderedDict()
+        self._bytes = 0
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    @staticmethod
+    def _bundle_bytes(bundle: dict) -> int:
+        total = 0
+        for key in ("rgb", "indices", "indices_ext"):
+            value = bundle.get(key)
+            if isinstance(value, (bytes, bytearray)):
+                total += len(value)
+        return total + 512
+
+    def get(self, key: tuple) -> dict | None:
+        with self._lock:
+            bundle = self._items.get(key)
+            if bundle is None:
+                self.misses += 1
+                return None
+            self._items.move_to_end(key)
+            self.hits += 1
+            return dict(bundle)
+
+    def put(self, key: tuple, bundle: dict) -> None:
+        size = self._bundle_bytes(bundle)
+        if size > self.max_bytes:
+            return
+        with self._lock:
+            if key in self._items:
+                self._bytes -= self._bundle_bytes(self._items.pop(key))
+            while self._items and (self._bytes + size > self.max_bytes or len(self._items) >= self.max_entries):
+                _, evicted = self._items.popitem(last=False)
+                self._bytes -= self._bundle_bytes(evicted)
+                self.evictions += 1
+            self._items[key] = dict(bundle)
+            self._bytes += size
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+            self._bytes = 0
+
+    def stats(self) -> dict:
+        with self._lock:
+            return {
+                "entries": len(self._items),
+                "bytes": self._bytes,
+                "max_bytes": self.max_bytes,
+                "max_entries": self.max_entries,
+                "hits": self.hits,
+                "misses": self.misses,
+                "evictions": self.evictions,
+            }
+
+
+def _cache_limits() -> tuple[int, int]:
+    def _number(name: str, fallback: float) -> int:
+        try:
+            return max(0, int(float(os.environ.get(name, fallback))))
+        except (TypeError, ValueError):
+            return int(fallback)
+
+    return _number("SCENE_CACHE_MB", 64) * 1024 * 1024, _number("SCENE_CACHE_ENTRIES", 32)
+
+
+_scene_cache: _SceneCache | None = None
+_cache_lock = threading.Lock()
+
+
+def get_scene_cache() -> _SceneCache:
+    global _scene_cache
+    with _cache_lock:
+        if _scene_cache is None:
+            max_bytes, max_entries = _cache_limits()
+            _scene_cache = _SceneCache(max_bytes, max_entries)
+        return _scene_cache
+
+
+def reset_scene_cache(*, max_bytes: int | None = None, max_entries: int | None = None) -> _SceneCache:
+    global _scene_cache
+    with _cache_lock:
+        defaults = _cache_limits()
+        _scene_cache = _SceneCache(
+            defaults[0] if max_bytes is None else max_bytes,
+            defaults[1] if max_entries is None else max_entries,
+        )
+        return _scene_cache
+
+
+def _scene_cache_key(bbox, scene: dict, size: tuple[int, int]) -> tuple:
+    return (
+        tuple(round(float(value), 6) for value in bbox),
+        str(scene.get("id") or ""),
+        str(scene.get("datetime") or (scene.get("properties") or {}).get("datetime") or ""),
+        int(size[0]),
+        int(size[1]),
+    )
 
 
 def make_bbox_square(bbox):
@@ -109,7 +253,7 @@ class CopernicusClient:
             "client_secret": self.client_secret,
         }
         try:
-            response = requests.post(AUTH_URL, data=payload, timeout=10)
+            response = _post_with_retry(AUTH_URL, data=payload, timeout=10)
         except requests.exceptions.RequestException as exc:
             raise CopernicusError(f"Network error authenticating with Copernicus: {exc}") from exc
         if response.status_code != 200:
@@ -133,7 +277,7 @@ class CopernicusClient:
         }
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         try:
-            response = requests.post(CATALOG_URL, headers=headers, json=payload, timeout=20)
+            response = _post_with_retry(CATALOG_URL, headers=headers, json=payload, timeout=20)
         except requests.exceptions.RequestException as exc:
             raise CopernicusError(f"Network error querying the Copernicus catalog: {exc}") from exc
         if response.status_code != 200:
@@ -161,6 +305,12 @@ class CopernicusClient:
             expected_pixels(list(bbox))["analysis_width_px"],
             expected_pixels(list(bbox))["analysis_height_px"],
         )
+        cache_key = _scene_cache_key(bbox, scene, (width, height))
+        cache = get_scene_cache()
+        cached = cache.get(cache_key)
+        if cached is not None:
+            cached["cached"] = True
+            return cached
         payload = {
             "input": {
                 "bounds": {
@@ -191,7 +341,7 @@ class CopernicusClient:
             "Accept": "application/tar",
         }
         try:
-            response = requests.post(PROCESS_URL, headers=headers, json=payload, timeout=60)
+            response = _post_with_retry(PROCESS_URL, headers=headers, json=payload, timeout=60)
         except requests.exceptions.RequestException as exc:
             raise CopernicusError(f"Network error or timeout fetching the scene: {exc}") from exc
         if response.status_code != 200:
@@ -199,15 +349,15 @@ class CopernicusClient:
                 f"Sentinel Hub Process API error: HTTP {response.status_code} - {response.text[:300]}"
             )
         try:
-            archive = tarfile.open(fileobj=io.BytesIO(response.content))
-            rgb_bytes = archive.extractfile("rgb.png").read()
-            indices_bytes = archive.extractfile("indices.png").read()
-            ext_member = archive.extractfile("indices_ext.png")
-            ext_bytes = ext_member.read() if ext_member is not None else b""
+            with tarfile.open(fileobj=io.BytesIO(response.content)) as archive:
+                rgb_bytes = archive.extractfile("rgb.png").read()
+                indices_bytes = archive.extractfile("indices.png").read()
+                ext_member = archive.extractfile("indices_ext.png")
+                ext_bytes = ext_member.read() if ext_member is not None else b""
         except (tarfile.TarError, KeyError, AttributeError) as exc:
             raise CopernicusError(f"Could not read the Process API TAR response: {exc}") from exc
         properties = scene.get("properties") or {}
-        return {
+        bundle = {
             "rgb": rgb_bytes,
             "indices": indices_bytes,
             "indices_ext": ext_bytes,
@@ -218,6 +368,8 @@ class CopernicusClient:
             "width": int(width),
             "height": int(height),
         }
+        cache.put(cache_key, bundle)
+        return bundle
 
     def _search_best_scene(self, bbox, base_date_str: str, window_days: int = 5):
         """Legacy helper retained for callers that expect (from, to, cloud)."""
