@@ -13,10 +13,9 @@ import {
   HistoryItem,
   CandidateScene,
   AutoFillPayload,
-  DetectionEngineKey,
 } from './types';
 import { PRESET_LOCATIONS, PROFILES } from './data/presets';
-import { runSyntheticAnalysis, calculateAoiStats, AVAILABLE_ENGINES } from './services/analysisEngine';
+import { runSyntheticAnalysis, calculateAoiStats } from './services/analysisEngine';
 import {
   Calendar,
   Sparkles,
@@ -29,7 +28,6 @@ import {
   Shield,
   Search,
   Bot,
-  Cpu,
   Target,
   Zap,
 } from 'lucide-react';
@@ -45,9 +43,6 @@ export const App: React.FC = () => {
   const [dateBefore, setDateBefore] = useState<string>(defaultPreset.dateBefore);
   const [dateAfter, setDateAfter] = useState<string>(defaultPreset.dateAfter);
   const [profileKey, setProfileKey] = useState<ProfileKey>(defaultPreset.profile);
-  const [selectedEngineKey, setSelectedEngineKey] = useState<DetectionEngineKey>('fusion_sota');
-  const [customMmu, setCustomMmu] = useState<number>(0.2);
-  const [windowDays, setWindowDays] = useState<number>(30);
   const [locationLabel, setLocationLabel] = useState<string>(defaultPreset.name);
 
   // Chat copilot state
@@ -106,33 +101,21 @@ export const App: React.FC = () => {
     setDateAfter(preset.dateAfter);
     setProfileKey(preset.profile);
     setLocationLabel(preset.name);
-    setCustomMmu(PROFILES[preset.profile]?.defaultMmuHa || 0.2);
     // Reset any old result so user sees fresh setup
     setCurrentResult(null);
   };
 
   const runAnalysis = async () => {
     setIsAnalyzing(true);
-    setAnalysisStep('Fetching Real High-Resolution Satellite Imagery (1024x1024 px HD Optical Capture)...');
+    setAnalysisStep('Requesting comparison imagery from configured providers…');
 
     try {
-      await new Promise((r) => setTimeout(r, 450));
-      setAnalysisStep('Querying Copernicus Sentinel-2 & Esri World Imagery sub-meter archives...');
-
-      await new Promise((r) => setTimeout(r, 500));
-      setAnalysisStep(`Executing Pixel-Level Optical & Multi-Spectral Change Detection (${PROFILES[profileKey].indices.join(', ')})...`);
-
-      await new Promise((r) => setTimeout(r, 500));
-      setAnalysisStep('Pinpointing Ground Transformations: Counting New Buildings, Cleared Trees & Roads...');
-
       const result = await runSyntheticAnalysis(
         bbox,
         dateBefore,
         dateAfter,
         profileKey,
-        customMmu,
-        locationLabel,
-        selectedEngineKey
+        locationLabel
       );
 
       setCurrentResult(result);
@@ -168,7 +151,6 @@ export const App: React.FC = () => {
     const t2 = payload.dateAfter || dateAfter;
     const prof = payload.profile || profileKey;
     const locName = payload.locationName || locationLabel;
-    const mmu = PROFILES[prof]?.defaultMmuHa || customMmu;
 
     // Update form state
     setBbox(targetBbox);
@@ -177,7 +159,6 @@ export const App: React.FC = () => {
     setDateBefore(t1);
     setDateAfter(t2);
     setProfileKey(prof);
-    setCustomMmu(mmu);
     setActiveTab('live');
 
     // Run analysis immediately
@@ -185,23 +166,8 @@ export const App: React.FC = () => {
     setAnalysisStep(`Auto-navigating to ${locName} (${targetBbox.south.toFixed(3)}, ${targetBbox.west.toFixed(3)})...`);
 
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      setAnalysisStep(`Downloading Sentinel-2 Multi-Spectral bands (${t1} vs ${t2})...`);
-
-      await new Promise((r) => setTimeout(r, 650));
-      setAnalysisStep(`Computing Multi-Spectral Indices (${PROFILES[prof]?.indices.join(', ') || 'NDVI, NDBI'})...`);
-
-      await new Promise((r) => setTimeout(r, 650));
-      setAnalysisStep('Evaluating SCL Cloud/Shadow Mask & Building / Vegetation Census...');
-
-      const result = await runSyntheticAnalysis(
-        targetBbox,
-        t1,
-        t2,
-        prof,
-        mmu,
-        locName
-      );
+      setAnalysisStep('Requesting imagery and screening visible RGB differences…');
+      const result = await runSyntheticAnalysis(targetBbox, t1, t2, prof, locName);
 
       setCurrentResult(result);
       saveToHistory(result);
@@ -252,15 +218,15 @@ export const App: React.FC = () => {
                 {/* Intro Hero Banner */}
                 <div className="max-w-3xl">
                   <span className="text-xs font-semibold uppercase tracking-widest text-cyan-400 block mb-1">
-                    Sentinel-2 L2A · 10m Resolution · Copernicus Data Space
+                    RGB imagery screening · Provider coverage and capture dates vary
                   </span>
                   <h1 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">
                     See what changed on the ground.
                   </h1>
                   <p className="mt-2 text-sm text-slate-300 leading-relaxed">
-                    Compare two dates of multi-spectral Sentinel-2 satellite imagery. Inspect verified
-                    spectral change evidence, identify newly built-up parcels or vegetation clearance, and
-                    generate a comprehensive provenance report.
+                    Request imagery for two dates and screen visible RGB pixel differences. This interface does
+                    not provide semantic land-cover classification or validated environmental findings; when
+                    imagery cannot be retrieved, it shows clearly labelled synthetic demonstration imagery.
                   </p>
 
                   {/* AI Quick Auto-Fill Prompt Pill */}
@@ -290,7 +256,7 @@ export const App: React.FC = () => {
                         </span>
                         <h2 className="text-base font-bold text-white">Choose Target Area (AOI)</h2>
                       </div>
-                      <span className="text-xs text-slate-400">10m Ground Precision</span>
+                      <span className="text-xs text-slate-400">Map area selected by bounding box</span>
                     </div>
 
                     <MapPicker
@@ -311,8 +277,8 @@ export const App: React.FC = () => {
                       <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 block">
                         Step 2
                       </span>
-                      <h2 className="text-base font-bold text-white">Dates & Multi-Spectral Profile</h2>
-                      <p className="text-xs text-slate-400 mt-0.5">Configure comparative dates and detection algorithms</p>
+                      <h2 className="text-base font-bold text-white">Dates & screening context</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Imagery source dates and RGB screening limitations apply</p>
                     </div>
 
                     {/* Comparative Date Pickers */}
@@ -361,8 +327,8 @@ export const App: React.FC = () => {
                     <div>
                       <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center justify-between">
                         <span>Analysis Profile</span>
-                        <span className="text-[11px] text-cyan-400 font-mono">
-                          Indices: {selectedProfile.indices.join(', ')}
+                        <span className="text-[11px] text-amber-300">
+                          Context only · RGB screen does not compute indices
                         </span>
                       </label>
                       <select
@@ -370,7 +336,6 @@ export const App: React.FC = () => {
                         onChange={(e) => {
                           const key = e.target.value as ProfileKey;
                           setProfileKey(key);
-                          setCustomMmu(PROFILES[key]?.defaultMmuHa || 0.2);
                         }}
                         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white focus:border-cyan-500 focus:outline-none"
                       >
@@ -383,100 +348,17 @@ export const App: React.FC = () => {
 
                       <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 text-xs">
                         <p className="text-slate-300">{selectedProfile.description}</p>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          <strong className="text-cyan-400">Optimal for:</strong> {selectedProfile.useCase}
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          This profile is context only. The current comparison uses visible RGB pixel differences
+                          and does not calculate the profile’s named spectral indices or classify land cover.
                         </p>
                       </div>
                     </div>
 
-                    {/* Detection Engine & Precision Calibration */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <Cpu className="h-3.5 w-3.5 text-cyan-400" />
-                          <span>Detection Engine & Accuracy Mode</span>
-                        </span>
-                        <span className="text-[10px] text-cyan-400 font-medium">Calibrated Precision</span>
-                      </label>
-                      <select
-                        value={selectedEngineKey}
-                        onChange={(e) => setSelectedEngineKey(e.target.value as DetectionEngineKey)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white focus:border-cyan-500 focus:outline-none cursor-pointer"
-                      >
-                        {AVAILABLE_ENGINES.map((eng) => (
-                          <option key={eng.key} value={eng.key}>
-                            {eng.name} ({eng.badge})
-                          </option>
-                        ))}
-                      </select>
-
-                      <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 text-xs">
-                        <div className="flex items-center justify-between text-[11px] mb-1">
-                          <span className="text-emerald-400 font-semibold">
-                            {AVAILABLE_ENGINES.find((e) => e.key === selectedEngineKey)?.badge}
-                          </span>
-                          <span className="text-slate-400">
-                            IoU: {AVAILABLE_ENGINES.find((e) => e.key === selectedEngineKey)?.iouScore}%
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-300 leading-normal">
-                          {AVAILABLE_ENGINES.find((e) => e.key === selectedEngineKey)?.description}
-                        </p>
-                      </div>
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-100">
+                      RGB screening only: no semantic classifier, cloud/shadow correction, image registration,
+                      minimum mapping unit, or validated accuracy estimate is applied.
                     </div>
-
-                    {/* Advanced Parameters Accordion */}
-                    <details className="group rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs">
-                      <summary className="cursor-pointer font-semibold text-slate-400 hover:text-white flex items-center justify-between">
-                        <span>Advanced Pipeline Parameters</span>
-                        <span className="text-[10px] text-cyan-400 group-open:rotate-180 transition-transform">▼</span>
-                      </summary>
-                      <div className="mt-3 space-y-3">
-                        <div>
-                          <label className="text-[11px] text-slate-300 block mb-1">
-                            Minimum Mapping Unit (MMU): {customMmu} ha
-                          </label>
-                          <input
-                            type="range"
-                            min="0.05"
-                            max="1.5"
-                            step="0.05"
-                            value={customMmu}
-                            onChange={(e) => setCustomMmu(parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none accent-cyan-400"
-                          />
-                          <p className="text-[10px] text-slate-500 mt-0.5">
-                            Connected change patches smaller than {customMmu} ha will be discarded to prevent sensor noise.
-                          </p>
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] text-slate-300 block mb-1">
-                            Search Window (± {windowDays} days)
-                          </label>
-                          <input
-                            type="range"
-                            min="5"
-                            max="60"
-                            step="5"
-                            value={windowDays}
-                            onChange={(e) => setWindowDays(parseInt(e.target.value))}
-                            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none accent-cyan-400"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
-                          <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                            <input type="checkbox" defaultChecked className="rounded accent-cyan-500" />
-                            <span>Apply SCL Cloud, Cirrus & Shadow Filtering</span>
-                          </label>
-                          <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
-                            <input type="checkbox" defaultChecked className="rounded accent-cyan-500" />
-                            <span>Morphological cleanup (dilate/erode boundary smoothing)</span>
-                          </label>
-                        </div>
-                      </div>
-                    </details>
 
                     {/* Run Button */}
                     <button
@@ -485,10 +367,10 @@ export const App: React.FC = () => {
                       className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                     >
                       <Sparkles className="h-4 w-4" />
-                      Run Spectral Change Analysis & Generate Report
+                      Run RGB Difference Screen
                     </button>
                     <p className="text-center text-[11px] text-slate-400">
-                      Processing runs multi-spectral difference algorithms directly on selected AOI.
+                      Results identify RGB pixel differences only; imagery availability and capture-date alignment are not guaranteed.
                     </p>
                   </div>
                 </div>
@@ -509,14 +391,15 @@ export const App: React.FC = () => {
                   saveToHistory(updated);
                 }}
               />
-            ) : (
+            ) : null}
+            <div className={currentResult ? 'hidden' : ''}>
               <UploadPairView
                 onAnalysisComplete={(res) => {
                   setCurrentResult(res);
                   saveToHistory(res);
                 }}
               />
-            )}
+            </div>
           </div>
         )}
 
@@ -549,7 +432,7 @@ export const App: React.FC = () => {
               <span className="animate-spin absolute inline-flex h-full w-full rounded-full border-4 border-cyan-400 border-t-transparent" />
               <Layers className="h-6 w-6 text-cyan-400" />
             </div>
-            <h3 className="text-base font-bold text-white">Analyzing Satellite Imagery</h3>
+            <h3 className="text-base font-bold text-white">Requesting and screening imagery</h3>
             <p className="mt-2 text-xs font-medium text-cyan-300 min-h-[36px]">{analysisStep}</p>
             <span className="mt-4 text-[11px] text-slate-500">Please keep this browser window open</span>
           </div>
@@ -558,9 +441,9 @@ export const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="mt-12 border-t border-slate-800/80 bg-[#070c19] py-6 text-center text-xs text-slate-500">
-        <p>Satellite Change Detection & Land Audit Platform · Sentinel-2 Multi-Spectral Instrument (MSI)</p>
+        <p>Satellite Change Detection & Land Audit Platform · RGB screening and imagery review</p>
         <p className="mt-1 text-[11px]">
-          Imagery: European Space Agency / Copernicus Sentinel data. Decision support platform, not certified legal ground truth.
+          Provider imagery and dates vary. Synthetic fallback is demonstration-only; results are not validated ground truth.
         </p>
       </footer>
 

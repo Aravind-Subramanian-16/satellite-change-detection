@@ -55,6 +55,11 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
   const env = result.environmentalAssessment;
   const reason = result.decisionReasoning;
   const census = result.census;
+  const isRgbScreening =
+    result.analysisMode === 'uploaded-rgb-screening' ||
+    result.analysisMode === 'rgb-screening' ||
+    result.analysisMode === 'simulated-demo';
+  const isSimulatedDemo = result.analysisMode === 'simulated-demo';
 
   const handleDownloadPDF = async () => {
     setIsExportingPDF(true);
@@ -143,7 +148,7 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-cyan-950 px-3 py-0.5 text-xs font-semibold text-cyan-300 border border-cyan-800">
                 <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
-                Precise Land Audit Ready
+                {isSimulatedDemo ? 'Synthetic demo · not observations' : isRgbScreening ? 'RGB screening · unvalidated' : 'Analysis result'}
               </span>
               <span className="text-xs text-slate-500 font-mono">ID: {result.id}</span>
             </div>
@@ -158,29 +163,41 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
               <span className="text-slate-600">•</span>
               <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
                 <Sparkles className="h-3 w-3" />
-                {result.imagerySource?.isRealSatellite ? 'Live High-Res Optical Satellite (1024px)' : 'High-Precision Spectral Analysis'}
+                {isSimulatedDemo
+                  ? 'Synthetically generated demonstration'
+                  : isRgbScreening
+                  ? result.analysisMode === 'uploaded-rgb-screening' ? 'Uploaded RGB pixel-difference screen' : 'Retrieved RGB pixel-difference screen'
+                  : 'Analysis result'}
               </span>
               <span className="text-slate-600">•</span>
-              <span className="text-slate-400">{result.imagerySource?.resolutionM || 0.5}m Spatial Resolution</span>
+              <span className="text-slate-400">
+                {isRgbScreening
+                  ? `${result.analysisPixelStats?.width ?? 0} × ${result.analysisPixelStats?.height ?? 0} analysis px`
+                  : result.imagerySource?.resolutionM
+                  ? `${result.imagerySource.resolutionM}m Spatial Resolution`
+                  : 'Ground resolution not reported'}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleRunAiVisionAudit}
-              disabled={isAiRunning}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-purple-600/20 transition-all hover:scale-102 disabled:opacity-50"
-            >
-              <Bot className="h-4 w-4" />
-              {isAiRunning ? 'Analyzing Vision...' : '✨ Run AI Vision Audit'}
-            </button>
+            {!isRgbScreening && (
+              <button
+                onClick={handleRunAiVisionAudit}
+                disabled={isAiRunning}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-purple-600/20 transition-all hover:scale-102 disabled:opacity-50"
+              >
+                <Bot className="h-4 w-4" />
+                {isAiRunning ? 'Analyzing Vision...' : '✨ Run AI Vision Audit'}
+              </button>
+            )}
 
             <button
               onClick={onNewAnalysis}
               className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-200 transition-colors"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              New Area
+              {isRgbScreening ? 'Refine ROI / Reanalyze' : 'New Area'}
             </button>
           </div>
         </div>
@@ -197,10 +214,12 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
         <div className="mt-5 pt-5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-              Download Audit Reports
+              {isRgbScreening ? 'Download Screening Evidence' : 'Download Audit Reports'}
             </span>
             <span className="text-xs text-slate-400">
-              Export ready-to-share executive documents and spreadsheet data with exact object counts
+              {isRgbScreening
+                ? 'Export the RGB screening evidence and pixel statistics; no object counts or physical units are inferred.'
+                : 'Export ready-to-share executive documents and spreadsheet data with exact object counts'}
             </span>
           </div>
 
@@ -223,14 +242,16 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
               {isExportingCSV ? 'Preparing CSV...' : 'Download CSV Table'}
             </button>
 
-            <button
-              onClick={() => exportGeoJSON(result)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 px-3 py-2.5 text-xs font-medium text-slate-300 transition-colors"
-              title="Download GeoJSON for GIS applications (QGIS, ArcGIS)"
-            >
-              <Map className="h-3.5 w-3.5 text-cyan-400" />
-              GeoJSON
-            </button>
+            {!isRgbScreening && (
+              <button
+                onClick={() => exportGeoJSON(result)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 px-3 py-2.5 text-xs font-medium text-slate-300 transition-colors"
+                title="Download GeoJSON for GIS applications (QGIS, ArcGIS)"
+              >
+                <Map className="h-3.5 w-3.5 text-cyan-400" />
+                GeoJSON
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -253,14 +274,43 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
       <div className="rounded-2xl border border-indigo-500/40 bg-gradient-to-br from-slate-900 via-indigo-950/30 to-slate-950 p-6 shadow-xl">
         <div className="flex items-center gap-2 mb-2 text-indigo-300 text-xs font-bold uppercase tracking-wider">
           <Eye className="h-4 w-4 text-indigo-400" />
-          Ground Transformation Story (Before vs After Observation)
+          {isSimulatedDemo ? 'Synthetic demonstration notice' : isRgbScreening ? 'Pixel-difference screening summary' : 'Analysis summary'}
         </div>
         <p className="text-base font-semibold leading-relaxed text-white">
-          "{census?.narrativeStory || env.impactSummary}"
+          {census?.narrativeStory || env.impactSummary}
         </p>
       </div>
 
       {/* ── PRECISE OBJECT & INFRASTRUCTURE CENSUS (4 KPI CARDS) ── */}
+      {isRgbScreening ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-4 shadow-lg">
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
+              {isSimulatedDemo ? 'Generated demo pattern' : 'Pixels above RGB threshold'}
+            </span>
+            <div className="mt-1 text-3xl font-extrabold text-cyan-300">
+              {isSimulatedDemo ? 'Illustrative' : `${result.percentChanged}%`}
+            </div>
+            <span className="text-[11px] text-slate-400">
+              {isSimulatedDemo
+                ? 'No real-world pixel measurement'
+                : `${result.analysisPixelStats?.changedPixels.toLocaleString()} of ${result.analysisPixelStats?.totalPixels.toLocaleString()} sampled pixels`}
+            </span>
+          </div>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/90 p-4 shadow-lg">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Analysis grid</span>
+            <div className="mt-1 text-3xl font-extrabold text-white">
+              {result.analysisPixelStats?.width} × {result.analysisPixelStats?.height}
+            </div>
+            <span className="text-[11px] text-slate-400">pixels; no ground scale supplied</span>
+          </div>
+          <div className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-4 shadow-lg">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-300">Validation</span>
+            <div className="mt-1 text-lg font-bold text-white">Not assessed</div>
+            <span className="text-[11px] text-slate-400">No accuracy or confidence score available</span>
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-4 shadow-lg">
           <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">
@@ -324,9 +374,10 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
           </span>
         </div>
       </div>
+      )}
 
       {/* ── PAN-INDIA GROUND-TRUTH ACCURACY & CALIBRATION MATRIX ── */}
-      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-slate-900/95 to-emerald-950/20 p-5 shadow-2xl backdrop-blur-md">
+      {!isRgbScreening && result.accuracyMetrics && <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-slate-900/95 to-emerald-950/20 p-5 shadow-2xl backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -452,20 +503,26 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
             </span>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── VISUAL EVIDENCE, SWIPE & OBJECT PINPOINTER ─────────────── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Visual Evidence & Pinpointed Objects</span>
-              <span className="rounded-full bg-cyan-950 px-2 py-0.5 text-[10px] font-semibold text-cyan-300 border border-cyan-800">
-                Interactive Pins
-              </span>
+              <span>{isSimulatedDemo ? 'Demonstration visuals · synthetic data' : isRgbScreening ? 'Visual Evidence · RGB screening' : 'Visual Evidence & Pinpointed Objects'}</span>
+              {!isRgbScreening && result.detectedFeatures.length > 0 && (
+                <span className="rounded-full bg-cyan-950 px-2 py-0.5 text-[10px] font-semibold text-cyan-300 border border-cyan-800">
+                  Interactive Pins
+                </span>
+              )}
             </h2>
             <p className="text-xs text-slate-400">
-              Click any pin on the image to see what was there before and what came up in its place
+              {isSimulatedDemo
+                ? 'These images are generated examples, not observations of the selected place. Zoom/pan controls are for UI demonstration only.'
+                : isRgbScreening
+                ? 'Zoom and pan both dates together; drag on the Before image in the upload step to refine the region and run the screen again.'
+                : 'Click any pin on the image to see what was there before and what came up in its place'}
             </p>
           </div>
 
@@ -513,18 +570,20 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
         {result.imagerySource && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-950/80 border border-slate-800 px-3.5 py-2.5 text-xs text-slate-300">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-bold text-white">Real-Time High-Resolution Optical Satellite:</span>
+              {!isRgbScreening && <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400" />}
+              <span className="font-bold text-white">
+                {isSimulatedDemo ? 'Imagery status:' : isRgbScreening ? 'Imagery source:' : 'Imagery source:'}
+              </span>
               <span className="text-slate-400">
                 Baseline: <strong className="text-slate-200">{result.imagerySource.beforeProvider}</strong> | Current: <strong className="text-cyan-300">{result.imagerySource.afterProvider}</strong>
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px]">
               <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300 font-mono">
-                {result.imagerySource.width}x{result.imagerySource.height} px Native
+                {result.imagerySource.width} × {result.imagerySource.height} analysis px
               </span>
-              <span className="rounded bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 text-emerald-300 font-semibold">
-                Sub-meter HD Ground Detail
+              <span className="text-slate-400">
+                {isSimulatedDemo ? 'Synthetic demo; no spatial resolution' : 'Ground resolution not validated'}
               </span>
             </div>
           </div>
@@ -638,9 +697,13 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
       {/* ── DETECTED SECTORS TABLE WITH WHY FLAGGED ────────────────── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
         <div className="mb-4">
-          <h2 className="text-base font-bold text-white">Identified Changed Sectors & Clusters</h2>
+          <h2 className="text-base font-bold text-white">{isRgbScreening ? 'Georeferenced regions' : 'Identified Changed Sectors & Clusters'}</h2>
           <p className="text-xs text-slate-400">
-            Click any row to reveal the specific decision rationale and coordinate bounds
+            {isSimulatedDemo
+              ? 'No regions are reported because the images are generated demonstration data.'
+              : isRgbScreening
+              ? 'Not available: coordinates and ground scale were not supplied with these images.'
+              : 'Click any row to reveal the specific decision rationale and coordinate bounds'}
           </p>
         </div>
         <RegionsTable regions={result.regions} />
@@ -650,7 +713,7 @@ export const DetailedReport: React.FC<DetailedReportProps> = ({
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
         <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-cyan-400" />
-          Environmental Impact & Ground Transition Dynamics
+          {isRgbScreening ? 'Interpretation limits and follow-up' : 'Environmental Impact & Ground Transition Dynamics'}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">

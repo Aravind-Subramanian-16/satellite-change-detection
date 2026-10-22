@@ -1,0 +1,8 @@
+# Dependencies for saved-result analysis, paper figure generation and OSCD
+# raster evaluation. This file is intentionally standalone because the
+# historical web-app requirements.txt is not part of the current frontend.
+numpy>=1.24,<2
+Pillow>=9.0,<13
+rasterio>=1.3,<2
+tqdm>=4.66,<5
+matplotlib>=3.7,<4

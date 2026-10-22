@@ -14,7 +14,7 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Real-Time High-Resolution Satellite Imagery Fetching Endpoint
+// Fetch provider imagery for visual comparison; providers may return composites rather than date-specific scenes.
 app.post('/api/real-satellite-pair', async (req, res) => {
   try {
     const { bbox, dateBefore, dateAfter, width = 1024, height = 1024 } = req.body;
@@ -34,7 +34,7 @@ app.post('/api/real-satellite-pair', async (req, res) => {
     // 1. Copernicus Sentinel-2 True Color (10m resolution)
     const sentinelUrl = `https://tiles.maps.eox.at/wms?service=wms&request=GetMap&version=1.3.0&layers=s2cloudless-${yBefore}&styles=&format=image/jpeg&transparent=false&crs=EPSG:4326&bbox=${bbox.south},${bbox.west},${bbox.north},${bbox.east}&width=${w}&height=${h}`;
 
-    // 2. Esri World Imagery Export (sub-meter ground resolution)
+    // 2. Esri World Imagery mosaic. Capture date and ground resolution are not supplied by this request.
     const esriUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox.west},${bbox.south},${bbox.east},${bbox.north}&bboxSR=4326&size=${w},${h}&imageSR=4326&format=png&f=image`;
 
     const fetchWithTimeout = async (url: string, timeoutMs = 8000) => {
@@ -61,10 +61,10 @@ app.post('/api/real-satellite-pair', async (req, res) => {
     // Parallel fetch with fallback
     let beforeDataUrl: string | null = null;
     let afterDataUrl: string | null = null;
-    let sourceBefore = `Copernicus Sentinel-2 Cloudless (${yBefore})`;
-    let sourceAfter = 'Esri World Imagery HD Sub-Meter Satellite';
+    let sourceBefore = `EOX Sentinel-2 cloudless composite (${yBefore}; RGB)`;
+    let sourceAfter = 'Esri World Imagery mosaic (capture date unspecified)';
 
-    // Fetch After (Real sub-meter optical satellite)
+    // Fetch latest available provider imagery (not necessarily the requested after-date acquisition).
     try {
       const resAfter = await fetchWithTimeout(esriUrl, 9000);
       afterDataUrl = `data:${resAfter.contentType};base64,${resAfter.buffer.toString('base64')}`;
@@ -75,7 +75,7 @@ app.post('/api/real-satellite-pair', async (req, res) => {
         const fallbackUrl = `https://tiles.maps.eox.at/wms?service=wms&request=GetMap&version=1.3.0&layers=s2cloudless-2024&styles=&format=image/jpeg&transparent=false&crs=EPSG:4326&bbox=${bbox.south},${bbox.west},${bbox.north},${bbox.east}&width=${w}&height=${h}`;
         const resFb = await fetchWithTimeout(fallbackUrl, 8000);
         afterDataUrl = `data:${resFb.contentType};base64,${resFb.buffer.toString('base64')}`;
-        sourceAfter = 'Copernicus Sentinel-2 True Color (2024)';
+        sourceAfter = 'EOX Sentinel-2 cloudless composite (2024; RGB)';
       } catch (errFb) {
         console.warn('Fallback after failed:', errFb);
       }
@@ -86,12 +86,7 @@ app.post('/api/real-satellite-pair', async (req, res) => {
       const resBefore = await fetchWithTimeout(sentinelUrl, 9000);
       beforeDataUrl = `data:${resBefore.contentType};base64,${resBefore.buffer.toString('base64')}`;
     } catch (e: any) {
-      console.warn('Sentinel baseline fetch error, attempting fallback:', e?.message);
-      if (afterDataUrl) {
-        // If we have the current high-res after, we can use it as base for spectral difference
-        beforeDataUrl = afterDataUrl;
-        sourceBefore = 'Historical Optical Baseline';
-      }
+      console.warn('Sentinel baseline fetch failed; a valid before/after pair is unavailable:', e?.message);
     }
 
     if (beforeDataUrl && afterDataUrl) {
@@ -102,7 +97,7 @@ app.post('/api/real-satellite-pair', async (req, res) => {
         afterDataUrl,
         sourceBefore,
         sourceAfter,
-        resolutionM: 0.5,
+        resolutionM: 0,
         width: w,
         height: h,
       });

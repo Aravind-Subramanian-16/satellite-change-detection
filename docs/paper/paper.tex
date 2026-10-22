@@ -1,15 +1,14 @@
-% Compile from docs/paper with pdflatex (IEEEtran required).
-% Every number is computed from degradation_results.csv or
-% benchmarks/results/oscd_results_v2.json. Citation slots are deliberate:
-% no bibliographic data is asserted in this version.
+% Compile from docs/paper with an IEEEtran-compatible LaTeX installation.
+% Reported metrics are derived from saved benchmark records documented in
+% ARTIFACT.md; original model inference is not reproduced in this checkout.
 \documentclass[conference]{IEEEtran}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage[hidelinks]{hyperref}
 
-\title{Resolution-Induced Performance Collapse of a CNN Change Detector:\\
-Simulated and Real Sentinel-2 Evidence}
+\title{A Single-Model Study of Change Detection Under Resolution Degradation:\\
+Simulated Degradation and Cross-Dataset Sentinel-2 Evaluation}
 
 \author{\IEEEauthorblockN{Aravind}
 \IEEEauthorblockA{Department of Computer Science and Engineering\\
@@ -50,16 +49,17 @@ convolutional neural networks, Sentinel-2, spectral indices, NDVI, NDBI, OSCD
 \section{Introduction}
 Automated change detection supports urban planning, disaster response and
 land-cover monitoring. Much recent progress uses deep networks trained and
-evaluated on high-resolution benchmarks such as LEVIR-CD, which provides
-0.5\,m aerial imagery with pixel-level labels [CITE: LEVIR-CD dataset]. Such
-models can report high scores at their native resolution [CITE: deep learning
-change detection surveys], but those scores do not show that the same model
-transfers to a different sensor, resolution or label definition.
+evaluated on high-resolution benchmarks such as LEVIR-CD, a dataset of
+bitemporal Google Earth imagery with change annotations
+\cite{chen2020stanet}. Results on a benchmark's native imagery do not by
+themselves establish transfer to a different sensor, resolution or label
+definition.
 
-Sentinel-2 offers free, frequently revisited multispectral imagery at 10\,m and
-20\,m [CITE: Sentinel-2 mission and L2A products]. A 10\,m pixel is twenty times
-coarser linearly than a 0.5\,m aerial pixel. The difference matters for small
-objects, mixed pixels and any decision that assumes native spatial detail.
+Sentinel-2 is a multispectral imaging mission with bands sampled at 10\,m,
+20\,m and 60\,m spatial resolutions \cite{drusch2012sentinel,sentinel2mission}.
+A 10\,m pixel is twenty times coarser linearly than a 0.5\,m aerial pixel. The
+difference matters for small objects, mixed pixels and any decision that
+assumes native spatial detail.
 
 This paper reports an empirical case study, not a new detector. We take one
 trained CNN, freeze it, and evaluate it in two ways. We apply controlled
@@ -87,48 +87,56 @@ We do not claim a new architecture, a benchmark-leading score or a validated
 operational system.
 
 \section{Related Work}
-\textbf{CNN change detection.} Fully convolutional Siamese networks established
-a standard architecture family for bitemporal change detection [CITE: fully
-convolutional Siamese networks]. Later work added spatial-temporal attention and
-transformer fusion [CITE: STANet], [CITE: BIT]. These studies evaluate at native
-resolution, so their scores are not directly comparable to the cross-resolution
-evaluation reported here.
+\textbf{CNN change detection.} Fully convolutional Siamese networks provide an
+early end-to-end architecture for bitemporal change detection
+\cite{daudt2018siamese}. STANet introduced spatial-temporal attention and the
+LEVIR-CD dataset \cite{chen2020stanet}; BIT later used transformer-based
+temporal feature fusion \cite{chen2022bit}. These benchmark results use
+different protocols from the cross-resolution evaluation reported here and
+are not treated as direct comparisons.
 
 \textbf{Transfer and resolution shift.} Domain shift between training and
-deployment imagery is an acknowledged challenge in remote sensing [CITE:
-cross-sensor and domain-shift change detection]. Sensor, geography, season,
-atmosphere and resolution can differ. This paper isolates a
-simulated blur-and-resampling factor in one experiment and reports a real
-Sentinel-2 evaluation in another; it does not identify which factor causes the
-real-data result.
+deployment imagery can involve changes in sensor, geography, season,
+atmosphere and resolution. This paper isolates a simulated
+blur-and-resampling factor in one experiment and reports a separate real-data
+evaluation; it does not identify which factor causes the cross-dataset result.
 
-\textbf{Spectral indices and thresholding.} NDVI [CITE: NDVI definition] and
-NDBI [CITE: NDBI definition] are simple per-pixel indices that require no
-training labels. At 10\,m, mixed pixels dilute both indices, so a threshold on
-an index difference is not resolution-independent. Otsu's method selects a
-threshold from an intensity histogram without labels [CITE: Otsu thresholding]
-and is sensitive to class balance.
+\textbf{Spectral indices and thresholding.} NDVI is a vegetation index derived
+from red and near-infrared reflectance \cite{rouse1974vegetation}. NDBI uses
+shortwave-infrared and near-infrared reflectance to highlight built-up areas
+\cite{zha2003ndbi}. At 10\,m, mixed pixels can dilute both indices, so an index
+difference threshold is not resolution-independent. Otsu's method selects a
+threshold from a gray-level histogram without labels \cite{otsu1979threshold}.
 
 \textbf{Benchmarks and evaluation hygiene.} OSCD provides Sentinel-2
-urban-change pairs with a fixed city split [CITE: OSCD dataset and protocol].
-Repeated use of a fixed test split can inflate apparent progress [CITE:
-test-set reuse and benchmark overfitting]. We therefore report the prior
-scoring history of the OSCD test cities and do not present the reported run as a
-fresh test. The contribution is evidence and reporting discipline, not a
-priority claim.
+urban-change pairs and annotations for cross-city evaluation
+\cite{daudt2018oscd}. We report the prior scoring history of its test cities
+and do not present the reported run as a fresh, independent test. The
+contribution is a bounded empirical case study, not a priority claim.
 
-\section{System Overview}
-The evaluated tool is a browser-based decision-support application over a
-FastAPI service. Its upload path runs a CNN on a before/after pair. Its live
-path resolves a place name or bounding box and two dates, queries the
-Copernicus Data Space catalogue for Sentinel-2 L2A scenes, ranks candidate
-scenes, retrieves the selected acquisitions, applies cloud/shadow masking from
-the Scene Classification Layer, and computes NDVI and NDBI differences. The
-offline benchmark reuses the same index and threshold logic on reflectance
-bands. The interface presents candidate regions with provenance and withholds
-accuracy figures for unvalidated profiles. This section describes
-implementation facts only; it is not an end-to-end validation of the deployed
-service.
+\section{Software Context and Scope}
+The current repository contains a React/TypeScript browser application served
+by an Express service. It compares provider RGB imagery and uploaded RGB pairs.
+For uploaded pairs, users can select a normalized region of interest, inspect
+the images with synchronized zoom and pan, and view a thresholded RGB
+pixel-difference screen. Provider imagery may be a composite or mosaic rather
+than an acquisition matching the requested date. If a complete provider pair
+is unavailable, the application labels generated imagery as a demonstration.
+The current application does not run the CNN or multispectral NDVI/NDBI
+pipeline described in the supplied draft; its RGB results are screening
+signals, not validated change classifications.
+
+The experiments in Sections IV--V are separate historical offline evaluations
+of a frozen CNN and spectral rules. They are not measurements of the current
+browser application. The saved per-image degradation counts, per-city OSCD
+confusion counts, and scripts for deriving summary metrics are included in the
+repository history and have been restored. Their aggregate metrics and paper
+tables were recomputed from those records for this revision. The original
+imagery, model checkpoint and complete run environment are not available here,
+so inference and the original evaluations could not be rerun. No claim about
+application accuracy or operational performance is made. The distinction
+between the historical experiments and the current software is essential to
+interpreting this work.
 
 \section{Controlled Resolution Degradation}
 \subsection{Protocol}
@@ -187,7 +195,7 @@ other differences in the simulation.
 \section{Real Sentinel-2 Evaluation on OSCD}
 \subsection{Data and Protocol}
 OSCD provides fourteen training cities and ten official test cities with
-pixel-level urban-change labels [CITE: OSCD dataset and protocol]. We use five
+pixel-level urban-change labels \cite{daudt2018oscd}. We use five
 bands aligned to the label grid: B02, B03, B04, B08 and B11. The pooled test set
 contains 3,077,936 pixels, of which 5.17\% are labelled change. The benchmark
 layout used here does not include the Sentinel-2 Scene Classification Layer, so
@@ -196,11 +204,13 @@ cloud and shadow exclusion is not evaluated.
 Three spectral configurations were evaluated. The hardcoded rule flags a pixel
 when NDVI drops by at least 0.30 or NDBI rises by at least 0.30. The percentile
 rule thresholds the positive-change evidence at the 99.0th percentile. Otsu
-thresholds the same evidence without labels [CITE: Otsu thresholding]. The
+thresholds the same evidence without labels \cite{otsu1979threshold}. The
 hardcoded and percentile settings were selected on the fourteen training cities
-over fixed grids; the selected hardcoded values lie at the edges of the search
-grid, while 99.0 is interior to the percentile grid. No test labels were used to
-fit the v2 thresholds.
+over fixed grids according to the saved code and project records; the selected
+hardcoded values lie at the edges of the search grid, while 99.0 is interior to
+the percentile grid. The saved v2 path contains no test-label fitting step, but
+the complete threshold-selection and run logs are unavailable, so this
+separation cannot be independently audited.
 
 The CNN is evaluated zero-shot with two preprocessing variants. Its input is an
 RGB stack (B04, B03, B02). Reflectance scaling maps raw values to 0--255 by
@@ -296,9 +306,11 @@ predicted fraction is extreme, as with Otsu. Precision, recall, predicted
 fraction and true prevalence need to be read together, and overall accuracy is
 uninformative when the positive class is small.
 
-For decision support, the consequence is that the tool should emit candidate
-regions, masked-area statistics and provenance, not autonomous change polygons.
-The spectral rules are transparent but weak: the percentile rule improves
+For decision support, outputs should be treated as candidate evidence requiring
+human verification, not autonomous change polygons. The current browser
+application exposes RGB difference screening and source limitations; it does
+not produce validated land-cover classes or physical-area estimates. The
+spectral rules are transparent but weak: the percentile rule improves
 pooled F1 over the hardcoded rule, yet both under-predict change and vary widely
 by city. Their results do not establish NDVI/NDBI differencing as a validated
 low-resolution fallback. Otsu is not a drop-in fix; its high recall is bought
@@ -311,43 +323,91 @@ radiometric calibration, atmospheric correction, mixed pixels and sensor noise.
 OSCD supplies real 10\,m data, but the layout used here has ten test cities, no
 SCL layer and urban labels only. Only one architecture and one training run were
 tested; there was no retraining, fine-tuning, seed variation or architecture
-comparison. The hardcoded thresholds sat on a search-grid edge in all 14
+comparison, and the training seed was not recorded. The hardcoded thresholds sat on a search-grid edge in all 14
 training folds (Sec.~V-B), so the hardcoded scores are limited by the grid as
 well as by the data. No decision-threshold tuning was tested. The
 official test cities had been scored before the reported run, and the total
-number of scoring events is not recorded. No confidence intervals are reported
+number of scoring events is not recorded. The saved per-image degradation CSV
+and per-city OSCD confusion-count JSON are present, and their reported
+aggregate metrics can be reproduced from those records. The original imagery,
+model checkpoint and complete run environment are unavailable, so original
+inference cannot be independently rerun. No confidence intervals are reported
 for overall accuracy, and the per-city intervals use an independent-pixel
-approximation. The reported benchmark evaluates the offline pipeline and the
-frozen checkpoint, not the deployed application's scene selection or user
-interface.
+approximation. The reported benchmark evaluates a historical offline pipeline
+and frozen checkpoint, not the current application's imagery retrieval, RGB
+screening, exports or user interface.
 
 All test-set scores and per-image counts in this paper come from two saved
-files: the per-image degradation CSV (SHA-256 \texttt{4c301920...}) and the OSCD
-per-city JSON (SHA-256 \texttt{37ffe2bb...}). The training-only robustness
-values come from a third saved file, the leave-one-city-out JSON (SHA-256
-\texttt{32d1dbf5...}), produced without reading a test label. The figure and
-table generator reads the two test-set files only and records their hashes in a
-manifest; the benchmark does not re-score any test city for this paper.
+files: \path{degradation_results.csv} and
+\path{benchmarks/results/oscd_results_v2.json}. The training-only robustness
+values come from \path{benchmarks/results/oscd_loco_thresholds.json}, produced
+without reading a test label. Their SHA-256 hashes and derivation instructions
+are recorded in the accompanying artifact guide. The figure/table generator
+reads the saved result files only and records their hashes in a manifest; it
+does not run model inference or rescore any test city for this paper.
 
 \section{Conclusion}
 We reported a single-architecture case study in which a CNN with 87.06\% F1 at
 native 0.5\,m resolution falls to 70.81\% at 1\,m and 4.41\% at 2\,m under
-blur-and-resampling, and to 2.61\% at 8--10\,m with near-empty predictions. The
-simulation shows that resolution-related information loss alone is sufficient to
-collapse this detector; it does not reproduce all differences of real
-Sentinel-2 data. A zero-shot OSCD evaluation of the same frozen CNN yields
+blur-and-resampling, and to 2.61\% at 8--10\,m with near-empty predictions.
+This specified blur-and-resampling simulation alone was sufficient to collapse
+this detector; it does not reproduce all differences of real Sentinel-2 data.
+A zero-shot OSCD evaluation of the same frozen CNN yields
 pooled F1 0.0007 or lower. Train-selected NDVI/NDBI rules also perform poorly
 (pooled F1 0.0782--0.1176), so the results do not establish spectral indices as
 a validated alternative. The test cities had been scored before the reported
 run. Resolution mismatch should be evaluated explicitly, and claims about
 low-resolution fallbacks require real-data validation on independent cities.
 
-\section*{References}
-\noindent This version contains deliberate citation slots of the form
-\texttt{[CITE: topic]}. No bibliographic field, DOI, volume or page is asserted
-here. Before submission, each slot must be replaced with a verified source and
-the sentence around it checked against that source. The working list and
-verification rules are in \texttt{docs/paper/TODO\_CITATIONS.md}; the list is
-not a bibliography and must not be submitted as one.
+\begin{thebibliography}{9}
+\bibitem{chen2020stanet}
+H. Chen and Z. Shi, ``A spatial-temporal attention-based method and a new
+dataset for remote sensing image change detection,'' \emph{Remote Sensing},
+vol. 12, no. 10, Art. no. 1662, 2020, doi: 10.3390/rs12101662.
+
+\bibitem{drusch2012sentinel}
+M. Drusch \emph{et al.}, ``Sentinel-2: ESA's optical high-resolution mission
+for GMES operational services,'' \emph{Remote Sensing of Environment},
+vol. 120, pp. 25--36, 2012, doi: 10.1016/j.rse.2011.11.026.
+
+\bibitem{daudt2018siamese}
+R. C. Daudt, B. Le Saux, and A. Boulch, ``Fully convolutional Siamese
+networks for change detection,'' in \emph{Proc. IEEE International Conference
+on Image Processing (ICIP)}, 2018, pp. 4063--4067,
+doi: 10.1109/ICIP.2018.8451652.
+
+\bibitem{chen2022bit}
+H. Chen, Z. Qi, and Z. Shi, ``Remote sensing image change detection with
+transformers,'' \emph{IEEE Transactions on Geoscience and Remote Sensing},
+vol. 60, pp. 1--14, 2022, doi: 10.1109/TGRS.2021.3095166.
+
+\bibitem{rouse1974vegetation}
+J. W. Rouse, Jr., R. H. Haas, J. A. Schell, and D. W. Deering, ``Monitoring
+vegetation systems in the Great Plains with ERTS,'' in \emph{Proc. Third
+ERTS-1 Symposium}, NASA Goddard Space Flight Center, vol. 1, 1974. [Online].
+Available: \url{https://ntrs.nasa.gov/citations/19740022614}
+
+\bibitem{zha2003ndbi}
+Y. Zha, J. Gao, and S. Ni, ``Use of normalized difference built-up index in
+automatically mapping urban areas from TM imagery,'' \emph{International
+Journal of Remote Sensing}, vol. 24, no. 3, pp. 583--594, 2003,
+doi: 10.1080/01431160304987.
+
+\bibitem{otsu1979threshold}
+N. Otsu, ``A threshold selection method from gray-level histograms,''
+\emph{IEEE Transactions on Systems, Man, and Cybernetics}, vol. 9, no. 1,
+pp. 62--66, 1979, doi: 10.1109/TSMC.1979.4310076.
+
+\bibitem{daudt2018oscd}
+R. C. Daudt, B. Le Saux, A. Boulch, and Y. Gousseau, ``Urban change detection
+for multispectral Earth observation using convolutional neural networks,'' in
+\emph{Proc. IEEE International Geoscience and Remote Sensing Symposium
+(IGARSS)}, 2018, pp. 2115--2118, doi: 10.1109/IGARSS.2018.8518015.
+
+\bibitem{sentinel2mission}
+European Space Agency, ``Sentinel-2 mission,'' Copernicus Sentinel Online.
+[Online]. Available: \url{https://sentiwiki.copernicus.eu/web/s2-mission}.
+Accessed: Oct. 22, 2026.
+\end{thebibliography}
 
 \end{document}

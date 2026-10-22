@@ -5,6 +5,13 @@ export interface BoundingBox {
   north: number;
 }
 
+export interface NormalizedRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type ProfileKey =
   | 'general'
   | 'urban'
@@ -122,6 +129,14 @@ export interface GeospatialAccuracyMetrics {
 }
 
 export interface AnalysisResult {
+  analysisMode?: 'uploaded-rgb-screening' | 'rgb-screening' | 'simulated-demo';
+  analysisPixelStats?: {
+    width: number;
+    height: number;
+    totalPixels: number;
+    changedPixels: number;
+    selectedRegion: NormalizedRegion;
+  };
   id: string;
   title: string;
   locationName: string;
@@ -134,7 +149,7 @@ export interface AnalysisResult {
   totalAreaHa: number;
   changedAreaHa: number;
   cloudMaskedPercent: number;
-  overallConfidence: number; // 0-100
+  overallConfidence?: number; // 0-100 only when independently validated
   imageBefore: string; // data URL or path
   imageAfter: string;
   overlayImage: string;
@@ -199,21 +214,3 @@ export interface ChatMessage {
   timestamp: string;
   actionPayload?: AutoFillPayload;
 }
-
-export type DetectionEngineKey =
-  | 'fusion_sota'
-  | 'spectral_physics'
-  | 'cadastral_highres';
-
-export interface EngineConfigInfo {
-  key: DetectionEngineKey;
-  name: string;
-  badge: string;
-  description: string;
-  precision: number;
-  recall: number;
-  f1Score: number;
-  iouScore: number;
-  recommendedFor: string;
-}
-

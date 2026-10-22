@@ -1,6 +1,14 @@
 # Claims audit
 
-Audit date: 2026-10-21. Scope: every quantitative or comparative claim in the
+> **Updated audit dated 2026-10-22.** The degradation CSV and saved OSCD result
+> records/scripts were restored from repository history; derived metrics and
+> generated tables were reproduced from those records. The manuscript's
+> bibliography and current software scope were checked against this checkout.
+> Original imagery and model weights are unavailable, so inference was not
+> rerun; source-to-claim verification and independent review remain submission
+> blockers. See `CONFERENCE_READINESS.md` for the current status.
+
+Audit date: 2026-10-22. Scope: every quantitative or comparative claim in the
 current `docs/paper/paper.tex`, plus claims a reader could infer from the
 abstract, tables and figures. This audit replaces the Phase F version, which
 described an earlier manuscript.
@@ -73,15 +81,15 @@ Status meanings:
 | O17 | Only one architecture and one training run were tested; there was no retraining, fine-tuning, seed variation or architecture comparison (Sec. VII, Abstract) | One checkpoint; training log; no other runs recorded | Supported as scope | Keep; do not generalise to “CNNs”. |
 | O18 | No confidence intervals are reported for overall accuracy (Sec. VII) | `oscd_evidence.json` stores OA without intervals | Supported | Keep; do not add intervals without recomputation. |
 | O19 | All test-set scores and per-image counts come from the two saved files named in Sec. VII; the training-only robustness values come from a third file; the figure/table generator reads the two test-set files only and records their hashes | `scripts/make_paper_figures.py`; `figure_manifest.json`; SHA-256 values above | Supported | Keep. Regenerating figures must not read imagery or re-score a city. |
-| O20 | The benchmark evaluates the offline pipeline and frozen checkpoint, not the deployed application's scene selection or user interface (Sec. VII) | `benchmarks/oscd_eval.py` versus `app.py`/`live_pipeline.py` | Supported by code structure | Keep; the system overview is implementation description, not end-to-end validation. |
-| O21 | The upload path runs a CNN; the live path queries the Copernicus catalogue, ranks scenes, applies SCL masking and computes NDVI/NDBI differences; the interface withholds accuracy for unvalidated profiles (Sec. III) | `app.py`, `live_pipeline.py`, `scene_selection.py`, `static/app.js`, `profiles/validation_status.json`; tests | Supported as implementation facts | Keep the sentence that this section is not an end-to-end validation. |
+| O20 | The benchmark evaluates saved outputs from a historical offline pipeline and frozen checkpoint, not the current browser application's RGB screening (Sec. III, VII) | `benchmarks/oscd_eval.py`, `evaluate_degradation.py` versus `src/services/analysisEngine.ts`, `src/services/imageAnalysisService.ts` | Supported by code structure | Keep the distinction; no end-to-end app performance is inferred from benchmark metrics. |
+| O21 | The current application compares provider or uploaded RGB images, supports ROI selection and synchronized zoom/pan for uploaded pairs, and labels generated fallback imagery as demonstration-only (Sec. III) | `src/`, `server.ts`, `docs/LIMITATIONS.md` | Supported as implementation facts | Keep the limitation that RGB screening is not a validated environmental classification or end-to-end scientific measurement. |
 | O22 | Train-only leave-one-city-out check: pooled held-out F1 0.0976 hardcoded (IoU 0.0513, precision 0.0838, recall 0.1168) and 0.1469 percentile (IoU 0.0793, precision 0.1544, recall 0.1401); hardcoded selection at a search-grid edge in all 14 folds, percentile in none (Sec. V-B, VII) | `benchmarks/results/oscd_loco_thresholds.json`; `benchmarks/results/COLAB_RUN_SUMMARY.md` | Supported as a saved training-only run | This is not a test-set score and adds no test-scoring event. Do not compare it directly with the v2 test F1 as though it were test performance. The hardcoded scores are limited by the search grid. |
 
 ## General claims
 
 | ID | Claim (paper location) | Evidence | Status | Action |
 |---|---|---|---|---|
-| G1 | Related-work statements about LEVIR-CD, Sentinel-2, Siamese networks, STANet, BIT, NDVI, NDBI, Otsu, OSCD, domain shift and test-set reuse | 15 `[CITE: ...]` occurrences (14 body slots plus one explanatory example); no bibliography exists | Unverified | Replace every body slot with a verified source and check the surrounding sentence. Do not submit with placeholders. |
+| G1 | Related-work statements about LEVIR-CD, Sentinel-2, Siamese networks, STANet, BIT, NDVI, NDBI, Otsu and OSCD | Nine bibliography entries and all `\cite{...}` keys are present in `paper.tex`; no citation placeholders remain | Partially supported | Bibliographic metadata was checked. Before submission, confirm each sentence against the publisher/official source and apply the target venue's reference formatting. |
 | G2 | The paper makes no priority or originality claim (Abstract, Introduction, Conclusion) | Static check finds no prohibited priority or originality wording | Supported as wording | Keep the hedged framing; complete an external prior-work search before any stronger statement. |
 | G3 | Author block: Aravind, Department of Computer Science and Engineering, Presidency University, Bengaluru | Supplied by the owner and present in the revised DOCX | Partially supported | Confirm the spelling, affiliation and whether an email is required before submission. |
 | G4 | Drive `model.onnx` is 33,268,410 bytes, SHA-256 `41c2ab64...`, loads in onnxruntime and exposes inputs `input_a`, `input_b` | `benchmarks/results/colab_model_check.json` | Supported as a Colab artifact check | This verifies the file, not app-level inference. The model is still absent from this checkout, so the deployed app path remains unverified. |
@@ -133,5 +141,7 @@ Status meanings:
   summary's recorded source hashes match the two JSON files.
 - `docs/paper/figures/figure_manifest.json` records the v2 JSON hash and the
   degradation CSV hash used for the current figures.
-- Static LaTeX check (with `\input` expanded): 77 opening and 77 closing braces,
-  all four labels resolve, all four referenced assets exist, 15 citation slots.
+- Static LaTeX checks must confirm every citation key resolves to one
+  bibliography item, no `[CITE: ...]` placeholders remain, braces and
+  references are balanced, and every included figure/table asset exists.
+  A complete IEEE PDF compile and visual review remain outstanding.

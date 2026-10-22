@@ -1,24 +1,26 @@
 # Limitations and intended use
 
-This tool is a decision-support aid for exploring Sentinel-2 change candidates.
-It is not a validated land-cover product, a cadastral record, or ground truth.
-The limits below are part of the result, not fine print.
+The browser app currently provides RGB pixel-difference screening, not a
+validated land-cover product, cadastral record, or ground-truth analysis. The
+benchmark results below describe separate experimental evaluation code; they
+are not performance scores for the browser app.
 
 ## Spatial and spectral resolution
 
-- Sentinel-2 L2A bands used here are 10–20 m (B02/B03/B04/B08 at 10 m, B11/B12
-  at 20 m). A pixel is a mixture of surfaces; buildings, field boundaries,
-  narrow roads and small clearings are often sub-pixel.
-- The live path requests at most `MAX_ANALYSIS_PX` (default 1024) on the long
-  side. AOIs are resampled to that grid, so reported pixel sizes are
-  approximate and edgeless.
-- B11/B12 are resampled to the 10 m grid by the data provider. Index values at
-  sharp edges can be interpolated rather than measured at 10 m.
-- Atmospheric correction is whatever CDSE L2A provides. The tool does not
-  estimate surface reflectance, BRDF, terrain correction or sensor geometry.
-- Road detection is not claimed. At 10 m, roads narrower than about 20 m are
-  mostly sub-pixel; the roads profile reports change near mapped OSM roads as
-  context only.
+- The browser comparison receives provider imagery as RGB composites/mosaics.
+  The EOX Sentinel-2 layer is a cloudless year composite; Esri World Imagery is
+  a mosaic whose capture date is not supplied by this request. In particular,
+  imagery displayed for a requested after-date may not be acquired on that
+  date; verify the provider metadata independently.
+- This path computes a heuristic weighted RGB pixel difference only. It does
+  not load NIR/SWIR bands or calculate NDVI, NDBI, MNDWI, or BSI, and it does
+  not apply cloud/shadow correction, atmospheric correction, registration,
+  semantic classification, or a minimum mapping unit.
+- No ground sampling distance is derived from the image request. Pixel counts
+  and percentages are on the rendered comparison grid, not physical area.
+- If the provider pair is incomplete or unavailable, the UI displays generated
+  demonstration imagery. Those pixels are synthetic and are never
+  observations of the requested place.
 
 ## Validation status
 
@@ -41,13 +43,28 @@ The limits below are part of the result, not fine print.
   through the underlying spectral thresholding on OSCD urban change; its
   additional NDBI/BSI cues and MMU are not separately ablated. No profile has
   been validated for agriculture, forest loss, water or road labels.
-- No accuracy or F1 number is shown in the interface for an unvalidated
-  profile. OSCD labels cover urban change only.
+- OSCD labels cover urban change only. Its benchmark metrics do not validate
+  the browser app's provider imagery or RGB screening.
 - OSCD provides no Sentinel-2 SCL in the benchmark layout used here, so cloud
-  and shadow exclusion was not evaluated by the benchmark. The live path does
-  apply SCL masking and reports the masked fraction.
+  and shadow exclusion was not evaluated by the benchmark. The browser app
+  does not apply SCL masking or report a masked fraction.
 - Reported percentages are pixel shares on the analysis grid, not area
   estimates corrected for resampling, mixed pixels or map projection.
+
+## Uploaded RGB pair screening
+
+- Uploaded image pairs are compared using weighted 8-bit RGB differences only.
+  The selected normalized crop is applied to each image; this assumes the images
+  show the same footprint and are already co-registered.
+- The output grid is limited to 2,048 pixels per dimension and does not upscale
+  beyond the lower-resolution crop. This limit improves browser responsiveness,
+  but it does not add spatial detail absent from the source images.
+- Registration, illumination, seasonal and atmospheric correction, semantic
+  classes, object counts, confidence scores, ground resolution and geospatial
+  coordinates are not inferred. The changed-pixel percentage is a screening
+  measure, not a validated change estimate or area measurement.
+- Review flagged pixels against the source pair and independent data. Do not use
+  this RGB screen alone as a scientific finding or environmental-impact estimate.
 
 ## Spectral and semantic confusion
 
