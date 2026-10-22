@@ -1,276 +1,218 @@
-import { AnalysisResult, ChangedRegion } from '../types';
+import { AnalysisResult, NormalizedRegion } from '../types';
 import { viridisColor } from './analysisEngine';
 
-export function analyzeUploadedPair(
-  fileA: File,
-  fileB: File,
-  sensitivity: number = 0.25
-): Promise<AnalysisResult> {
-  return new Promise((resolve, reject) => {
-    const readerA = new FileReader();
-    const readerB = new FileReader();
+const MAX_ANALYSIS_DIMENSION = 2048;
 
-    readerA.onload = () => {
-      const imgA = new Image();
-      imgA.onload = () => {
-        readerB.onload = () => {
-          const imgB = new Image();
-          imgB.onload = () => {
-            try {
-              const res = processImageElements(imgA, imgB, fileA.name, fileB.name, sensitivity);
-              resolve(res);
-            } catch (err) {
-              reject(err);
-            }
-          };
-          imgB.onerror = () => reject(new Error('Failed to load After image'));
-          imgB.src = readerB.result as string;
-        };
-        readerB.readAsDataURL(fileB);
-      };
-      imgA.onerror = () => reject(new Error('Failed to load Before image'));
-      imgA.src = readerA.result as string;
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
     };
-    readerA.onerror = () => reject(new Error('Failed to read Before image file'));
-    readerA.readAsDataURL(fileA);
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Could not decode image: ${file.name}`));
+    };
+    image.src = url;
   });
 }
 
-function processImageElements(
-  imgA: HTMLImageElement,
-  imgB: HTMLImageElement,
-  nameA: string,
-  nameB: string,
-  sensitivity: number
-): AnalysisResult {
-  const W = 512;
-  const H = 512;
+function createCanvas(width: number, height: number): {
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+} {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new Error('This browser could not create an image analysis canvas.');
+  return { canvas, context };
+}
 
-  const canvasA = document.createElement('canvas');
-  canvasA.width = W;
-  canvasA.height = H;
-  const ctxA = canvasA.getContext('2d')!;
-  ctxA.drawImage(imgA, 0, 0, W, H);
-  const dataA = ctxA.getImageData(0, 0, W, H);
+function getCrop(image: HTMLImageElement, region: NormalizedRegion) {
+  const left = Math.round(region.x * image.naturalWidth);
+  const top = Math.round(region.y * image.naturalHeight);
+  const width = Math.round(region.width * image.naturalWidth);
+  const height = Math.round(region.height * image.naturalHeight);
+  return {
+    left,
+    top,
+    width: Math.min(width, image.naturalWidth - left),
+    height: Math.min(height, image.naturalHeight - top),
+  };
+}
 
-  const canvasB = document.createElement('canvas');
-  canvasB.width = W;
-  canvasB.height = H;
-  const ctxB = canvasB.getContext('2d')!;
-  ctxB.drawImage(imgB, 0, 0, W, H);
-  const dataB = ctxB.getImageData(0, 0, W, H);
+export async function analyzeUploadedPair(
+  fileA: File,
+  fileB: File,
+  sensitivity = 0.25,
+  selectedRegion: NormalizedRegion = { x: 0, y: 0, width: 1, height: 1 }
+): Promise<AnalysisResult> {
+  const region = selectedRegion;
+  if (
+    !Number.isFinite(region.x) ||
+    !Number.isFinite(region.y) ||
+    !Number.isFinite(region.width) ||
+    !Number.isFinite(region.height) ||
+    region.x < 0 ||
+    region.y < 0 ||
+    region.width <= 0 ||
+    region.height <= 0 ||
+    region.x + region.width > 1 ||
+    region.y + region.height > 1
+  ) {
+    throw new Error('Select a valid matching region inside both images.');
+  }
 
-  const canvasOverlay = document.createElement('canvas');
-  canvasOverlay.width = W;
-  canvasOverlay.height = H;
-  const ctxOverlay = canvasOverlay.getContext('2d')!;
-  ctxOverlay.drawImage(imgB, 0, 0, W, H);
-  const overlayData = ctxOverlay.getImageData(0, 0, W, H);
+  const [imgA, imgB] = await Promise.all([loadImage(fileA), loadImage(fileB)]);
+  const cropA = getCrop(imgA, region);
+  const cropB = getCrop(imgB, region);
+  if (cropA.width < 64 || cropA.height < 64 || cropB.width < 64 || cropB.height < 64) {
+    throw new Error('The selected region is too small. Choose an area at least 64 × 64 pixels in both images.');
+  }
 
-  const canvasMask = document.createElement('canvas');
-  canvasMask.width = W;
-  canvasMask.height = H;
-  const ctxMask = canvasMask.getContext('2d')!;
-  const maskData = ctxMask.createImageData(W, H);
+  const aspectA = cropA.width / cropA.height;
+  const aspectB = cropB.width / cropB.height;
+  if (Math.abs(aspectA - aspectB) / Math.max(aspectA, aspectB) > 0.02) {
+    throw new Error('The images have different aspect ratios. Align/crop them to the same footprint before comparing.');
+  }
 
-  const canvasHeatmap = document.createElement('canvas');
-  canvasHeatmap.width = W;
-  canvasHeatmap.height = H;
-  const ctxHeatmap = canvasHeatmap.getContext('2d')!;
-  const heatmapData = ctxHeatmap.createImageData(W, H);
+  // Use the lower-resolution crop as the common grid and cap work for browser responsiveness.
+  const width = Math.min(cropA.width, cropB.width, MAX_ANALYSIS_DIMENSION);
+  const height = Math.min(cropA.height, cropB.height, MAX_ANALYSIS_DIMENSION);
 
-  const totalPixels = W * H;
+  const before = createCanvas(width, height);
+  const after = createCanvas(width, height);
+  before.context.imageSmoothingEnabled = true;
+  after.context.imageSmoothingEnabled = true;
+  before.context.drawImage(imgA, cropA.left, cropA.top, cropA.width, cropA.height, 0, 0, width, height);
+  after.context.drawImage(imgB, cropB.left, cropB.top, cropB.width, cropB.height, 0, 0, width, height);
+
+  const beforeData = before.context.getImageData(0, 0, width, height);
+  const afterData = after.context.getImageData(0, 0, width, height);
+  const overlay = createCanvas(width, height);
+  const mask = createCanvas(width, height);
+  const heatmap = createCanvas(width, height);
+  overlay.context.drawImage(after.canvas, 0, 0);
+  const overlayData = overlay.context.getImageData(0, 0, width, height);
+  const maskData = mask.context.createImageData(width, height);
+  const heatmapData = heatmap.context.createImageData(width, height);
+  const totalPixels = width * height;
   let changedPixels = 0;
 
-  // Grid for clustering changed areas into regions
-  const gridDim = 16;
-  const gridCells = new Float32Array(gridDim * gridDim);
-  const cellCounts = new Int32Array(gridDim * gridDim);
+  for (let pixel = 0; pixel < totalPixels; pixel++) {
+    const index = pixel * 4;
+    const dr = (afterData.data[index] - beforeData.data[index]) / 255;
+    const dg = (afterData.data[index + 1] - beforeData.data[index + 1]) / 255;
+    const db = (afterData.data[index + 2] - beforeData.data[index + 2]) / 255;
+    const delta = Math.sqrt(0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db);
+    const [red, green, blue] = viridisColor(Math.min(1, delta * 2.5));
+    heatmapData.data[index] = red;
+    heatmapData.data[index + 1] = green;
+    heatmapData.data[index + 2] = blue;
+    heatmapData.data[index + 3] = 255;
 
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const idx = (y * W + x) * 4;
-
-      const rA = dataA.data[idx];
-      const gA = dataA.data[idx + 1];
-      const bA = dataA.data[idx + 2];
-
-      const rB = dataB.data[idx];
-      const gB = dataB.data[idx + 1];
-      const bB = dataB.data[idx + 2];
-
-      // Normalized color difference
-      const dr = Math.abs(rB - rA) / 255;
-      const dg = Math.abs(gB - gA) / 255;
-      const db = Math.abs(bB - bA) / 255;
-
-      // Perceptual Euclidean difference
-      const delta = Math.sqrt(0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db);
-
-      // Viridis Heatmap
-      const [vr, vg, vb] = viridisColor(Math.min(1, delta * 2.5));
-      heatmapData.data[idx] = vr;
-      heatmapData.data[idx + 1] = vg;
-      heatmapData.data[idx + 2] = vb;
-      heatmapData.data[idx + 3] = 255;
-
-      const isChanged = delta > sensitivity;
-      if (isChanged) {
-        changedPixels++;
-        maskData.data[idx] = 255;
-        maskData.data[idx + 1] = 255;
-        maskData.data[idx + 2] = 255;
-        maskData.data[idx + 3] = 255;
-
-        // Vivid crimson highlight over after image
-        overlayData.data[idx] = Math.round(overlayData.data[idx] * 0.35 + 255 * 0.65);
-        overlayData.data[idx + 1] = Math.round(overlayData.data[idx + 1] * 0.35 + 40 * 0.65);
-        overlayData.data[idx + 2] = Math.round(overlayData.data[idx + 2] * 0.35 + 40 * 0.65);
-
-        // Grid clustering
-        const gx = Math.min(gridDim - 1, Math.floor((x / W) * gridDim));
-        const gy = Math.min(gridDim - 1, Math.floor((y / H) * gridDim));
-        const gIdx = gy * gridDim + gx;
-        gridCells[gIdx] += delta;
-        cellCounts[gIdx]++;
-      } else {
-        maskData.data[idx] = 0;
-        maskData.data[idx + 1] = 0;
-        maskData.data[idx + 2] = 0;
-        maskData.data[idx + 3] = 255;
-      }
+    const changed = delta > sensitivity;
+    if (changed) {
+      changedPixels++;
+      maskData.data[index] = 255;
+      maskData.data[index + 1] = 255;
+      maskData.data[index + 2] = 255;
+      overlayData.data[index] = Math.round(overlayData.data[index] * 0.35 + 255 * 0.65);
+      overlayData.data[index + 1] = Math.round(overlayData.data[index + 1] * 0.35 + 40 * 0.65);
+      overlayData.data[index + 2] = Math.round(overlayData.data[index + 2] * 0.35 + 40 * 0.65);
     }
+    maskData.data[index + 3] = 255;
   }
 
-  ctxOverlay.putImageData(overlayData, 0, 0);
-  ctxMask.putImageData(maskData, 0, 0);
-  ctxHeatmap.putImageData(heatmapData, 0, 0);
+  overlay.context.putImageData(overlayData, 0, 0);
+  mask.context.putImageData(maskData, 0, 0);
+  heatmap.context.putImageData(heatmapData, 0, 0);
 
-  const percentChanged = parseFloat(((changedPixels / totalPixels) * 100).toFixed(2));
-  const estimatedAreaHa = 100.0; // Normalized 100 ha frame for uploaded imagery
-  const changedAreaHa = parseFloat(((percentChanged / 100) * estimatedAreaHa).toFixed(1));
-
-  // Extract top changed clusters from grid
-  const clusterScores: Array<{ gx: number; gy: number; score: number; count: number }> = [];
-  for (let gy = 0; gy < gridDim; gy++) {
-    for (let gx = 0; gx < gridDim; gx++) {
-      const gIdx = gy * gridDim + gx;
-      if (cellCounts[gIdx] > 15) {
-        clusterScores.push({ gx, gy, score: gridCells[gIdx] / cellCounts[gIdx], count: cellCounts[gIdx] });
-      }
-    }
-  }
-
-  clusterScores.sort((a, b) => b.count - a.count);
-  const topClusters = clusterScores.slice(0, 5);
-
-  const regions: ChangedRegion[] = topClusters.map((c, i) => {
-    const areaHa = parseFloat(((c.count / totalPixels) * estimatedAreaHa).toFixed(1));
-    const normalizedLat = 37.5 - (c.gy / gridDim) * 0.05;
-    const normalizedLon = -122.2 + (c.gx / gridDim) * 0.05;
-
-    return {
-      id: i + 1,
-      label: `Anomaly Zone ${String.fromCharCode(65 + i)}`,
-      type: 'Built-up / Urban',
-      areaHa: Math.max(0.2, areaHa),
-      centroid: [parseFloat(normalizedLat.toFixed(5)), parseFloat(normalizedLon.toFixed(5))] as [number, number],
-      meanDelta: parseFloat(c.score.toFixed(2)),
-      confidence: (c.score > 0.4 ? 'High' : 'Medium') as 'High' | 'Medium' | 'Low',
-      description: `High pixel-level delta detected across ${c.count} pixels in Sector (${c.gx}, ${c.gy}).`,
-      reasonForConclusion: `Pixel Euclidean color-space difference exceeded ${sensitivity.toFixed(2)} threshold (local delta ${c.score.toFixed(2)}), confirming textural and structural displacement.`,
-    };
-  });
-
-  const decisionReasoning = {
-    headlineWhy: `Optical discrepancy detected: ${(percentChanged).toFixed(1)}% of frame pixels exceeded the ${(sensitivity * 100).toFixed(0)}% luminance and chrominance delta tolerance.`,
-    spectralEvidence: `Direct RGB Euclidean differencing identified significant chromatic shift (mean delta ${sensitivity.toFixed(2)} threshold).`,
-    surfaceShift: 'Structural or ground reflectance shift across detected target areas',
-    spatialCoherence: `Changes are grouped into ${regions.length} prominent spatial clusters, indicating organized physical alterations rather than random sensor noise.`,
-    atmosphericIntegrity: 'Full-frame optical analysis completed with direct comparative pixel normalization.',
-  };
-
-  const estimatedBuildings = Math.max(3, Math.round(changedAreaHa * 2.2));
-  const estimatedCommercial = Math.max(1, Math.round(changedAreaHa * 0.15));
-  const estimatedRoadMeters = Math.round(changedAreaHa * 140 + 300);
-  const estimatedTreesCleared = parseFloat((changedAreaHa * 0.4).toFixed(1));
-
-  const census = {
-    newBuildingsCount: estimatedBuildings,
-    commercialStructuresCount: estimatedCommercial,
-    roadwaysPavedMeters: estimatedRoadMeters,
-    treesClearedHectares: estimatedTreesCleared,
-    waterRetreatMeters: 0,
-    imperviousSurfaceAddedM2: Math.round(changedAreaHa * 6500),
-    narrativeStory: `Hey look: between the uploaded Before and After images, approximately ${estimatedTreesCleared} hectares of vegetative/ground canopy have been cleared off. In their place, approximately ${estimatedBuildings} new structures have appeared, with ${estimatedRoadMeters} meters of access paving connecting the cleared zones.`,
-  };
-
-  const detectedFeatures = topClusters.map((c, i) => {
-    const isCommercial = i % 2 === 1;
-    return {
-      id: `feat-${i + 1}`,
-      category: (isCommercial ? 'commercial' : 'building') as any,
-      name: isCommercial ? `Commercial / Industrial Unit ${String.fromCharCode(65 + i)}` : `New Building Cluster ${String.fromCharCode(65 + i)}`,
-      beforeState: 'Original optical ground state',
-      afterState: 'Modified high-contrast structural ground presence',
-      story: isCommercial
-        ? 'Hey look: where open ground was visible before, a commercial building structure with surrounding surface alteration has come up.'
-        : `Hey look: new building foundations have been laid here across ${c.count} pixels.`,
-      metric: `${Math.round(c.count * 0.4)} m² estimated footprint`,
-      pixelLocation: {
-        x: Math.round(((c.gx + 0.5) / gridDim) * 100),
-        y: Math.round(((c.gy + 0.5) / gridDim) * 100),
-      },
-      confidence: 91,
-    };
-  });
+  const percentChanged = Number(((changedPixels / totalPixels) * 100).toFixed(2));
+  const changedPixelShare = changedPixels.toLocaleString();
+  const warnings = [
+    'This is an RGB pixel-difference screen, not a validated land-cover or object detector. A flagged pixel is not proof of a physical change.',
+    'The images are compared at matching normalized coordinates; no image registration or illumination/season correction is performed. Misalignment, shadows, haze, and exposure differences can create false detections.',
+    'The uploaded images have no geospatial scale/coordinates in this workflow. Hectares, metres, geographic coordinates, and accuracy/confidence scores are not reported.',
+    'For scientific interpretation, use co-registered imagery from comparable dates and verify candidate areas against independent data or field observations.',
+  ];
 
   return {
-    id: 'upload-' + Date.now(),
-    title: `Upload Pair: ${nameA} vs ${nameB}`,
+    analysisMode: 'uploaded-rgb-screening',
+    analysisPixelStats: {
+      width,
+      height,
+      totalPixels,
+      changedPixels,
+      selectedRegion: region,
+    },
+    id: `upload-${Date.now()}`,
+    title: `RGB screen: ${fileA.name} vs ${fileB.name}`,
     locationName: 'User Uploaded Pair',
     dateBefore: 'Uploaded T1',
     dateAfter: 'Uploaded T2',
-    bbox: { west: -122.2, south: 37.45, east: -122.15, north: 37.5 },
+    bbox: { west: 0, south: 0, east: 0, north: 0 },
     profile: 'general',
-    profileLabel: 'Dual-Image Differential Analysis',
+    profileLabel: 'RGB pixel-difference screening',
     percentChanged,
-    totalAreaHa: estimatedAreaHa,
-    changedAreaHa,
+    totalAreaHa: 0,
+    changedAreaHa: 0,
     cloudMaskedPercent: 0,
-    overallConfidence: 91,
-    imageBefore: canvasA.toDataURL('image/png'),
-    imageAfter: canvasB.toDataURL('image/png'),
-    overlayImage: canvasOverlay.toDataURL('image/png'),
-    maskImage: canvasMask.toDataURL('image/png'),
-    heatmapImage: canvasHeatmap.toDataURL('image/png'),
-    census,
-    detectedFeatures,
-    regions,
-    categories: [
-      { category: 'Modified Pixels', areaHa: changedAreaHa, percent: percentChanged, color: '#f97316' },
-      { category: 'Unchanged Matrix', areaHa: estimatedAreaHa - changedAreaHa, percent: 100 - percentChanged, color: '#3b82f6' },
-    ],
-    decisionReasoning,
-    provenance: {
-      pipeline: 'High-Resolution Pair Differential Pipeline (Client-Side)',
-      profile: 'Direct Euclidean RGB Differencing',
-      sensor: 'Uploaded Aerial / Optical Camera',
-      resolutionM: 1.0,
-      timestamp: new Date().toISOString(),
-      bounds: { west: -122.2, south: 37.45, east: -122.15, north: 37.5 },
-      spectralBands: ['Red', 'Green', 'Blue (8-bit standard optical)'],
-      thresholdFormula: `Euclidean_RGB_delta > ${sensitivity}`,
-      mmuAppliedHa: 0.1,
-      version: '3.0.0-pair',
-      cloudFilter: 'None (Assumes cloudless or pre-filtered pair)',
+    imageBefore: before.canvas.toDataURL('image/png'),
+    imageAfter: after.canvas.toDataURL('image/png'),
+    overlayImage: overlay.canvas.toDataURL('image/png'),
+    maskImage: mask.canvas.toDataURL('image/png'),
+    heatmapImage: heatmap.canvas.toDataURL('image/png'),
+    census: {
+      newBuildingsCount: 0,
+      commercialStructuresCount: 0,
+      roadwaysPavedMeters: 0,
+      treesClearedHectares: 0,
+      waterRetreatMeters: 0,
+      imperviousSurfaceAddedM2: 0,
+      narrativeStory: `${percentChanged}% of pixels (${changedPixelShare} of ${totalPixels.toLocaleString()}) in the selected region exceeded the RGB difference threshold (${sensitivity.toFixed(2)}). This is a visual screening signal only; it does not identify the type or cause of change.`,
     },
+    detectedFeatures: [],
+    regions: [],
+    categories: [],
+    decisionReasoning: {
+      headlineWhy: `${percentChanged}% of selected-region pixels exceeded the normalized RGB difference threshold of ${sensitivity.toFixed(2)}.`,
+      spectralEvidence: 'Only 8-bit RGB channel differences were measured. No near-infrared, shortwave-infrared, or other spectral bands were available.',
+      surfaceShift: 'Surface type and cause are not classified by this screening step.',
+      spatialCoherence: 'No object segmentation, georeferencing, or minimum mapping unit was applied.',
+      atmosphericIntegrity: 'Cloud, shadow, seasonal, sensor, and illumination effects were not corrected.',
+    },
+    provenance: {
+      pipeline: 'Client-side RGB pixel-difference screening',
+      profile: 'RGB only; no semantic classifier',
+      sensor: `User-provided images (${imgA.naturalWidth} × ${imgA.naturalHeight}; ${imgB.naturalWidth} × ${imgB.naturalHeight} px)`,
+      resolutionM: 0,
+      timestamp: new Date().toISOString(),
+      bounds: { west: 0, south: 0, east: 0, north: 0 },
+      spectralBands: ['Red', 'Green', 'Blue (8-bit)'],
+      thresholdFormula: `Weighted RGB difference > ${sensitivity.toFixed(2)} (normalized 0–1)`,
+      mmuAppliedHa: 0,
+      version: '4.0.0-rgb-screen',
+      cloudFilter: 'Not available for uploaded RGB images',
+    },
+    imagerySource: {
+      beforeProvider: `Uploaded: ${fileA.name}`,
+      afterProvider: `Uploaded: ${fileB.name}`,
+      resolutionM: 0,
+      isRealSatellite: false,
+      width,
+      height,
+    },
+    warnings,
     environmentalAssessment: {
-      impactSummary: `Optical comparison revealed that ${percentChanged}% of the scene underwent surface modification between the provided pair.`,
-      landUseShift: 'Structural or ground reflectance shift across detected target areas',
+      impactSummary: `${percentChanged}% of the selected image region exceeded the RGB difference threshold. No land-cover or environmental impact class was inferred.`,
+      landUseShift: 'Not classified from RGB difference alone',
       actionRecommendations: [
-        'Review high-delta zones for physical land restructuring or vegetation canopy clearance.',
-        'Ensure both images have consistent lighting and seasonal sun-angle to reduce false positives.',
+        'Inspect the overlay and verify flagged areas against the source images.',
+        'For area estimates or land-cover conclusions, provide georeferenced imagery with known ground resolution and use a validated, task-specific method.',
       ],
     },
   };

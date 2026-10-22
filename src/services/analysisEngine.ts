@@ -3,48 +3,8 @@ import {
   BoundingBox,
   ChangedRegion,
   ProfileKey,
-  PreciseCensus,
-  DetectedFeature,
-  DetectionEngineKey,
-  EngineConfigInfo,
 } from '../types';
 import { PROFILES } from '../data/presets';
-
-export const AVAILABLE_ENGINES: EngineConfigInfo[] = [
-  {
-    key: 'fusion_sota',
-    name: 'Multi-Spectral Hybrid Fusion (SOTA)',
-    badge: 'Precision: 98.4% | F1: 97.6%',
-    description: 'Combines bi-temporal NDBI, NDVI, and BSI indices with sub-pixel morphological edge refinement. Ground calibrated on 50,000+ parcels across Indian & global growth corridors.',
-    precision: 98.4,
-    recall: 96.9,
-    f1Score: 97.6,
-    iouScore: 90.2,
-    recommendedFor: 'Maximum overall accuracy across complex urban growth corridors and land clearance',
-  },
-  {
-    key: 'cadastral_highres',
-    name: 'Sub-Pixel Cadastral & Building Footprint Delineation',
-    badge: 'Precision: 98.8% | F1: 97.2%',
-    description: 'High-frequency edge-sharpening model tuned for individual 30x40 and 40x60 ft plot layouts, RCC concrete roofing, and asphalt roadway paving.',
-    precision: 98.8,
-    recall: 95.8,
-    f1Score: 97.2,
-    iouScore: 89.4,
-    recommendedFor: 'Municipal layout audits, building construction counts, and road extension tracking',
-  },
-  {
-    key: 'spectral_physics',
-    name: 'Biophysical Index Differencing (NDBI + NDVI + MNDWI)',
-    badge: 'Precision: 97.2% | F1: 96.1%',
-    description: 'Direct biophysical reflectance differencing. Invariant to spatial sensor resolution and atmospheric blur; zero artificial neural hallucinations.',
-    precision: 97.2,
-    recall: 95.1,
-    f1Score: 96.1,
-    iouScore: 87.8,
-    recommendedFor: 'Reliable biophysical vegetation clearing, canopy audits, and water dynamics',
-  },
-];
 
 // Helper to compute geographic area from bounding box
 export function calculateAoiStats(bbox: BoundingBox) {
@@ -335,7 +295,7 @@ async function fetchRealSatellitePair(
         afterDataUrl: data.afterDataUrl,
         sourceBefore: data.sourceBefore || 'Copernicus Sentinel-2',
         sourceAfter: data.sourceAfter || 'Esri World Imagery HD Sub-Meter',
-        resolutionM: data.resolutionM || 0.5,
+        resolutionM: typeof data.resolutionM === 'number' ? data.resolutionM : 0,
       };
     }
   } catch (err) {
@@ -350,19 +310,14 @@ export async function runSyntheticAnalysis(
   dateBefore: string,
   dateAfter: string,
   profileKey: ProfileKey = 'general',
-  customMmu?: number,
-  locationLabel?: string,
-  engineKey: DetectionEngineKey = 'fusion_sota'
+  locationLabel?: string
 ): Promise<AnalysisResult> {
-  const selectedEngine = AVAILABLE_ENGINES.find((e) => e.key === engineKey) || AVAILABLE_ENGINES[0];
 
   // Use high-definition 1024x1024 raster resolution for ultra-sharp visual detail
   const W = 1024;
   const H = 1024;
 
-  const stats = calculateAoiStats(bbox);
   const profile = PROFILES[profileKey] || PROFILES.general;
-  const mmuHa = customMmu !== undefined && customMmu > 0 ? customMmu : profile.defaultMmuHa;
 
   // Offscreen canvases
   const canvasBefore = document.createElement('canvas');
@@ -393,9 +348,9 @@ export async function runSyntheticAnalysis(
   // 1. Try to fetch REAL high-resolution satellite imagery
   const realSatellite = await fetchRealSatellitePair(bbox, dateBefore, dateAfter, W, H);
   let isRealSatellite = false;
-  let sourceBefore = 'Copernicus Sentinel-2 MSI Multi-Spectral';
-  let sourceAfter = 'Esri World Imagery Sub-Meter Satellite';
-  let groundResM = 0.5;
+  let sourceBefore = 'Synthetic demo imagery';
+  let sourceAfter = 'Synthetic demo imagery';
+  let groundResM = 0;
 
   if (realSatellite) {
     try {
@@ -415,7 +370,7 @@ export async function runSyntheticAnalysis(
     }
   }
 
-  // Detect ground-truth calibration for the region (Pan-India or Global)
+  // The profile affects only this RGB screen's heuristic threshold; it is not a semantic classifier.
   const indianCalibration = detectIndianGeospatialCalibration(bbox);
 
   // Determine terrain signature based on coordinates & profile
@@ -460,11 +415,7 @@ export async function runSyntheticAnalysis(
     const gridScores: number[][] = Array.from({ length: gridRows }, () => Array(gridCols).fill(0));
 
     // Ground-truth calibrated thresholds
-    const changeThreshold = isUrbanDominant
-      ? (indianCalibration.isIndia ? 0.25 : 0.28)
-      : isForestDominant
-      ? 0.24
-      : 0.26;
+    const changeThreshold = 0.26;
 
     for (let y = 0; y < H; y++) {
       const gy = Math.floor(y / GRID_SIZE);
@@ -497,8 +448,8 @@ export async function runSyntheticAnalysis(
         const briGain = Math.max(0, bri1 - bri0);
 
         // Combined multi-spectral change score with regional weighting
-        const albedoWeight = indianCalibration.isIndia ? 0.85 : 0.7;
-        const greenWeight = indianCalibration.isIndia ? 1.9 : 1.8;
+        const albedoWeight = 0.7;
+        const greenWeight = 1.8;
         let delta = colorDist * 0.45 + greenLoss * greenWeight + briGain * albedoWeight;
         delta = Math.max(0, Math.min(1, delta));
 
@@ -706,232 +657,97 @@ export async function runSyntheticAnalysis(
     ctxOverlay.putImageData(overlayImgData, 0, 0);
   }
 
-  // Compute metrics
-  const percentChanged = parseFloat(Math.min(95, Math.max(1.5, (changedPixelCount / totalPixels) * 100)).toFixed(2));
-  const changedAreaHa = parseFloat(((percentChanged / 100) * stats.areaHa).toFixed(1));
+  const percentChanged = parseFloat(((changedPixelCount / totalPixels) * 100).toFixed(2));
+  const analysisMode = isRealSatellite ? 'rgb-screening' : 'simulated-demo';
+  const warning = isRealSatellite
+    ? `Only RGB pixel differences were measured. This is a screening signal, not a land-cover classification or verified environmental finding. Image registration, cloud/shadow masking, and ground-resolution validation are not performed. Verify provider capture dates: ${sourceAfter} may not correspond to the requested after date (${dateAfter}).`
+    : 'Live imagery could not be retrieved. The displayed Before/After imagery and difference mask are synthetically generated demo content, not satellite observations. Do not interpret the displayed percentage or patterns as real-world measurements or findings.';
 
-  // Build Regions list
-  const regions: ChangedRegion[] = candidateRegions.map((cluster, idx) => {
-    const lon = bbox.west + (cluster.cx / W) * (bbox.east - bbox.west);
-    const lat = bbox.north - (cluster.cy / H) * (bbox.north - bbox.south);
-    const clusterPixels = Math.PI * cluster.rx * cluster.ry;
-    const clusterAreaHa = Math.max(0.2, (clusterPixels / totalPixels) * stats.areaHa);
-
-    let reason = '';
-    if (cluster.type === 'Vegetation Loss') {
-      reason = `Visible greenness ratio collapsed by ${(cluster.changeMagnitude * 0.42).toFixed(2)}, demonstrating tree canopy clearance and leveled soil.`;
-    } else if (cluster.type === 'Built-up / Urban') {
-      reason = `Surface albedo increased by +${(cluster.changeMagnitude * 0.36).toFixed(2)} alongside high reflective concrete roofs and foundation slabs.`;
-    } else if (cluster.type === 'Infrastructure') {
-      reason = `Linear corridor disturbance with asphalt dark-bitumen spectral signature (+${Math.round(cluster.changeMagnitude * 35)}% edge gradient shift).`;
-    } else {
-      reason = `Optical spectral anomaly exceeding threshold (${Math.round(cluster.changeMagnitude * 100)}% magnitude shift).`;
-    }
-
-    return {
-      id: idx + 1,
-      label: cluster.label,
-      type: cluster.type,
-      areaHa: parseFloat(clusterAreaHa.toFixed(1)),
-      centroid: [parseFloat(lat.toFixed(5)), parseFloat(lon.toFixed(5))] as [number, number],
-      meanDelta: parseFloat(cluster.changeMagnitude.toFixed(2)),
-      confidence: (cluster.changeMagnitude > 0.7 ? 'High' : 'Medium') as 'High' | 'Medium' | 'Low',
-      description: cluster.desc,
-      reasonForConclusion: reason,
-    };
-  }).filter((r) => r.areaHa >= mmuHa);
-
-  // Category breakdown
-  const typeAreas: Record<string, { count: number; ha: number; color: string }> = {};
-  for (const r of regions) {
-    if (!typeAreas[r.type]) {
-      let col = '#3b82f6';
-      if (r.type === 'Vegetation Loss') col = '#10b981';
-      if (r.type === 'Built-up / Urban') col = '#f97316';
-      if (r.type === 'Water Dynamics') col = '#06b6d4';
-      if (r.type === 'Infrastructure') col = '#a855f7';
-      typeAreas[r.type] = { count: 0, ha: 0, color: col };
-    }
-    typeAreas[r.type].count++;
-    typeAreas[r.type].ha += r.areaHa;
-  }
-
-  const categories = Object.entries(typeAreas).map(([cat, val]) => ({
-    category: cat,
-    areaHa: parseFloat(val.ha.toFixed(1)),
-    percent: parseFloat(((val.ha / (changedAreaHa || 1)) * 100).toFixed(1)),
-    color: val.color,
-  }));
-
-  // Precise Census & Count estimates calibrated to cadastral ground truth
-  const buildingDensityFactor = isUrbanDominant ? 0.38 : 0.15;
-  const estimatedBuildings = Math.max(
-    5,
-    Math.round(
-      isUrbanDominant
-        ? (changedAreaHa * 10000 * buildingDensityFactor) / indianCalibration.cadastralUnitSqM
-        : isForestDominant
-        ? changedAreaHa * 0.35 + 2
-        : changedAreaHa * 1.8 + 5
-    )
-  );
-  const estimatedCommercial = Math.max(1, Math.round(changedAreaHa * 0.22 + 1));
-  const estimatedRoadMeters = Math.round(changedAreaHa * 185 + 460);
-  const estimatedTreesClearedHa = parseFloat(
-    (isForestDominant ? changedAreaHa * 0.9 : isWaterDominant ? 0.2 : changedAreaHa * 0.45).toFixed(1)
-  );
-  const estimatedImperviousM2 = Math.round(changedAreaHa * 8200);
-
-  const narrativeStory = indianCalibration.isIndia
-    ? `Hey look: between ${dateBefore} and ${dateAfter} across ${locationLabel || 'this sector'}, extensive tree cover and open ground have now been cleared off across ${estimatedTreesClearedHa} hectares. In their place, approximately ${estimatedBuildings} new buildings (calibrated to ${indianCalibration.cadastralAccuracy}) and ${estimatedCommercial} commercial complexes have come up, connected by ${estimatedRoadMeters.toLocaleString()} meters of newly paved bitumen roadway!`
-    : isUrbanDominant
-    ? `Hey look: between ${dateBefore} and ${dateAfter}, extensive tree cover and open ground have now been cleared off across ${estimatedTreesClearedHa} hectares. In their place, approximately ${estimatedBuildings} new buildings (including ${estimatedCommercial} commercial/industrial blocks) have come up, connected by ${estimatedRoadMeters.toLocaleString()} meters of newly paved roadway!`
-    : isForestDominant
-    ? `Hey look: between ${dateBefore} and ${dateAfter}, approximately ${estimatedTreesClearedHa} hectares of mature tree canopy have been completely cleared off, replaced by ${estimatedBuildings} structures and ${estimatedRoadMeters.toLocaleString()} meters of access roadway.`
-    : `Hey look: where open natural ground stood in ${dateBefore}, ${changedAreaHa} hectares have undergone transformation with ${estimatedBuildings} new buildings and ${estimatedRoadMeters.toLocaleString()} meters of fresh paved roads.`;
-
-  const census: PreciseCensus = {
-    newBuildingsCount: estimatedBuildings,
-    commercialStructuresCount: estimatedCommercial,
-    roadwaysPavedMeters: estimatedRoadMeters,
-    treesClearedHectares: estimatedTreesClearedHa,
-    waterRetreatMeters: isWaterDominant ? Math.round(changedAreaHa * 15 + 50) : 0,
-    imperviousSurfaceAddedM2: estimatedImperviousM2,
-    narrativeStory,
-  };
-
-  // Detected Pin Features on Image
-  const detectedFeatures: DetectedFeature[] = candidateRegions.map((cluster, idx) => {
-    const pxX = Math.round((cluster.cx / W) * 100);
-    const pxY = Math.round((cluster.cy / H) * 100);
-    const clArea = Math.max(0.2, (Math.PI * cluster.rx * cluster.ry / totalPixels) * stats.areaHa);
-
-    if (cluster.type === 'Vegetation Loss') {
-      return {
-        id: `feat-${idx + 1}`,
-        category: 'cleared_trees',
-        name: `Cleared Tree Parcel ${String.fromCharCode(65 + idx)}`,
-        beforeState: 'Contiguous green woodland & canopy (NDVI: 0.71)',
-        afterState: 'Complete tree felling and leveled ground (NDVI: 0.18)',
-        story: `Hey look: there was dense green tree canopy here in ${dateBefore}, but it has now been cleared off completely, leaving bare exposed earth for construction.`,
-        metric: `${clArea.toFixed(1)} ha trees cleared`,
-        pixelLocation: { x: pxX, y: pxY },
-        confidence: 96,
-      };
-    } else if (cluster.type === 'Infrastructure') {
-      return {
-        id: `feat-${idx + 1}`,
-        category: 'road',
-        name: `Paved Transport Corridor ${String.fromCharCode(65 + idx)}`,
-        beforeState: 'Natural soil path and boundary track',
-        afterState: 'Engineered two-lane dark asphalt bitumen roadway',
-        story: `Hey look: a brand new paved road cuts straight through the landscape, connecting newly built commercial buildings.`,
-        metric: `${Math.round(estimatedRoadMeters / 2)} meters paved`,
-        pixelLocation: { x: pxX, y: pxY },
-        confidence: 93,
-      };
-    } else {
-      const isCommercial = idx % 2 === 1;
-      return {
-        id: `feat-${idx + 1}`,
-        category: (isCommercial ? 'commercial' : 'building') as DetectedFeature['category'],
-        name: isCommercial ? `Commercial Complex & Hub ${String.fromCharCode(65 + idx)}` : `New Buildings Layout ${String.fromCharCode(65 + idx)}`,
-        beforeState: 'Natural ground and green shrubs',
-        afterState: 'Engineered concrete building foundations and high-albedo roofing',
-        story: isCommercial
-          ? `Hey look: open land has been converted into a commercial facility with loading bays and parking.`
-          : `Hey look: there were trees and open ground here before, but now ${Math.round(estimatedBuildings / (candidateRegions.length || 1))} new buildings have come up!`,
-        metric: isCommercial ? '3,400 m² commercial footprint' : `${Math.round(estimatedBuildings / candidateRegions.length)} buildings added`,
-        pixelLocation: { x: pxX, y: pxY },
-        confidence: 95,
-      };
-    }
-  });
-
+  const narrative = isRealSatellite
+    ? `${percentChanged}% of RGB pixels exceeded the screening threshold. This signal does not establish what changed or why.`
+    : 'Simulated demonstration only: no satellite observations were available for this area/date pair.';
   const decisionReasoning = {
-    headlineWhy: indianCalibration.isIndia
-      ? `Calibrated ground-truth verification (${indianCalibration.regionName}): Sharp increase in RCC concrete roof albedo and bare soil across ${changedAreaHa} ha confirms ${estimatedBuildings} newly constructed cadastral building units.`
-      : isUrbanDominant
-      ? `Built-up surface emergence: Sharp increase in surface albedo and built-up index across ${changedAreaHa} ha confirms newly constructed impervious buildings and paved asphalt.`
-      : isForestDominant
-      ? `Canopy clearance: High chlorophyll greenness absorption collapsed while bare earth reflectance surged across ${changedAreaHa} ha.`
-      : `Optical surface divergence: Surface reflectance variance between ${dateBefore} and ${dateAfter} exceeded decision criteria across ${changedAreaHa} ha.`,
-    spectralEvidence: `High-resolution optical sampling (${groundResM}m GSD) registered marked spectral variance with average delta index of ${((percentChanged / 100) * 0.7 + 0.38).toFixed(2)}. ${indianCalibration.soilModel} calibration applied.`,
-    surfaceShift: isUrbanDominant ? 'Urbanization: Vegetation/farmland converted into built structures and paved roadway' : 'Land-use clearing and surface development',
-    spatialCoherence: `Changes are grouped into ${regions.length} contiguous geometric parcels exceeding MMU (${mmuHa} ha), matching authentic ground plot boundaries.`,
-    atmosphericIntegrity: 'Cloud, shadow, and haze filtering verified clean observation conditions across the bounding box.',
+    headlineWhy: isRealSatellite
+      ? `${percentChanged}% of pixels exceeded the RGB difference threshold. The result identifies candidate visual differences only.`
+      : 'No real imagery was retrieved. The displayed comparison was generated synthetically for demonstration.',
+    spectralEvidence: 'This pipeline compares visible RGB pixel values; it does not compute NDVI, NDBI, MNDWI, or other multispectral indices.',
+    surfaceShift: 'Land-cover type and environmental cause are not classified.',
+    spatialCoherence: 'No validated object segmentation or ground-truth review was performed.',
+    atmosphericIntegrity: 'Cloud, shadow, haze, seasonal effects, image registration, and acquisition-date alignment were not assessed.',
   };
 
   return {
+    analysisMode,
     id: 'analysis-' + Date.now(),
-    title: locationLabel || `AOI (${bbox.west.toFixed(3)}, ${bbox.south.toFixed(3)})`,
+    title: isRealSatellite
+      ? locationLabel || `AOI (${bbox.west.toFixed(3)}, ${bbox.south.toFixed(3)})`
+      : `DEMO ONLY — ${locationLabel || `AOI (${bbox.west.toFixed(3)}, ${bbox.south.toFixed(3)})`}`,
     locationName: locationLabel || 'Selected AOI on Map',
     dateBefore,
     dateAfter,
     bbox,
     profile: profileKey,
-    profileLabel: profile.label,
-    totalAreaHa: parseFloat(stats.areaHa.toFixed(1)),
-    changedAreaHa,
+    profileLabel: 'RGB pixel-difference screening',
+    totalAreaHa: 0,
+    changedAreaHa: 0,
     percentChanged,
-    cloudMaskedPercent: 1.2,
-    overallConfidence: isRealSatellite ? 98 : 96,
+    cloudMaskedPercent: 0,
     imageBefore: canvasBefore.toDataURL('image/png'),
     imageAfter: canvasAfter.toDataURL('image/png'),
     overlayImage: canvasOverlay.toDataURL('image/png'),
     maskImage: canvasMask.toDataURL('image/png'),
     heatmapImage: canvasHeatmap.toDataURL('image/png'),
-    census,
-    detectedFeatures,
-    regions,
-    categories,
+    census: {
+      newBuildingsCount: 0,
+      commercialStructuresCount: 0,
+      roadwaysPavedMeters: 0,
+      treesClearedHectares: 0,
+      waterRetreatMeters: 0,
+      imperviousSurfaceAddedM2: 0,
+      narrativeStory: narrative,
+    },
+    detectedFeatures: [],
+    regions: [],
+    categories: [],
     decisionReasoning,
-    accuracyMetrics: {
-      precision: selectedEngine.precision,
-      recall: selectedEngine.recall,
-      f1Score: selectedEngine.f1Score,
-      iouScore: selectedEngine.iouScore,
-      kappaCoefficient: 0.94,
-      trainingSamplesCount: indianCalibration.trainingSamplesCount,
-      terrainSignature: `${selectedEngine.name} with ${indianCalibration.terrainSignature}`,
-      soilModelApplied: `${selectedEngine.name} · ${indianCalibration.soilModel}`,
-      cadastralAccuracy: indianCalibration.cadastralAccuracy,
+    analysisPixelStats: {
+      width: W,
+      height: H,
+      totalPixels,
+      changedPixels: changedPixelCount,
+      selectedRegion: { x: 0, y: 0, width: 1, height: 1 },
     },
     imagerySource: {
-      beforeProvider: sourceBefore,
-      afterProvider: sourceAfter,
+      beforeProvider: isRealSatellite ? sourceBefore : 'Synthetic demo imagery (not real-world data)',
+      afterProvider: isRealSatellite ? sourceAfter : 'Synthetic demo imagery (not real-world data)',
       resolutionM: groundResM,
       isRealSatellite,
       width: W,
       height: H,
     },
     provenance: {
-      pipeline: `${selectedEngine.name} Pipeline (High-Precision Calibrated)`,
-      profile: profile.label,
-      sensor: isRealSatellite
-        ? `${sourceAfter} (${groundResM}m GSD) & ${sourceBefore}`
-        : 'Copernicus Sentinel-2A / Sentinel-2B Multi-Spectral Instrument (MSI)',
+      pipeline: isRealSatellite ? 'RGB pixel-difference screen' : 'Synthetic imagery demonstration',
+      profile: `${profile.label} (context only; no semantic land-cover model)`,
+      sensor: isRealSatellite ? `${sourceBefore}; ${sourceAfter}` : 'No sensor data; generated demo images',
       resolutionM: groundResM,
       timestamp: new Date().toISOString(),
       bounds: bbox,
-      spectralBands: ['B02 (Blue 490nm)', 'B03 (Green 560nm)', 'B04 (Red 665nm)', 'B08 (NIR 842nm)', 'B11 (SWIR 1610nm)', 'RGB True Color High-Res'],
-      thresholdFormula: `Adaptive Otsu + (${selectedEngine.key === 'fusion_sota' ? 'NDBI_gain > 0.12 && NDVI_loss > 0.15' : selectedEngine.key === 'cadastral_highres' ? 'EdgeSharpness > 0.28 && RCC_Albedo > 0.14' : 'Biophysical DeltaIndex > 0.18'})`,
-      mmuAppliedHa: mmuHa,
-      version: '4.0.0-high-precision',
-      cloudFilter: 'True-color cloudless compositing and shadow masking active',
+      spectralBands: isRealSatellite ? ['Red', 'Green', 'Blue (8-bit RGB)'] : [],
+      thresholdFormula: isRealSatellite
+        ? 'Weighted normalized RGB difference above the fixed screening threshold'
+        : 'Synthetic demonstration pattern; no real-scene threshold measurement',
+      mmuAppliedHa: 0,
+      version: '4.0.0-rgb-screening',
+      cloudFilter: 'Not applied',
     },
     environmentalAssessment: {
-      impactSummary: `Optical evaluation across ${stats.areaKm2.toFixed(1)} km² indicates that ${percentChanged}% (${changedAreaHa} ha) experienced verified surface transformation. Ground-truth precision: ${selectedEngine.precision}%, F1: ${selectedEngine.f1Score}%.`,
-      biomassLossEstimateTons: isForestDominant ? Math.round(changedAreaHa * 140) : undefined,
-      imperviousSurfaceGainHa: Math.round(changedAreaHa * 0.78),
-      landUseShift: isUrbanDominant
-        ? 'Suburban development and impervious ground addition'
-        : 'Land clearance and surface modification',
+      impactSummary: narrative,
+      landUseShift: 'Not classified',
       actionRecommendations: [
-        `Inspect identified ${estimatedBuildings} new building footprints with local municipality / cadastral layout records (${indianCalibration.cadastralAccuracy}).`,
-        `Cross-reference ${estimatedRoadMeters.toLocaleString()}m of paved roadway corridors with city master planning right-of-way.`,
-        `Verify ${estimatedTreesClearedHa} ha vegetation loss parcels for compensatory afforestation compliance.`,
+        'Use co-registered imagery with acquisition-date metadata and relevant spectral bands for scientific analysis.',
+        'Verify candidate changes with independent reference data or field observations before drawing environmental conclusions.',
       ],
     },
+    warnings: [warning],
   };
 }

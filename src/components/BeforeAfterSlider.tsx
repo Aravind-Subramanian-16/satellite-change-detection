@@ -10,10 +10,10 @@ import {
   Store,
   Droplets,
   X,
-  Search,
   Maximize2,
   Minimize2,
-  Sparkles,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { DetectedFeature } from '../types';
 
@@ -43,13 +43,26 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
   const [showPins, setShowPins] = useState(true);
   const [activePin, setActivePin] = useState<DetectedFeature | null>(null);
 
-  // HD Magnifier (Loupe) state
-  const [isMagnifierActive, setIsMagnifierActive] = useState(false);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const isPanning = useRef(false);
+  const lastPointerPosition = useRef<{ x: number; y: number } | null>(null);
+  const imageTransform = `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`;
+
+  const updateZoom = (nextZoom: number) => {
+    const boundedZoom = Math.min(5, Math.max(1, nextZoom));
+    setZoomLevel(boundedZoom);
+    if (boundedZoom === 1) setPanOffset({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    updateZoom(zoomLevel + (e.deltaY < 0 ? 0.25 : -0.25));
+  };
 
   // Flicker animation loop
   useEffect(() => {
@@ -63,8 +76,13 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
   }, [viewMode, isFlickering]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (isMagnifierActive) return;
     if ((e.target as HTMLElement).closest('.pin-badge') || (e.target as HTMLElement).closest('.pin-card')) {
+      return;
+    }
+    if (zoomLevel > 1) {
+      isPanning.current = true;
+      lastPointerPosition.current = { x: e.clientX, y: e.clientY };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
     isDragging.current = true;
@@ -72,17 +90,21 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
 
   const handlePointerUp = () => {
     isDragging.current = false;
+    isPanning.current = false;
+    lastPointerPosition.current = null;
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    if (isPanning.current && lastPointerPosition.current) {
+      const dx = e.clientX - lastPointerPosition.current.x;
+      const dy = e.clientY - lastPointerPosition.current.y;
+      setPanOffset((offset) => ({ x: offset.x + dx, y: offset.y + dy }));
+      lastPointerPosition.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-
-    if (isMagnifierActive) {
-      setMousePos({ x, y });
-    }
 
     if (isDragging.current) {
       const percent = Math.round((x / rect.width) * 100);
@@ -91,10 +113,9 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
   };
 
   const handlePointerLeave = () => {
-    if (isMagnifierActive) {
-      setMousePos(null);
-    }
     isDragging.current = false;
+    isPanning.current = false;
+    lastPointerPosition.current = null;
   };
 
   const getPinIcon = (cat: DetectedFeature['category']) => {
@@ -177,19 +198,34 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* HD Magnifier Loupe Toggle */}
-          <button
-            onClick={() => setIsMagnifierActive(!isMagnifierActive)}
-            title="Toggle 2.5x HD Magnifier to inspect individual buildings and roads in crisp resolution"
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-semibold border transition-all ${
-              isMagnifierActive
-                ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Search className="h-3.5 w-3.5 text-amber-400" />
-            <span>HD Loupe (2.5x Zoom)</span>
-          </button>
+          <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 p-1 text-xs" aria-label="Synchronized image zoom">
+            <button
+              type="button"
+              onClick={() => updateZoom(zoomLevel - 0.25)}
+              disabled={zoomLevel <= 1}
+              aria-label="Zoom out both images"
+              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => updateZoom(1)}
+              aria-label="Reset synchronized zoom and pan"
+              className="min-w-10 rounded-md px-1 text-center font-mono text-cyan-300 hover:bg-slate-800"
+            >
+              {zoomLevel.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×
+            </button>
+            <button
+              type="button"
+              onClick={() => updateZoom(zoomLevel + 0.25)}
+              disabled={zoomLevel >= 5}
+              aria-label="Zoom in both images"
+              className="rounded-md p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           {detectedFeatures.length > 0 && (
             <button
@@ -215,7 +251,7 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
           </button>
         </div>
 
-        {viewMode === 'split' && !isMagnifierActive && (
+        {viewMode === 'split' && (
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <span>Swipe:</span>
             <input
@@ -239,15 +275,17 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
           onPointerUp={handlePointerUp}
           onPointerMove={handlePointerMove}
           onPointerLeave={handlePointerLeave}
+          onWheel={handleWheel}
           className={`relative aspect-square w-full select-none overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl ${
-            isMagnifierActive ? 'cursor-crosshair' : 'cursor-ew-resize'
+            zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-ew-resize'
           }`}
         >
           {/* Base Layer: AFTER Image (Underneath) */}
           <img
             src={imageAfter}
             alt="Current After State"
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+            style={{ transform: imageTransform, transformOrigin: 'center' }}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
           />
 
           {/* Top Layer: BEFORE Image (Clipped by sliderPosition) */}
@@ -261,46 +299,21 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
               style={{
                 width: containerRef.current ? `${containerRef.current.clientWidth}px` : '100%',
                 maxWidth: 'none',
+                transform: imageTransform,
+                transformOrigin: 'center',
               }}
-              className="pointer-events-none h-full object-cover"
+              className="pointer-events-none h-full object-contain"
             />
           </div>
 
           {/* Slider Divider Bar */}
-          {!isMagnifierActive && (
+          {zoomLevel === 1 && (
             <div
               className="absolute top-0 bottom-0 z-20 w-1 bg-white shadow-[0_0_12px_rgba(255,255,255,0.8)]"
               style={{ left: `${sliderPosition}%` }}
             >
               <div className="absolute top-1/2 -left-3.5 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-xl text-slate-900 border-2 border-slate-900">
                 <SplitSquareVertical className="h-4 w-4" />
-              </div>
-            </div>
-          )}
-
-          {/* HD Magnifier Lens (Loupe) */}
-          {isMagnifierActive && mousePos && containerRef.current && (
-            <div
-              className="pointer-events-none absolute z-40 h-44 w-44 rounded-full border-4 border-amber-400 bg-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.5)] overflow-hidden"
-              style={{
-                left: `${mousePos.x - 88}px`,
-                top: `${mousePos.y - 88}px`,
-              }}
-            >
-              <img
-                src={mousePos.x / (containerRef.current.clientWidth || 1) * 100 > sliderPosition ? imageAfter : imageBefore}
-                alt="Magnified View"
-                style={{
-                  position: 'absolute',
-                  width: `${(containerRef.current.clientWidth || 512) * 2.5}px`,
-                  height: `${(containerRef.current.clientHeight || 512) * 2.5}px`,
-                  left: `${-mousePos.x * 2.5 + 88}px`,
-                  top: `${-mousePos.y * 2.5 + 88}px`,
-                  maxWidth: 'none',
-                }}
-              />
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-slate-950/90 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/60 shadow">
-                2.5x HD
               </div>
             </div>
           )}
@@ -388,16 +401,30 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
       {/* Side-by-Side View */}
       {viewMode === 'side' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-lg">
-            <img src={imageBefore} alt="Before date" className="h-full w-full object-cover" />
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={handlePointerLeave}
+            onWheel={handleWheel}
+            className={`relative aspect-square overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-lg ${zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          >
+            <img src={imageBefore} alt="Before date" style={{ transform: imageTransform, transformOrigin: 'center' }} className="h-full w-full object-contain" />
             <div className="absolute top-3 left-3 rounded-md bg-slate-950/85 px-2.5 py-1 text-xs font-semibold text-slate-200 border border-slate-800 backdrop-blur-md">
               <div>Before ({dateBefore})</div>
               {sourceBefore && <div className="text-[10px] font-normal text-slate-400">{sourceBefore}</div>}
             </div>
           </div>
 
-          <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-lg">
-            <img src={imageAfter} alt="After date" className="h-full w-full object-cover" />
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerMove={handlePointerMove}
+            onPointerLeave={handlePointerLeave}
+            onWheel={handleWheel}
+            className={`relative aspect-square overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-lg ${zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          >
+            <img src={imageAfter} alt="After date" style={{ transform: imageTransform, transformOrigin: 'center' }} className="h-full w-full object-contain" />
             <div className="absolute top-3 left-3 rounded-md bg-cyan-950/85 px-2.5 py-1 text-xs font-semibold text-cyan-300 border border-cyan-800 backdrop-blur-md">
               <div>After ({dateAfter})</div>
               {sourceAfter && <div className="text-[10px] font-normal text-cyan-400">{sourceAfter}</div>}
@@ -408,11 +435,19 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
 
       {/* Flicker View */}
       {viewMode === 'flicker' && (
-        <div className="relative aspect-square w-full select-none overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
+        <div
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={handlePointerLeave}
+          onWheel={handleWheel}
+          className={`relative aspect-square w-full select-none overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl ${zoomLevel > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        >
           <img
             src={flickerState === 'before' ? imageBefore : imageAfter}
             alt="Flicker frame"
-            className="h-full w-full object-cover"
+            style={{ transform: imageTransform, transformOrigin: 'center' }}
+            className="h-full w-full object-contain"
           />
           <div className="absolute top-3 left-3 rounded-md bg-slate-950/85 px-3 py-1.5 text-xs font-bold border border-slate-700 backdrop-blur-md">
             {flickerState === 'before' ? (

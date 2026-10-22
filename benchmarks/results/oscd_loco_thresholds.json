@@ -1,0 +1,1074 @@
+{
+  "generated": "2026-10-21",
+  "scope": "training cities and training labels only; no test labels read",
+  "result_status": "computed_on_training_cities_only",
+  "source": {
+    "images_root": "/content/oscd/images/Onera Satellite Change Detection dataset - Images",
+    "train_labels_root": "/content/oscd/train_labels/Onera Satellite Change Detection dataset - Train Labels",
+    "train_list": "/content/oscd/images/Onera Satellite Change Detection dataset - Images/train.txt",
+    "train_list_sha256": "3a46a6f591addb51d7272c64c90ca152996abf8edc42be4173671e5defde9b18",
+    "train_cities": [
+      "aguasclaras",
+      "bercy",
+      "bordeaux",
+      "nantes",
+      "paris",
+      "rennes",
+      "saclay_e",
+      "abudhabi",
+      "cupertino",
+      "pisa",
+      "beihai",
+      "hongkong",
+      "beirut",
+      "mumbai"
+    ]
+  },
+  "guards": {
+    "official_test_cities": [
+      "brasilia",
+      "montpellier",
+      "norcia",
+      "rio",
+      "saclay_w",
+      "valencia",
+      "dubai",
+      "lasvegas",
+      "milano",
+      "chongqing"
+    ],
+    "official_test_cities_in_train_list": [],
+    "test_labels_path_accepted": false
+  },
+  "grids": {
+    "hardcoded_ndvi_drop": [
+      -0.3,
+      -0.2,
+      -0.15,
+      -0.1,
+      -0.05
+    ],
+    "hardcoded_ndbi_rise": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3
+    ],
+    "percentile": [
+      80.0,
+      85.0,
+      90.0,
+      95.0,
+      97.5,
+      98.0,
+      99.0,
+      99.5
+    ],
+    "candidate_count": 38
+  },
+  "protocol": {
+    "selection": "For each held-out training city, choose the candidate with the highest pooled F1 over the other training cities.",
+    "evaluation": "Apply the selected candidate to the held-out training city.",
+    "tie_breaking": "Highest pooled F1; ties keep the order of the candidate grids.",
+    "otsu_included": false,
+    "otsu_reason": "Otsu computes a threshold per city from that city's own histogram and has no train-selected global threshold."
+  },
+  "families": {
+    "hardcoded": {
+      "folds": [
+        {
+          "held_out_city": "aguasclaras",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10433998256937206,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 71,
+            "fp": 1079,
+            "fn": 3985,
+            "tn": 242140
+          },
+          "held_out_metrics": {
+            "precision": 0.06173913043478261,
+            "recall": 0.017504930966469427,
+            "f1": 0.02727621974644641,
+            "iou": 0.01382667964946446,
+            "overall_accuracy": 0.9795207764634516,
+            "predicted_fraction": 0.004650692548781721,
+            "true_fraction": 0.016402790415529268,
+            "tp": 71,
+            "fp": 1079,
+            "fn": 3985,
+            "tn": 242140
+          }
+        },
+        {
+          "held_out_city": "bercy",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1038973670053523,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 99,
+            "fp": 3202,
+            "fn": 947,
+            "tn": 137952
+          },
+          "held_out_metrics": {
+            "precision": 0.029990911844895485,
+            "recall": 0.09464627151051626,
+            "f1": 0.04554865424430642,
+            "iou": 0.023305084745762712,
+            "overall_accuracy": 0.9708227848101266,
+            "predicted_fraction": 0.02321378340365682,
+            "true_fraction": 0.007355836849507736,
+            "tp": 99,
+            "fp": 3202,
+            "fn": 947,
+            "tn": 137952
+          }
+        },
+        {
+          "held_out_city": "bordeaux",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10487856101598597,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 212,
+            "fp": 6988,
+            "fn": 2168,
+            "tn": 228969
+          },
+          "held_out_metrics": {
+            "precision": 0.029444444444444443,
+            "recall": 0.08907563025210084,
+            "f1": 0.044258872651356994,
+            "iou": 0.022630230572160546,
+            "overall_accuracy": 0.9615838078015583,
+            "predicted_fraction": 0.03020932545093712,
+            "true_fraction": 0.009985860357393104,
+            "tp": 212,
+            "fp": 6988,
+            "fn": 2168,
+            "tn": 228969
+          }
+        },
+        {
+          "held_out_city": "nantes",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10464017323802793,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 85,
+            "fp": 2881,
+            "fn": 3364,
+            "tn": 297474
+          },
+          "held_out_metrics": {
+            "precision": 0.028658125421443022,
+            "recall": 0.024644824586836766,
+            "f1": 0.02650038971161341,
+            "iou": 0.013428120063191154,
+            "overall_accuracy": 0.9794439836210188,
+            "predicted_fraction": 0.009762873431554554,
+            "true_fraction": 0.011352714249976959,
+            "tp": 85,
+            "fp": 2881,
+            "fn": 3364,
+            "tn": 297474
+          }
+        },
+        {
+          "held_out_city": "paris",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10282056531740391,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 116,
+            "fp": 658,
+            "fn": 342,
+            "tn": 158004
+          },
+          "held_out_metrics": {
+            "precision": 0.14987080103359174,
+            "recall": 0.25327510917030566,
+            "f1": 0.18831168831168832,
+            "iou": 0.1039426523297491,
+            "overall_accuracy": 0.9937154348919055,
+            "predicted_fraction": 0.0048642533936651584,
+            "true_fraction": 0.0028783308195072903,
+            "tp": 116,
+            "fp": 658,
+            "fn": 342,
+            "tn": 158004
+          }
+        },
+        {
+          "held_out_city": "rennes",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10314682647447418,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 289,
+            "fp": 416,
+            "fn": 4643,
+            "tn": 185509
+          },
+          "held_out_metrics": {
+            "precision": 0.4099290780141844,
+            "recall": 0.05859691808596918,
+            "f1": 0.10253681036012062,
+            "iou": 0.05403889304412865,
+            "overall_accuracy": 0.9734932436326674,
+            "predicted_fraction": 0.003693865040318144,
+            "true_fraction": 0.025841336707587356,
+            "tp": 289,
+            "fp": 416,
+            "fn": 4643,
+            "tn": 185509
+          }
+        },
+        {
+          "held_out_city": "saclay_e",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1125103646670615,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 569,
+            "fp": 32974,
+            "fn": 3777,
+            "tn": 402312
+          },
+          "held_out_metrics": {
+            "precision": 0.016963300837730674,
+            "recall": 0.13092498849516798,
+            "f1": 0.0300351025363562,
+            "iou": 0.015246516613076098,
+            "overall_accuracy": 0.9164050842522837,
+            "predicted_fraction": 0.07629790370127743,
+            "true_fraction": 0.009885540633984786,
+            "tp": 569,
+            "fp": 32974,
+            "fn": 3777,
+            "tn": 402312
+          }
+        },
+        {
+          "held_out_city": "abudhabi",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.11128532242619013,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 50,
+            "fp": 1667,
+            "fn": 23542,
+            "tn": 601956
+          },
+          "held_out_metrics": {
+            "precision": 0.029120559114735003,
+            "recall": 0.002119362495761275,
+            "f1": 0.003951163617685409,
+            "iou": 0.0019794924581337343,
+            "overall_accuracy": 0.9598080403051585,
+            "predicted_fraction": 0.0027374983060035234,
+            "true_fraction": 0.03761389635133088,
+            "tp": 50,
+            "fp": 1667,
+            "fn": 23542,
+            "tn": 601956
+          }
+        },
+        {
+          "held_out_city": "cupertino",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.09918183228208045,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 1844,
+            "fp": 3106,
+            "fn": 17098,
+            "tn": 777772
+          },
+          "held_out_metrics": {
+            "precision": 0.37252525252525254,
+            "recall": 0.09734980466687784,
+            "f1": 0.15436129248283942,
+            "iou": 0.08363570391872278,
+            "overall_accuracy": 0.9747393163461779,
+            "predicted_fraction": 0.006188892500812683,
+            "true_fraction": 0.0236828286364432,
+            "tp": 1844,
+            "fp": 3106,
+            "fn": 17098,
+            "tn": 777772
+          }
+        },
+        {
+          "held_out_city": "pisa",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.11119071022774601,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 506,
+            "fp": 23613,
+            "fn": 8624,
+            "tn": 524425
+          },
+          "held_out_metrics": {
+            "precision": 0.02097931091670467,
+            "recall": 0.05542168674698795,
+            "f1": 0.030437005624229293,
+            "iou": 0.015453684757047307,
+            "overall_accuracy": 0.942141329006691,
+            "predicted_fraction": 0.04328855928552968,
+            "true_fraction": 0.016386439996554,
+            "tp": 506,
+            "fp": 23613,
+            "fn": 8624,
+            "tn": 524425
+          }
+        },
+        {
+          "held_out_city": "beihai",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.25,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.11875980280415487,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3",
+          "held_out_counts": {
+            "tp": 2566,
+            "fp": 83054,
+            "fn": 14752,
+            "tn": 595972
+          },
+          "held_out_metrics": {
+            "precision": 0.02996963326325625,
+            "recall": 0.14816953458828963,
+            "f1": 0.049855252676368304,
+            "iou": 0.025564898577292473,
+            "overall_accuracy": 0.8595435589306435,
+            "predicted_fraction": 0.12295646979079305,
+            "true_fraction": 0.024869891892512895,
+            "tp": 2566,
+            "fp": 83054,
+            "fn": 14752,
+            "tn": 595972
+          }
+        },
+        {
+          "held_out_city": "hongkong",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.09240035842177963,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 2909,
+            "fp": 7943,
+            "fn": 10470,
+            "tn": 353978
+          },
+          "held_out_metrics": {
+            "precision": 0.26806118687799485,
+            "recall": 0.21743030121832724,
+            "f1": 0.24010564978746235,
+            "iou": 0.13643185442266204,
+            "overall_accuracy": 0.9509379163335998,
+            "predicted_fraction": 0.028915534239275245,
+            "true_fraction": 0.03564881428190781,
+            "tp": 2909,
+            "fp": 7943,
+            "fn": 10470,
+            "tn": 353978
+          }
+        },
+        {
+          "held_out_city": "beirut",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.07510627094470422,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 6422,
+            "fp": 6257,
+            "fn": 27496,
+            "tn": 1222425
+          },
+          "held_out_metrics": {
+            "precision": 0.5065068223045982,
+            "recall": 0.18933899404446017,
+            "f1": 0.2756400626649784,
+            "iou": 0.15985065339141258,
+            "overall_accuracy": 0.9732670679550135,
+            "predicted_fraction": 0.01004197687311896,
+            "true_fraction": 0.026863614763187074,
+            "tp": 6422,
+            "fp": 6257,
+            "fn": 27496,
+            "tn": 1222425
+          }
+        },
+        {
+          "held_out_city": "mumbai",
+          "selected_config": {
+            "mode": "hardcoded",
+            "ndvi_drop": -0.3,
+            "ndbi_rise": 0.3,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.10240782866217434,
+          "tied_candidates": 1,
+          "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+          "held_out_counts": {
+            "tp": 1682,
+            "fp": 16551,
+            "fn": 10562,
+            "tn": 449111
+          },
+          "held_out_metrics": {
+            "precision": 0.09225031536225525,
+            "recall": 0.1373734073832081,
+            "f1": 0.11037831807592612,
+            "iou": 0.0584129189095329,
+            "overall_accuracy": 0.9432670859959909,
+            "predicted_fraction": 0.038151854130310144,
+            "true_fraction": 0.025620101024050754,
+            "tp": 1682,
+            "fp": 16551,
+            "fn": 10562,
+            "tn": 449111
+          }
+        }
+      ],
+      "pooled_held_out": {
+        "precision": 0.08382697573252361,
+        "recall": 0.11676385816743749,
+        "f1": 0.09759130977957921,
+        "iou": 0.05129881411983662,
+        "overall_accuracy": 0.9505707488272485,
+        "predicted_fraction": 0.03188439018297901,
+        "true_fraction": 0.022890404994002373,
+        "tp": 17420,
+        "fp": 190389,
+        "fn": 131770,
+        "tn": 6177999
+      },
+      "selected_config_frequencies": [
+        {
+          "config": {
+            "mode": "hardcoded",
+            "ndbi_rise": 0.3,
+            "ndvi_drop": -0.3,
+            "use_cloud_mask": false
+          },
+          "count": 13,
+          "held_out_cities": [
+            "aguasclaras",
+            "bercy",
+            "bordeaux",
+            "nantes",
+            "paris",
+            "rennes",
+            "saclay_e",
+            "abudhabi",
+            "cupertino",
+            "pisa",
+            "hongkong",
+            "beirut",
+            "mumbai"
+          ]
+        },
+        {
+          "config": {
+            "mode": "hardcoded",
+            "ndbi_rise": 0.25,
+            "ndvi_drop": -0.3,
+            "use_cloud_mask": false
+          },
+          "count": 1,
+          "held_out_cities": [
+            "beihai"
+          ]
+        }
+      ],
+      "distinct_selected_configs": 2,
+      "folds_with_grid_edge_warning": 14,
+      "full_train_selection": {
+        "config": {
+          "mode": "hardcoded",
+          "ndvi_drop": -0.3,
+          "ndbi_rise": 0.3,
+          "use_cloud_mask": false
+        },
+        "grid_edge_warning": "WARNING: selected hardcoded value(s) at search-grid edge: ndvi_drop=-0.3, ndbi_rise=0.3",
+        "tied_candidates": 1,
+        "pooled_f1_on_train_cities_in_sample": 0.10313651144094742
+      }
+    },
+    "percentile": {
+      "folds": [
+        {
+          "held_out_city": "aguasclaras",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1447124449723441,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 178,
+            "fp": 3862,
+            "fn": 3878,
+            "tn": 239357
+          },
+          "held_out_metrics": {
+            "precision": 0.04405940594059406,
+            "recall": 0.04388560157790927,
+            "f1": 0.04397233201581028,
+            "iou": 0.02248042434958323,
+            "overall_accuracy": 0.9686988171064604,
+            "predicted_fraction": 0.016338085127894045,
+            "true_fraction": 0.016402790415529268,
+            "tp": 178,
+            "fp": 3862,
+            "fn": 3878,
+            "tn": 239357
+          }
+        },
+        {
+          "held_out_city": "bercy",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14318598060573348,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 68,
+            "fp": 2726,
+            "fn": 978,
+            "tn": 138428
+          },
+          "held_out_metrics": {
+            "precision": 0.024337866857551897,
+            "recall": 0.06500956022944551,
+            "f1": 0.035416666666666666,
+            "iou": 0.018027571580063628,
+            "overall_accuracy": 0.9739521800281294,
+            "predicted_fraction": 0.019648382559774965,
+            "true_fraction": 0.007355836849507736,
+            "tp": 68,
+            "fp": 2726,
+            "fn": 978,
+            "tn": 138428
+          }
+        },
+        {
+          "held_out_city": "bordeaux",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14393756474464323,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 156,
+            "fp": 3881,
+            "fn": 2224,
+            "tn": 232076
+          },
+          "held_out_metrics": {
+            "precision": 0.038642556353728014,
+            "recall": 0.06554621848739496,
+            "f1": 0.04862085086489014,
+            "iou": 0.024916147580258743,
+            "overall_accuracy": 0.974385009461393,
+            "predicted_fraction": 0.016938200950754604,
+            "true_fraction": 0.009985860357393104,
+            "tp": 156,
+            "fp": 3881,
+            "fn": 2224,
+            "tn": 232076
+          }
+        },
+        {
+          "held_out_city": "nantes",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14556971986150458,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 137,
+            "fp": 5449,
+            "fn": 3312,
+            "tn": 294906
+          },
+          "held_out_metrics": {
+            "precision": 0.02452559971356964,
+            "recall": 0.039721658451725136,
+            "f1": 0.03032650802434975,
+            "iou": 0.015396718363677231,
+            "overall_accuracy": 0.971162328343274,
+            "predicted_fraction": 0.018386854682624323,
+            "true_fraction": 0.011352714249976959,
+            "tp": 137,
+            "fp": 5449,
+            "fn": 3312,
+            "tn": 294906
+          }
+        },
+        {
+          "held_out_city": "paris",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14219604219604218,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 169,
+            "fp": 2828,
+            "fn": 289,
+            "tn": 155834
+          },
+          "held_out_metrics": {
+            "precision": 0.05638972305638972,
+            "recall": 0.36899563318777295,
+            "f1": 0.09782923299565846,
+            "iou": 0.05143031040779063,
+            "overall_accuracy": 0.9804110105580693,
+            "predicted_fraction": 0.018834841628959275,
+            "true_fraction": 0.0028783308195072903,
+            "tp": 169,
+            "fp": 2828,
+            "fn": 289,
+            "tn": 155834
+          }
+        },
+        {
+          "held_out_city": "rennes",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1396874412188852,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 813,
+            "fp": 2266,
+            "fn": 4119,
+            "tn": 183659
+          },
+          "held_out_metrics": {
+            "precision": 0.26404676843130886,
+            "recall": 0.16484184914841848,
+            "f1": 0.20297091499188613,
+            "iou": 0.11294804112253404,
+            "overall_accuracy": 0.9665456336419413,
+            "predicted_fraction": 0.016132497105162503,
+            "true_fraction": 0.025841336707587356,
+            "tp": 813,
+            "fp": 2266,
+            "fn": 4119,
+            "tn": 183659
+          }
+        },
+        {
+          "held_out_city": "saclay_e",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14577901430842605,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 297,
+            "fp": 6952,
+            "fn": 4049,
+            "tn": 428334
+          },
+          "held_out_metrics": {
+            "precision": 0.0409711684370258,
+            "recall": 0.06833870225494708,
+            "f1": 0.05122897800776197,
+            "iou": 0.02628783855549655,
+            "overall_accuracy": 0.974976798777159,
+            "predicted_fraction": 0.016488790624886267,
+            "true_fraction": 0.009885540633984786,
+            "tp": 297,
+            "fp": 6952,
+            "fn": 4049,
+            "tn": 428334
+          }
+        },
+        {
+          "held_out_city": "abudhabi",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.15976930392367394,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 408,
+            "fp": 11016,
+            "fn": 23184,
+            "tn": 592607
+          },
+          "held_out_metrics": {
+            "precision": 0.03571428571428571,
+            "recall": 0.017293997965412006,
+            "f1": 0.023303632625085675,
+            "iou": 0.011789181692094313,
+            "overall_accuracy": 0.9454732428274196,
+            "predicted_fraction": 0.01821385011519176,
+            "true_fraction": 0.03761389635133088,
+            "tp": 408,
+            "fp": 11016,
+            "fn": 23184,
+            "tn": 592607
+          }
+        },
+        {
+          "held_out_city": "cupertino",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1350386726007864,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 3010,
+            "fp": 9813,
+            "fn": 15932,
+            "tn": 771065
+          },
+          "held_out_metrics": {
+            "precision": 0.2347344615144662,
+            "recall": 0.1589061345158906,
+            "f1": 0.18951676373366913,
+            "iou": 0.1046774474004521,
+            "overall_accuracy": 0.9678115075892075,
+            "predicted_fraction": 0.01603235728038809,
+            "true_fraction": 0.0236828286364432,
+            "tp": 3010,
+            "fp": 9813,
+            "fn": 15932,
+            "tn": 771065
+          }
+        },
+        {
+          "held_out_city": "pisa",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.15002140367327801,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 237,
+            "fp": 8543,
+            "fn": 8893,
+            "tn": 539495
+          },
+          "held_out_metrics": {
+            "precision": 0.026993166287015945,
+            "recall": 0.025958378970427163,
+            "f1": 0.026465661641541037,
+            "iou": 0.013410286878288916,
+            "overall_accuracy": 0.96870602762542,
+            "predicted_fraction": 0.015758263216839444,
+            "true_fraction": 0.016386439996554,
+            "tp": 237,
+            "fp": 8543,
+            "fn": 8893,
+            "tn": 539495
+          }
+        },
+        {
+          "held_out_city": "beihai",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14941874157014712,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 1188,
+            "fp": 11144,
+            "fn": 16130,
+            "tn": 667882
+          },
+          "held_out_metrics": {
+            "precision": 0.09633473889069089,
+            "recall": 0.06859914539785195,
+            "f1": 0.08013490725126475,
+            "iou": 0.041739863677886305,
+            "overall_accuracy": 0.9608325770021714,
+            "predicted_fraction": 0.017709637765242467,
+            "true_fraction": 0.024869891892512895,
+            "tp": 1188,
+            "fp": 11144,
+            "fn": 16130,
+            "tn": 667882
+          }
+        },
+        {
+          "held_out_city": "hongkong",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1341138334457736,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 2335,
+            "fp": 4389,
+            "fn": 11044,
+            "tn": 357532
+          },
+          "held_out_metrics": {
+            "precision": 0.34726353361094586,
+            "recall": 0.17452724418865387,
+            "f1": 0.2323036362731931,
+            "iou": 0.1314160288158487,
+            "overall_accuracy": 0.9588782307487344,
+            "predicted_fraction": 0.017916333599786838,
+            "true_fraction": 0.03564881428190781,
+            "tp": 2335,
+            "fp": 4389,
+            "fn": 11044,
+            "tn": 357532
+          }
+        },
+        {
+          "held_out_city": "beirut",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 98.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.1009599916973691,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 10744,
+            "fp": 33399,
+            "fn": 23174,
+            "tn": 1195283
+          },
+          "held_out_metrics": {
+            "precision": 0.24339079808803207,
+            "recall": 0.31676396013915914,
+            "f1": 0.27527190274272684,
+            "iou": 0.15960307203232468,
+            "overall_accuracy": 0.955193252019642,
+            "predicted_fraction": 0.03496198320925075,
+            "true_fraction": 0.026863614763187074,
+            "tp": 10744,
+            "fp": 33399,
+            "fn": 23174,
+            "tn": 1195283
+          }
+        },
+        {
+          "held_out_city": "mumbai",
+          "selected_config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "selection_f1_on_other_cities": 0.14465812408139606,
+          "tied_candidates": 1,
+          "grid_edge_warning": null,
+          "held_out_counts": {
+            "tp": 1166,
+            "fp": 8250,
+            "fn": 11078,
+            "tn": 457412
+          },
+          "held_out_metrics": {
+            "precision": 0.12383177570093458,
+            "recall": 0.09523031688990526,
+            "f1": 0.10766389658356418,
+            "iou": 0.0568947008880648,
+            "overall_accuracy": 0.9595569003109398,
+            "predicted_fraction": 0.019702619343552916,
+            "true_fraction": 0.025620101024050754,
+            "tp": 1166,
+            "fp": 8250,
+            "fn": 11078,
+            "tn": 457412
+          }
+        }
+      ],
+      "pooled_held_out": {
+        "precision": 0.15437440926275992,
+        "recall": 0.14013003552516926,
+        "f1": 0.1469077417133381,
+        "iou": 0.0792770791936536,
+        "overall_accuracy": 0.9627465908348163,
+        "predicted_fraction": 0.020778270701171508,
+        "true_fraction": 0.022890404994002373,
+        "tp": 20906,
+        "fp": 114518,
+        "fn": 128284,
+        "tn": 6253870
+      },
+      "selected_config_frequencies": [
+        {
+          "config": {
+            "mode": "percentile",
+            "percentile": 99.0,
+            "use_cloud_mask": false
+          },
+          "count": 13,
+          "held_out_cities": [
+            "aguasclaras",
+            "bercy",
+            "bordeaux",
+            "nantes",
+            "paris",
+            "rennes",
+            "saclay_e",
+            "abudhabi",
+            "cupertino",
+            "pisa",
+            "beihai",
+            "hongkong",
+            "mumbai"
+          ]
+        },
+        {
+          "config": {
+            "mode": "percentile",
+            "percentile": 98.0,
+            "use_cloud_mask": false
+          },
+          "count": 1,
+          "held_out_cities": [
+            "beirut"
+          ]
+        }
+      ],
+      "distinct_selected_configs": 2,
+      "folds_with_grid_edge_warning": 0,
+      "full_train_selection": {
+        "config": {
+          "mode": "percentile",
+          "percentile": 99.0,
+          "use_cloud_mask": false
+        },
+        "grid_edge_warning": null,
+        "tied_candidates": 1,
+        "pooled_f1_on_train_cities_in_sample": 0.1416136324778206
+      }
+    }
+  },
+  "caveats": [
+    "This is a training-split robustness check, not a test-set result.",
+    "Scores use the same ten official test cities nowhere in this script; no test label is read.",
+    "The held-out city is still a training city; its labels inform no selection in that fold.",
+    "Full-train pooled F1 is in-sample and optimistic; it is reported only to show which configuration the grid selects.",
+    "Otsu is excluded because it has no train-selected threshold to leave out."
+  ]
+}

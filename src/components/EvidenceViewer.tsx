@@ -30,6 +30,17 @@ export const EvidenceViewer: React.FC<EvidenceViewerProps> = ({
   };
 
   const getCaption = () => {
+    if (profileLabel === 'RGB pixel-difference screening') {
+      switch (activeLayer) {
+        case 'overlay':
+          return `Red highlighting marks pixels in the selected region that exceeded the RGB difference threshold (${percentChanged}%). It does not identify the cause or class of change.`;
+        case 'mask':
+          return 'Binary RGB threshold mask for visual review. No connected-component filtering or minimum mapping unit was applied.';
+        case 'heatmap':
+          return 'Relative weighted RGB channel difference visualized with the Viridis color ramp. This is not a calibrated spectral index or probability/confidence map.';
+      }
+    }
+
     switch (activeLayer) {
       case 'overlay':
         return `Red semi-transparent highlighting identifies pixels where spectral criteria were exceeded (${percentChanged}% of AOI).`;

@@ -2,6 +2,9 @@ import { jsPDF } from 'jspdf';
 import { AnalysisResult } from '../types';
 
 export function exportGeoJSON(result: AnalysisResult) {
+  if (result.analysisMode) {
+    throw new Error('GeoJSON export is unavailable for screening/demo results because they contain no validated georeferenced regions.');
+  }
   const features = result.regions.map((reg) => ({
     type: 'Feature',
     geometry: {
@@ -48,7 +51,17 @@ export function exportGeoJSON(result: AnalysisResult) {
 }
 
 export function exportCSV(result: AnalysisResult) {
-  const headers = [
+  const isScreeningResult = Boolean(result.analysisMode);
+  const isSimulatedDemo = result.analysisMode === 'simulated-demo';
+  const headers = isScreeningResult ? [
+    'Analysis Mode',
+    'Percent of Pixels Above RGB Threshold',
+    'Changed Pixels',
+    'Total Pixels',
+    'Analysis Width (px)',
+    'Analysis Height (px)',
+    'Threshold',
+  ] : [
     'ID',
     'Sector Label',
     'Land Classification',
@@ -81,7 +94,17 @@ export function exportCSV(result: AnalysisResult) {
   ]);
 
   // Prepend metadata summary comments for Excel / Sheets users
-  const metadataLines = [
+  const metadataLines = isScreeningResult
+    ? [
+        `# ANALYSIS MODE: ${isSimulatedDemo ? 'synthetic demonstration only; not observations' : 'RGB pixel-difference screening; not a validated land-cover classification'}`,
+        `# PIXELS ABOVE RGB THRESHOLD: ${isSimulatedDemo ? 'Not measured on real imagery' : `${result.analysisPixelStats?.changedPixels} of ${result.analysisPixelStats?.totalPixels} (${result.percentChanged}%)`}`,
+        `# ANALYSIS GRID: ${result.analysisPixelStats?.width ?? 'Not available'} x ${result.analysisPixelStats?.height ?? 'Not available'} pixels`,
+        `# THRESHOLD: ${result.provenance.thresholdFormula}`,
+        `# UNITS / ACCURACY: Not available; geospatial scale, image registration, and validation data were not provided`,
+        ...((result.warnings || []).map((warning) => `# LIMITATION: ${warning}`)),
+        '',
+      ]
+    : [
     `# AUDIT REPORT: ${result.title}`,
     `# DATE WINDOW: ${result.dateBefore} to ${result.dateAfter}`,
     `# GROUND STORY: ${(result.census?.narrativeStory || '').replace(/[\r\n]+/g, ' ')}`,
@@ -89,17 +112,21 @@ export function exportCSV(result: AnalysisResult) {
     `# ESTIMATED TREES CLEARED: ${result.census?.treesClearedHectares || 0} ha`,
     `# ESTIMATED ROADWAYS PAVED: ${result.census?.roadwaysPavedMeters || 0} meters`,
     `# TOTAL CHANGED: ${result.percentChanged}% (${result.changedAreaHa} ha of ${result.totalAreaHa} ha monitored)`,
-    `# OVERALL CONFIDENCE: ${result.overallConfidence}%`,
-    `# GROUND-TRUTH PRECISION: ${result.accuracyMetrics?.precision || 97.4}%`,
-    `# GROUND-TRUTH RECALL: ${result.accuracyMetrics?.recall || 95.8}%`,
-    `# GROUND-TRUTH F1-SCORE: ${result.accuracyMetrics?.f1Score || 96.6}%`,
-    `# TRAINING SAMPLES CALIBRATED: ${(result.accuracyMetrics?.trainingSamplesCount || 42800).toLocaleString()} ground-truth parcels across India`,
-    `# SOIL & TERRAIN MODEL: ${result.accuracyMetrics?.soilModelApplied || 'Indian Subcontinent Calibrated'}`,
-    `# CADASTRAL CALIBRATION: ${result.accuracyMetrics?.cadastralAccuracy || 'Calibrated to Indian Urban Planning Standards'}`,
     '',
   ];
 
-  const csvContent = [...metadataLines, headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+  const csvRows = isScreeningResult
+    ? [[
+        isSimulatedDemo ? 'Synthetic demonstration (not measured)' : 'RGB pixel-difference screening',
+        isSimulatedDemo ? '' : result.percentChanged,
+        isSimulatedDemo ? '' : result.analysisPixelStats?.changedPixels ?? 0,
+        isSimulatedDemo ? '' : result.analysisPixelStats?.totalPixels ?? 0,
+        result.analysisPixelStats?.width ?? '',
+        result.analysisPixelStats?.height ?? '',
+        `"${result.provenance.thresholdFormula.replace(/"/g, '""')}"`,
+      ]]
+    : rows;
+  const csvContent = [...metadataLines, headers.join(','), ...csvRows.map((row) => row.join(','))].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -110,6 +137,8 @@ export function exportCSV(result: AnalysisResult) {
 }
 
 export function generatePDFReport(result: AnalysisResult) {
+  const isScreeningResult = Boolean(result.analysisMode);
+  const isSimulatedDemo = result.analysisMode === 'simulated-demo';
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -127,12 +156,22 @@ export function generatePDFReport(result: AnalysisResult) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(103, 232, 249); // Cyan
-  doc.text('SATELLITE CHANGE DETECTION & AUDIT REPORT', 14, 11);
+  doc.text(
+    isSimulatedDemo
+      ? 'SYNTHETIC DEMONSTRATION — NOT OBSERVATIONS'
+      : isScreeningResult ? 'RGB IMAGE DIFFERENCE SCREENING REPORT' : 'SATELLITE CHANGE DETECTION & AUDIT REPORT',
+    14,
+    11
+  );
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(154, 169, 192);
-  doc.text(`Copernicus Sentinel-2 L2A Multi-Spectral Analysis  |  Generated ${new Date().toLocaleDateString()}`, 14, 18);
+  doc.text(
+    `${isSimulatedDemo ? 'Generated demonstration imagery · no satellite observations' : isScreeningResult ? 'RGB imagery · screening only' : 'Imagery source not validated'}  |  Generated ${new Date().toLocaleDateString()}`,
+    14,
+    18
+  );
 
   let y = 30;
 
@@ -147,7 +186,11 @@ export function generatePDFReport(result: AnalysisResult) {
   doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
   doc.text(
-    `Comparative Window: ${result.dateBefore} to ${result.dateAfter}  |  Profile: ${result.profileLabel}  |  Resolution: 10m`,
+    `Comparative Window: ${result.dateBefore} to ${result.dateAfter}  |  Profile: ${result.profileLabel}  |  ${
+      isScreeningResult
+        ? `Grid: ${result.analysisPixelStats?.width} x ${result.analysisPixelStats?.height} px`
+        : 'Ground resolution not reported'
+    }`,
     14,
     y
   );
@@ -161,7 +204,7 @@ export function generatePDFReport(result: AnalysisResult) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(49, 46, 129);
-  doc.text('GROUND TRANSFORMATION STORY', 18, y + 5.5);
+  doc.text(isSimulatedDemo ? 'DEMONSTRATION STATUS' : isScreeningResult ? 'SCREENING SUMMARY' : 'ANALYSIS SUMMARY', 18, y + 5.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -176,10 +219,19 @@ export function generatePDFReport(result: AnalysisResult) {
   // Precise Object Census Indicators (4 boxes)
   const cBoxW = (pageWidth - 28 - 9) / 4;
   const censusItems = [
-    { label: 'New Buildings Added', val: `~${result.census?.newBuildingsCount || 0}` },
-    { label: 'Trees Cleared', val: `${result.census?.treesClearedHectares || 0} ha` },
-    { label: 'Roadways Paved', val: `${result.census?.roadwaysPavedMeters || 0} m` },
-    { label: 'Total Altered', val: `${result.percentChanged}%` },
+    ...(isScreeningResult
+      ? [
+          { label: isSimulatedDemo ? 'Imagery' : 'Pixels Above Threshold', val: isSimulatedDemo ? 'Synthetic demo' : `${result.percentChanged}%` },
+          { label: 'Changed Pixels', val: isSimulatedDemo ? 'Not measured' : `${result.analysisPixelStats?.changedPixels ?? 0}` },
+          { label: 'Analysis Grid', val: `${result.analysisPixelStats?.width ?? 'N/A'} x ${result.analysisPixelStats?.height ?? 'N/A'}` },
+          { label: 'Validation', val: 'Not assessed' },
+        ]
+      : [
+          { label: 'New Buildings Added', val: `~${result.census?.newBuildingsCount || 0}` },
+          { label: 'Trees Cleared', val: `${result.census?.treesClearedHectares || 0} ha` },
+          { label: 'Roadways Paved', val: `${result.census?.roadwaysPavedMeters || 0} m` },
+          { label: 'Total Altered', val: `${result.percentChanged}%` },
+        ]),
   ];
 
   censusItems.forEach((c, idx) => {
@@ -274,7 +326,11 @@ export function generatePDFReport(result: AnalysisResult) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(103, 232, 249);
-  doc.text('DETAILED OBJECT INVENTORY & TRANSFORMATION LOG', 14, 10);
+  doc.text(
+    isScreeningResult ? 'SCREENING DETAILS (NO OBJECT CLASSIFICATION)' : 'DETAILED OBJECT INVENTORY & TRANSFORMATION LOG',
+    14,
+    10
+  );
 
   y = 24;
 
@@ -307,12 +363,19 @@ export function generatePDFReport(result: AnalysisResult) {
     y += 2;
   }
 
-  // Flagged Changed Clusters Table with Explanations
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text('FLAGGED SECTORS & SPECIFIC SPECTRAL RATIONALE', 14, y);
-  y += 4.5;
+  if (isScreeningResult) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text('No object classes, geographic coordinates, or georeferenced regions were inferred from RGB differences.', 14, y);
+    y += 8;
+  } else {
+    // Flagged Changed Clusters Table with Explanations
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('FLAGGED SECTORS & SPECIFIC SPECTRAL RATIONALE', 14, y);
+    y += 4.5;
 
   // Table Header
   doc.setFillColor(226, 232, 240);
@@ -349,6 +412,7 @@ export function generatePDFReport(result: AnalysisResult) {
 
     y += 7.5;
   });
+  }
 
   y += 4;
 
@@ -388,7 +452,13 @@ export function generatePDFReport(result: AnalysisResult) {
   doc.setTextColor(100, 116, 139);
   doc.text(`Sensor Platform: ${result.provenance.sensor}`, 14, y);
   doc.text(`Bands: ${result.provenance.spectralBands.join(', ')}`, 14, y + 3);
-  doc.text(`Detection Rule: ${result.provenance.thresholdFormula}  |  MMU: ${result.provenance.mmuAppliedHa} ha`, 14, y + 6);
+  doc.text(
+    isScreeningResult
+      ? `Detection Rule: ${result.provenance.thresholdFormula}  |  Geospatial scale: not supplied`
+      : `Detection Rule: ${result.provenance.thresholdFormula}  |  MMU: ${result.provenance.mmuAppliedHa} ha`,
+    14,
+    y + 6
+  );
   doc.text(`Timestamp: ${result.provenance.timestamp}  |  Version: ${result.provenance.version}`, 14, y + 9);
 
   doc.text('Page 2 of 2  |  Satellite Change Detection Platform', 14, pageHeight - 6);
